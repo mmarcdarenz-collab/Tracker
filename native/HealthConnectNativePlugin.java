@@ -18,7 +18,7 @@ import android.os.Build;
 import android.os.OutcomeReceiver;
 
 import androidx.activity.result.contract.ActivityResultContract;
-import androidx.health.connect.client.PermissionController;
+import androidx.health.connect.client.contracts.HealthPermissionsRequestContract;
 
 
 import com.getcapacitor.JSObject;
@@ -68,9 +68,7 @@ public class HealthConnectNativePlugin extends Plugin {
             ));
 
             ActivityResultContract<Set<String>, Set<String>> contract =
-                PermissionController.createRequestPermissionResultContract(
-                    "com.google.android.apps.healthdata"
-                );
+                new HealthPermissionsRequestContract("com.google.android.apps.healthdata");
 
             Intent intent = contract.createIntent(getContext(), permissions);
             getActivity().startActivity(intent);
