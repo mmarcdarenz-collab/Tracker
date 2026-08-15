@@ -17,8 +17,6 @@ import android.health.connect.datatypes.ActiveCaloriesBurnedRecord;
 import android.os.Build;
 import android.os.OutcomeReceiver;
 
-import androidx.activity.result.contract.ActivityResultContract;
-import androidx.health.connect.client.PermissionController;
 
 
 import com.getcapacitor.JSObject;
@@ -32,9 +30,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
-import java.util.Set;
-import java.util.HashSet;
-import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 
 @CapacitorPlugin(name = "HealthConnectNative")
@@ -60,23 +55,18 @@ public class HealthConnectNativePlugin extends Plugin {
         }
 
         try {
-            Set<String> permissions = new HashSet<>(Arrays.asList(
-                HealthPermissions.READ_SLEEP,
-                HealthPermissions.READ_RESTING_HEART_RATE,
-                HealthPermissions.READ_HEART_RATE,
-                HealthPermissions.READ_ACTIVE_CALORIES_BURNED
-            ));
+            Intent intent = new Intent(HealthConnectManager.ACTION_MANAGE_HEALTH_PERMISSIONS);
+            intent.putExtra(Intent.EXTRA_PACKAGE_NAME, getContext().getPackageName());
 
-            ActivityResultContract<Set<String>, Set<String>> contract =
-                PermissionController.createRequestPermissionResultContract(
-                    "com.google.android.apps.healthdata"
-                );
+            if (intent.resolveActivity(getContext().getPackageManager()) == null) {
+                call.reject("Android could not find the Health Connect permissions screen.");
+                return;
+            }
 
-            Intent intent = contract.createIntent(getContext(), permissions);
             getActivity().startActivity(intent);
             call.resolve();
         } catch (Exception e) {
-            call.reject("Could not open Health Connect permission request.", e);
+            call.reject("Could not open Health Connect access settings.", e);
         }
     }
 
