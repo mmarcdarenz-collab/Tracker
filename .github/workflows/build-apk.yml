@@ -25,15 +25,29 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Install dependencies
+      - name: Install npm dependencies
         run: npm install
 
       - name: Create Android project
         run: npx cap add android
 
-      - name: Add Health Connect AndroidX dependency
+      - name: Add Health Connect SDK dependency
         run: |
-          python3 native/patch_gradle.py android/app/build.gradle
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path("android/app/build.gradle")
+          s=p.read_text()
+          dep='implementation "androidx.health.connect:connect-client:1.1.0"'
+          if dep not in s:
+              m=re.search(r'dependencies\s*\{', s)
+              if not m:
+                  raise SystemExit("dependencies block not found in android/app/build.gradle")
+              pos=m.end()
+              s=s[:pos]+"\n    "+dep+s[pos:]
+              p.write_text(s)
+          print(p.read_text())
+          PY
 
       - name: Sync web app
         run: npx cap sync android
@@ -47,12 +61,14 @@ jobs:
           cp native/PermissionsRationaleActivity.java "$PKG/PermissionsRationaleActivity.java"
           python3 native/patch_manifest.py android/app/src/main/AndroidManifest.xml
 
-      - name: Verify native bridge was installed
+      - name: Verify Health Connect setup
         run: |
-          grep -q "registerPlugin(HealthConnectNativePlugin.class)" android/app/src/main/java/com/mrcdrnzz/dailytracker/MainActivity.java
-          grep -q "android.permission.health.READ_SLEEP" android/app/src/main/AndroidManifest.xml
-          grep -q "androidx.health.connect:connect-client:1.1.0" android/app/build.gradle
-          echo "Health Connect bridge, permissions, and AndroidX dependency are present."
+          echo "Checking dependency..."
+          grep -n 'androidx.health.connect:connect-client:1.1.0' android/app/build.gradle
+          echo "Checking plugin registration..."
+          grep -n 'registerPlugin(HealthConnectNativePlugin.class)' android/app/src/main/java/com/mrcdrnzz/dailytracker/MainActivity.java
+          echo "Checking manifest permission..."
+          grep -n 'android.permission.health.READ_SLEEP' android/app/src/main/AndroidManifest.xml
 
       - name: Build debug APK
         run: |
