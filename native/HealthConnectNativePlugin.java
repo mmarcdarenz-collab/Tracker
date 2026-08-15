@@ -17,6 +17,8 @@ import android.health.connect.datatypes.ActiveCaloriesBurnedRecord;
 import android.os.Build;
 import android.os.OutcomeReceiver;
 
+import androidx.health.connect.client.HealthConnectClient;
+
 
 
 import com.getcapacitor.JSObject;
@@ -55,18 +57,19 @@ public class HealthConnectNativePlugin extends Plugin {
         }
 
         try {
-            Intent intent = new Intent(HealthConnectManager.ACTION_MANAGE_HEALTH_PERMISSIONS);
-            intent.putExtra(Intent.EXTRA_PACKAGE_NAME, getContext().getPackageName());
+            // Android's Jetpack API exposes the correct Health Connect settings
+            // action for the Android version running on this device.
+            Intent intent = new Intent(HealthConnectClient.getHealthConnectSettingsAction());
 
             if (intent.resolveActivity(getContext().getPackageManager()) == null) {
-                call.reject("Android could not find the Health Connect permissions screen.");
+                call.reject("Android could not find Health Connect settings.");
                 return;
             }
 
             getActivity().startActivity(intent);
             call.resolve();
         } catch (Exception e) {
-            call.reject("Could not open Health Connect access settings.", e);
+            call.reject("Could not open Health Connect settings.", e);
         }
     }
 
