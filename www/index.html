@@ -1886,5 +1886,506 @@ renderSpark();renderToday();renderHistory();renderMoney();renderWorkout();
 renderHealth();
 renderTodayDashboardExtras();refreshFxRates(false);
 </script>
+
+<!-- DAILY_TRACKER_WORKOUT_3MIN_PATCH -->
+<style>
+
+/* Daily Tracker Workout 3-Minute Completion UI */
+.exercise-done-btn{
+  width:100%;
+  margin-top:12px;
+  padding:12px 14px;
+  border:1px solid #24543c;
+  border-radius:13px;
+  background:#10251c;
+  color:var(--green);
+  font-weight:900;
+}
+.exercise-done-btn:active{transform:scale(.99)}
+.pending-workout-wrap{
+  display:grid;
+  gap:9px;
+  margin:2px 0 14px;
+}
+.pending-workout-bubble{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:11px 12px;
+  border:1px solid #24543c;
+  border-radius:16px;
+  background:linear-gradient(90deg,#0e241a,#0c1b18);
+}
+.pending-check{
+  width:34px;height:34px;flex:none;
+  border-radius:50%;
+  display:grid;place-items:center;
+  background:#153b2a;color:var(--green);
+  font-weight:950;
+}
+.pending-main{flex:1;min-width:0}
+.pending-main b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pending-main small{display:block;margin-top:2px;color:var(--muted);font-size:10px}
+.pending-time{color:var(--green);font-weight:900}
+.pending-edit,.pending-undo{
+  border:0;background:transparent;padding:7px 5px;
+  font-size:11px;font-weight:900;
+}
+.pending-edit{color:var(--blue)}
+.pending-undo{color:var(--muted)}
+.all-workouts-done{
+  padding:28px 16px;text-align:center;color:var(--green)
+}
+.all-workouts-done>div{
+  width:50px;height:50px;border-radius:50%;display:grid;place-items:center;
+  margin:0 auto 10px;background:#153b2a;font-size:24px;font-weight:900
+}
+.all-workouts-done b{display:block;color:#fff}
+.all-workouts-done small{display:block;color:var(--muted);margin-top:5px;line-height:1.4}
+.activity-history-title{
+  margin-top:18px;padding-top:13px;border-top:1px solid rgba(255,255,255,.08);
+  color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:900
+}
+.saved-activity-row{
+  display:flex;gap:10px;padding:12px 2px;border-top:1px solid rgba(255,255,255,.055)
+}
+.saved-activity-icon{
+  width:34px;height:34px;flex:none;border-radius:11px;
+  display:grid;place-items:center;background:#153b2a;color:var(--green);font-weight:900
+}
+.saved-activity-main{flex:1;min-width:0}
+.saved-activity-main b{display:block;font-size:13px}
+.saved-activity-main small{display:block;color:var(--muted);font-size:10px;margin-top:3px}
+.saved-activity-detail{color:#b9c7d1;font-size:11px;line-height:1.55;margin-top:7px}
+
+</style>
+<script>
+
+/* Daily Tracker Workout Reliability + 3-Minute Completion Patch
+   Designed for daily_tracker_login_money_minimal.html
+   Add this script AFTER the app's existing script, just before </body>.
+*/
+(() => {
+  "use strict";
+
+  const FINALIZE_MS = 3 * 60 * 1000;
+  const tickers = new Map();
+
+  function deepClone(v){ return JSON.parse(JSON.stringify(v)); }
+  function dayKey(){ return typeof todayKey === "function" ? todayKey() : new Date().toISOString().slice(0,10); }
+  function pendingId(day, key){ return `${day}|${dayKey()}|${key}`; }
+
+  function ensureWorkoutPatchState(){
+    if(!state.workouts) state.workouts = {sessions:[], drafts:{}};
+    if(!state.workouts.drafts) state.workouts.drafts = {};
+    if(!state.workouts.pendingExercises) state.workouts.pendingExercises = {};
+    if(!state.workouts.completedExercises) state.workouts.completedExercises = [];
+    if(!state.workouts.collapsedByDay) state.workouts.collapsedByDay = {push:true,pull:true,legs:true};
+    save();
+  }
+
+  function exerciseStableKey(e, index){
+    if(e?.[4]) return String(e[4]);
+    if(typeof exerciseKey === "function") return exerciseKey(e);
+    return `${e?.[0] || "Exercise"}|${e?.[1] || ""}|${index}`;
+  }
+
+  function hasSetData(entry){
+    return !!entry?.sets?.some(s =>
+      String(s?.kg ?? "").trim() !== "" ||
+      String(s?.reps ?? "").trim() !== "" ||
+      String(s?.effort ?? "").trim() !== ""
+    );
+  }
+
+  function persistNow(){
+    try { save(); } catch(err){ console.warn("Workout autosave failed", err); }
+  }
+
+  function pendingFor(day, key){
+    ensureWorkoutPatchState();
+    return state.workouts.pendingExercises[pendingId(day,key)] || null;
+  }
+
+  function completedToday(day, key){
+    ensureWorkoutPatchState();
+    const d = dayKey();
+    return state.workouts.completedExercises.some(x =>
+      x.day === day && x.dayKey === d && x.exerciseKey === key
+    );
+  }
+
+  function formatLeft(ms){
+    const total = Math.max(0, Math.ceil(ms/1000));
+    const m = Math.floor(total/60);
+    const s = total % 60;
+    return `${m}:${String(s).padStart(2,"0")}`;
+  }
+
+  function finalizePending(id){
+    ensureWorkoutPatchState();
+    const rec = state.workouts.pendingExercises[id];
+    if(!rec) return;
+
+    const already = state.workouts.completedExercises.some(x => x.id === rec.id);
+    if(!already){
+      state.workouts.completedExercises.push({
+        ...deepClone(rec),
+        finalizedAt: new Date().toISOString()
+      });
+    }
+
+    delete state.workouts.pendingExercises[id];
+
+    // Clear only this exercise's active draft after finalization.
+    try{
+      const exs = effectiveExercises(rec.day);
+      const idx = exs.findIndex((e,i)=>exerciseStableKey(e,i) === rec.exerciseKey);
+      const draftKey = `${rec.day}_${rec.dayKey}`;
+      const d = state.workouts.drafts?.[draftKey];
+      if(idx >= 0 && d?.[idx]){
+        d[idx].sets = (d[idx].sets || []).map(() => ({kg:"",reps:"",effort:""}));
+      }
+    }catch(e){ console.warn("Could not clear finalized draft", e); }
+
+    persistNow();
+    if(typeof renderWorkoutHistory === "function") renderWorkoutHistory();
+    if(typeof renderTodayDashboardExtras === "function") renderTodayDashboardExtras();
+    if(typeof renderWorkout === "function") renderWorkout();
+  }
+
+  function schedulePending(id){
+    const old = tickers.get(id);
+    if(old) clearInterval(old);
+
+    const loop = () => {
+      const rec = state.workouts.pendingExercises?.[id];
+      if(!rec){
+        clearInterval(tickers.get(id));
+        tickers.delete(id);
+        return;
+      }
+      const left = rec.expiresAt - Date.now();
+      const el = document.querySelector(`[data-pending-id="${CSS.escape(id)}"] .pending-time`);
+      if(el) el.textContent = formatLeft(left);
+      if(left <= 0){
+        clearInterval(tickers.get(id));
+        tickers.delete(id);
+        finalizePending(id);
+      }
+    };
+    loop();
+    tickers.set(id, setInterval(loop, 1000));
+  }
+
+  function startCompletion(e, ei){
+    ensureWorkoutPatchState();
+    const d = draft();
+    const entry = d[ei];
+    if(!hasSetData(entry)){
+      alert("Enter at least one set before marking this activity done.");
+      return;
+    }
+    const key = exerciseStableKey(e,ei);
+    const id = pendingId(wday,key);
+    state.workouts.pendingExercises[id] = {
+      id,
+      day: wday,
+      dayKey: dayKey(),
+      exerciseKey: key,
+      name: e[0],
+      type: e[1] || "",
+      muscle: e[2] || "",
+      sets: deepClone(entry.sets || []),
+      startedAt: new Date().toISOString(),
+      expiresAt: Date.now() + FINALIZE_MS
+    };
+    persistNow();
+    renderWorkout();
+    schedulePending(id);
+  }
+
+  function undoCompletion(id){
+    ensureWorkoutPatchState();
+    const rec = state.workouts.pendingExercises[id];
+    if(!rec) return;
+
+    try{
+      const exs = effectiveExercises(rec.day);
+      const idx = exs.findIndex((e,i)=>exerciseStableKey(e,i) === rec.exerciseKey);
+      const draftKey = `${rec.day}_${rec.dayKey}`;
+      if(!state.workouts.drafts[draftKey]) state.workouts.drafts[draftKey] = [];
+      if(idx >= 0){
+        if(!state.workouts.drafts[draftKey][idx]) state.workouts.drafts[draftKey][idx] = {sets:[]};
+        state.workouts.drafts[draftKey][idx].sets = deepClone(rec.sets || []);
+      }
+    }catch(e){ console.warn("Could not restore pending exercise", e); }
+
+    delete state.workouts.pendingExercises[id];
+    const timer = tickers.get(id);
+    if(timer) clearInterval(timer);
+    tickers.delete(id);
+    persistNow();
+    renderWorkout();
+  }
+
+  function editPending(id){
+    undoCompletion(id);
+    requestAnimationFrame(() => {
+      const key = id.split("|").slice(2).join("|");
+      document.querySelectorAll(".exercise").forEach(box => {
+        if(box.dataset.exerciseKey === key){
+          box.classList.add("open");
+          box.scrollIntoView({behavior:"smooth", block:"center"});
+        }
+      });
+    });
+  }
+
+  function renderPendingBubbles(container, day){
+    ensureWorkoutPatchState();
+    const active = Object.values(state.workouts.pendingExercises)
+      .filter(x => x.day === day && x.dayKey === dayKey())
+      .sort((a,b)=>a.expiresAt-b.expiresAt);
+
+    if(!active.length) return;
+
+    const wrap = document.createElement("div");
+    wrap.className = "pending-workout-wrap";
+
+    active.forEach(rec => {
+      const item = document.createElement("div");
+      item.className = "pending-workout-bubble";
+      item.dataset.pendingId = rec.id;
+      item.innerHTML = `
+        <div class="pending-check">✓</div>
+        <div class="pending-main">
+          <b>${rec.name}</b>
+          <small>Completed • saving in <span class="pending-time">${formatLeft(rec.expiresAt-Date.now())}</span></small>
+        </div>
+        <button class="pending-edit" type="button">Edit</button>
+        <button class="pending-undo" type="button">Undo</button>
+      `;
+      item.querySelector(".pending-edit").onclick = () => editPending(rec.id);
+      item.querySelector(".pending-undo").onclick = () => undoCompletion(rec.id);
+      wrap.appendChild(item);
+      schedulePending(rec.id);
+    });
+
+    container.appendChild(wrap);
+  }
+
+  function patchedRenderWorkout(){
+    ensureWorkoutPatchState();
+
+    const p = plans[wday];
+    const exercises = effectiveExercises(wday);
+    const d = draft();
+
+    // Persist draft creation immediately too.
+    persistNow();
+
+    wtitle.textContent = p.title;
+    wsub.textContent = "";
+    wsub.style.display = "none";
+    wlist.innerHTML = "";
+
+    // Pending items sit above the remaining list.
+    renderPendingBubbles(wlist, wday);
+
+    exercises.forEach((e,ei) => {
+      const stableKey = exerciseStableKey(e,ei);
+
+      // Hide items once Done was pressed. During 3 min they live in the bubble.
+      if(pendingFor(wday,stableKey) || completedToday(wday,stableKey)) return;
+
+      const box = document.createElement("div");
+      box.className = "exercise"; // all collapsed by default
+      box.dataset.exerciseKey = stableKey;
+
+      const pv = prev(ei,0);
+      const pl = e[3]?.[0] || [null,""];
+      box.innerHTML = `
+        <div class="exercise-head">
+          <span class="exnum">${ei+1}</span>
+          <button class="exname" type="button" style="border:0;background:transparent;color:inherit;text-align:left;padding:0">
+            <b>${e[0]} ${e[1]?'<span style="color:var(--muted);font-weight:500">('+e[1]+')</span>':''}</b>
+            <small>${e[2]}</small>
+          </button>
+          <span class="exsum">${pv?(pv.kg||"–")+" × "+(pv.reps||"–"):(pl[0]??"–")+" × "+(pl[1]||"")}</span>
+          <button class="exercise-menu-btn" type="button" aria-label="Activity menu">⋯</button>
+          <button class="exercise-chevron" type="button" aria-label="Expand activity">⌄</button>
+        </div>
+        <div class="exbody">
+          <div class="sethead"><span>SET</span><span>PREVIOUS</span><span>KG</span><span>REPS</span><span>EFFORT</span></div>
+          <div class="rows"></div>
+          <button class="addset" type="button">＋ Add Set</button>
+          <button class="exercise-done-btn" type="button">✓ Done with ${e[0]}</button>
+        </div>`;
+
+      const toggle = () => box.classList.toggle("open");
+      box.querySelector(".exname").onclick = toggle;
+      box.querySelector(".exsum").onclick = toggle;
+      box.querySelector(".exercise-chevron").onclick = toggle;
+
+      const menu = box.querySelector(".exercise-menu-btn");
+      menu.onclick = ev => {
+        ev.stopPropagation();
+        if(typeof openExerciseMenu === "function") openExerciseMenu(e,ei,ev.currentTarget);
+      };
+
+      const rows = box.querySelector(".rows");
+      (d[ei]?.sets || []).forEach((x,si) => {
+        const old = prev(ei,si);
+        const pln = e[3]?.[si] || [null,""];
+        const row = document.createElement("div");
+        row.className = "setrow";
+        row.innerHTML = `
+          <b style="text-align:center">${si+1}</b>
+          <div class="prevval">${old?(old.kg||"–")+" × "+(old.reps||"–"):(pln[0]??"–")+" × "+(pln[1]||"")}<br><span style="opacity:.5">${old?"previous":"plan"}</span></div>
+          <input class="loginput kg" inputmode="decimal" type="number" step=".5" value="${x.kg ?? ""}" placeholder="${old?.kg ?? pln[0] ?? "KG"}">
+          <input class="loginput reps" inputmode="numeric" type="number" value="${x.reps ?? ""}" placeholder="${old?.reps ?? "Reps"}">
+          <button class="effort ${x.effort || ""}" type="button"></button>`;
+
+        const kg = row.querySelector(".kg");
+        const reps = row.querySelector(".reps");
+        kg.oninput = z => { x.kg = z.target.value; persistNow(); };
+        reps.oninput = z => { x.reps = z.target.value; persistNow(); };
+        kg.onchange = persistNow;
+        reps.onchange = persistNow;
+        kg.onblur = persistNow;
+        reps.onblur = persistNow;
+
+        row.querySelector(".effort").onclick = () => {
+          effTarget = {ei,si};
+          effortModal.classList.add("show");
+        };
+        rows.appendChild(row);
+      });
+
+      box.querySelector(".addset").onclick = () => {
+        if(!d[ei]) d[ei] = {sets:[]};
+        d[ei].sets.push({kg:"",reps:"",effort:""});
+        persistNow();
+        renderWorkout();
+        requestAnimationFrame(()=>{
+          const reopened = [...document.querySelectorAll(".exercise")]
+            .find(x => x.dataset.exerciseKey === stableKey);
+          if(reopened) reopened.classList.add("open");
+        });
+      };
+
+      box.querySelector(".exercise-done-btn").onclick = () => startCompletion(e,ei);
+      wlist.appendChild(box);
+    });
+
+    if(!wlist.querySelector(".exercise") && !wlist.querySelector(".pending-workout-bubble")){
+      const all = document.createElement("div");
+      all.className = "all-workouts-done";
+      all.innerHTML = `<div>✓</div><b>${p.title} complete</b><small>Today's completed activities are saved in History.</small>`;
+      wlist.appendChild(all);
+    }
+
+    if(typeof updateFinishWorkoutButton === "function") updateFinishWorkoutButton();
+  }
+
+  // Keep effort selection autosaved and reopen the same exercise rather than first item.
+  document.querySelectorAll("[data-eff]").forEach(btn => {
+    btn.onclick = () => {
+      if(!effTarget) return;
+      const current = effectiveExercises(wday)[effTarget.ei];
+      const stableKey = current ? exerciseStableKey(current,effTarget.ei) : null;
+      draft()[effTarget.ei].sets[effTarget.si].effort = btn.dataset.eff;
+      persistNow();
+      effortModal.classList.remove("show");
+      renderWorkout();
+      if(stableKey){
+        requestAnimationFrame(()=>{
+          const box = [...document.querySelectorAll(".exercise")].find(x=>x.dataset.exerciseKey===stableKey);
+          if(box) box.classList.add("open");
+        });
+      }
+    };
+  });
+
+  // Rebind category tabs: list only, all collapsed after every switch.
+  document.querySelectorAll("[data-wday]").forEach(btn => {
+    btn.onclick = () => {
+      wday = btn.dataset.wday;
+      document.querySelectorAll("[data-wday]").forEach(x=>x.classList.remove("active"));
+      btn.classList.add("active");
+      renderWorkout();
+    };
+  });
+
+  // Extend workout history with auto-finalized individual activities.
+  const originalHistoryRenderer = (typeof renderWorkoutHistory === "function") ? renderWorkoutHistory : null;
+  if(originalHistoryRenderer){
+    renderWorkoutHistory = function(){
+      originalHistoryRenderer();
+      ensureWorkoutPatchState();
+
+      const list = document.getElementById("workoutHistoryList");
+      if(!list) return;
+
+      const records = [...state.workouts.completedExercises]
+        .sort((a,b)=>String(b.finalizedAt||b.startedAt).localeCompare(String(a.finalizedAt||a.startedAt)))
+        .slice(0,60);
+
+      if(!records.length) return;
+
+      const title = document.createElement("div");
+      title.className = "activity-history-title";
+      title.textContent = "Saved activities";
+      list.appendChild(title);
+
+      records.forEach(rec => {
+        const when = new Date(rec.finalizedAt || rec.startedAt);
+        const logged = (rec.sets||[]).filter(s => s.kg || s.reps || s.effort);
+        const details = logged.map((s,i)=>{
+          const kg = (s.kg!=="" && s.kg!=null) ? `${s.kg} kg` : "—";
+          const reps = (s.reps!=="" && s.reps!=null) ? `${s.reps} reps` : "—";
+          return `Set ${i+1}: ${kg} × ${reps}${s.effort ? ` • ${s.effort}` : ""}`;
+        }).join("<br>");
+
+        const row = document.createElement("div");
+        row.className = "saved-activity-row";
+        row.innerHTML = `
+          <div class="saved-activity-icon">✓</div>
+          <div class="saved-activity-main">
+            <b>${rec.name}</b>
+            <small>${workoutDayLabel(rec.day)} • ${when.toLocaleDateString([], {day:"numeric",month:"short",year:"numeric"})} • ${when.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}</small>
+            <div class="saved-activity-detail">${details || "No set details"}</div>
+          </div>`;
+        list.appendChild(row);
+      });
+    };
+  }
+
+  // Do not use the old whole-workout button as the primary completion path.
+  // It remains available as a manual fallback if already shown by the original app.
+  const finishBtn = document.getElementById("saveWorkout");
+  if(finishBtn){
+    finishBtn.textContent = "Save remaining workout";
+    finishBtn.title = "Optional fallback. Individual activities now save automatically after their 3-minute countdown.";
+  }
+
+  // Reconcile timers after reload/app reopen.
+  ensureWorkoutPatchState();
+  Object.keys(state.workouts.pendingExercises).forEach(id => {
+    const rec = state.workouts.pendingExercises[id];
+    if(rec.expiresAt <= Date.now()) finalizePending(id);
+    else schedulePending(id);
+  });
+
+  // Replace renderer last.
+  renderWorkout = patchedRenderWorkout;
+  renderWorkout();
+
+  console.info("Daily Tracker workout patch active: autosave + collapsed lists + 3-minute completion.");
+})();
+
+</script>
+
 </body>
 </html>
