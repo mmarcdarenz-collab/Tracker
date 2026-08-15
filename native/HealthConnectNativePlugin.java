@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.health.connect.HealthConnectManager;
+import android.health.connect.AggregateRecordsRequest;
+import android.health.connect.AggregateRecordsResponse;
 import android.health.connect.HealthPermissions;
 import android.health.connect.HealthConnectException;
 import android.health.connect.ReadRecordsRequestUsingFilters;
@@ -15,6 +17,7 @@ import android.health.connect.datatypes.RestingHeartRateRecord;
 import android.health.connect.datatypes.HeartRateRecord;
 import android.health.connect.datatypes.ActiveCaloriesBurnedRecord;
 import android.health.connect.datatypes.StepsRecord;
+import android.health.connect.datatypes.units.Energy;
 import android.os.Build;
 import android.os.OutcomeReceiver;
 
@@ -111,6 +114,63 @@ public class HealthConnectNativePlugin extends Plugin {
         return future;
     }
 
+
+    private CompletableFuture<Long> aggregateSteps(Instant start, Instant end) {
+        CompletableFuture<Long> future = new CompletableFuture<>();
+        TimeInstantRangeFilter filter = new TimeInstantRangeFilter.Builder()
+            .setStartTime(start)
+            .setEndTime(end)
+            .build();
+
+        AggregateRecordsRequest<Long> request =
+            new AggregateRecordsRequest.Builder<Long>(filter)
+                .addAggregationType(StepsRecord.STEPS_COUNT_TOTAL)
+                .build();
+
+        manager().aggregate(
+            request,
+            getContext().getMainExecutor(),
+            new OutcomeReceiver<AggregateRecordsResponse<Long>, HealthConnectException>() {
+                @Override public void onResult(AggregateRecordsResponse<Long> response) {
+                    Long value = response.get(StepsRecord.STEPS_COUNT_TOTAL);
+                    future.complete(value == null ? 0L : value);
+                }
+                @Override public void onError(HealthConnectException error) {
+                    future.completeExceptionally(error);
+                }
+            }
+        );
+        return future;
+    }
+
+    private CompletableFuture<Double> aggregateActiveCalories(Instant start, Instant end) {
+        CompletableFuture<Double> future = new CompletableFuture<>();
+        TimeInstantRangeFilter filter = new TimeInstantRangeFilter.Builder()
+            .setStartTime(start)
+            .setEndTime(end)
+            .build();
+
+        AggregateRecordsRequest<Energy> request =
+            new AggregateRecordsRequest.Builder<Energy>(filter)
+                .addAggregationType(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL)
+                .build();
+
+        manager().aggregate(
+            request,
+            getContext().getMainExecutor(),
+            new OutcomeReceiver<AggregateRecordsResponse<Energy>, HealthConnectException>() {
+                @Override public void onResult(AggregateRecordsResponse<Energy> response) {
+                    Energy value = response.get(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL);
+                    future.complete(value == null ? 0.0 : value.getInCalories());
+                }
+                @Override public void onError(HealthConnectException error) {
+                    future.completeExceptionally(error);
+                }
+            }
+        );
+        return future;
+    }
+
     @PluginMethod
     public void readSummary(PluginCall call) {
         HealthConnectManager mgr = manager();
@@ -134,6 +194,8 @@ public class HealthConnectNativePlugin extends Plugin {
         CompletableFuture<List<RestingHeartRateRecord>> restF = read(RestingHeartRateRecord.class, sleepStart, now);
         CompletableFuture<List<HeartRateRecord>> heartF = read(HeartRateRecord.class, dayStart, now);
         CompletableFuture<List<ActiveCaloriesBurnedRecord>> calF = read(ActiveCaloriesBurnedRecord.class, dayStart, now);
+        CompletableFuture<Long> stepsAggF = aggregateSteps(dayStart, now);
+        CompletableFuture<Double> activeCaloriesAggF = aggregateActiveCalories(dayStart, now);
         CompletableFuture<List<StepsRecord>> stepsF = read(StepsRecord.class, dayStart, now);
 
         CompletableFuture.allOf(sleepF, restF, heartF, calF, stepsF).whenComplete((v, err) -> {
@@ -176,12 +238,9 @@ public class HealthConnectNativePlugin extends Plugin {
                 }
                 if (hrCount > 0) out.put("workoutHR", Math.round((double) hrSum / hrCount));
 
-                double calories = 0;
-                for (ActiveCaloriesBurnedRecord r : calF.join()) {
-                    calories += r.getEnergy().getInCalories();
-                }
-                if (calories > 5000) calories = calories / 1000.0;
+                double calories = activeCaloriesAggF.join();
                 out.put("activeCalories", Math.round(calories));
+                out.put("steps", stepsAggF.join());
 
                 long steps = 0;
                 for (StepsRecord r : stepsF.join()) steps += r.getCount();
