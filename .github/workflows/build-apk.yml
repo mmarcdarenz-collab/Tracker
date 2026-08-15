@@ -31,6 +31,21 @@ jobs:
       - name: Create Android project
         run: npx cap add android
 
+      - name: Raise Android minSdk for Health Connect
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path("android/variables.gradle")
+          s = p.read_text()
+          new_s, n = re.subn(r'minSdkVersion\s*=\s*\d+', 'minSdkVersion = 26', s, count=1)
+          if n != 1:
+              raise SystemExit("Could not find minSdkVersion in android/variables.gradle")
+          p.write_text(new_s)
+          print("Updated minSdkVersion to 26:")
+          print(p.read_text())
+          PY
+
       - name: Add Health Connect SDK dependency
         run: |
           python3 - <<'PY'
@@ -63,6 +78,8 @@ jobs:
 
       - name: Verify Health Connect setup
         run: |
+          echo "Checking minSdk..."
+          grep -n 'minSdkVersion = 26' android/variables.gradle
           echo "Checking dependency..."
           grep -n 'androidx.health.connect:connect-client:1.1.0' android/app/build.gradle
           echo "Checking plugin registration..."
