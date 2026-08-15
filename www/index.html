@@ -142,7 +142,53 @@ h2{margin:0;font-size:22px}
 .setting-row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.06)}
 .setting-row:last-child{border-bottom:0}
 
-.chat{position:fixed;right:max(18px,calc((100vw - 560px)/2 + 18px));bottom:calc(108px + env(safe-area-inset-bottom));z-index:90;pointer-events:auto;padding:11px 15px;border-radius:999px;border:1px solid #2a4153;background:#101d28;color:white;font-weight:900;box-shadow:var(--shadow)}
+.chat{
+  position:fixed;
+  right:max(14px,calc((100vw - 560px)/2 + 14px));
+  bottom:calc(104px + env(safe-area-inset-bottom));
+  z-index:90;
+  pointer-events:auto;
+  padding:8px 11px;
+  border-radius:999px;
+  border:1px solid rgba(70,105,130,.72);
+  background:rgba(16,29,40,.82);
+  color:white;
+  font-size:12px;
+  font-weight:850;
+  box-shadow:0 8px 24px rgba(0,0,0,.24);
+  opacity:.74;
+  backdrop-filter:blur(10px);
+  transition:opacity .18s ease,transform .24s ease,right .24s ease;
+  touch-action:pan-y;
+}
+.chat:active{opacity:1;transform:scale(.97)}
+.chat.collapsed{
+  pointer-events:none;
+  opacity:0;
+  transform:translateX(115%);
+}
+.chat-handle{
+  position:fixed;
+  right:max(0px,calc((100vw - 560px)/2));
+  bottom:calc(108px + env(safe-area-inset-bottom));
+  z-index:91;
+  width:27px;
+  height:42px;
+  border:1px solid rgba(70,105,130,.7);
+  border-right:0;
+  border-radius:14px 0 0 14px;
+  background:rgba(16,29,40,.82);
+  color:#dfeaf2;
+  display:none;
+  place-items:center;
+  font-size:17px;
+  opacity:.72;
+  backdrop-filter:blur(10px);
+  box-shadow:0 8px 20px rgba(0,0,0,.2);
+  touch-action:pan-y;
+}
+.chat-handle.show{display:grid}
+.chat-handle:active{opacity:1}
 nav{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:min(560px,100%);display:grid;grid-template-columns:repeat(5,1fr);gap:3px;padding:9px 11px calc(10px + env(safe-area-inset-bottom));background:rgba(7,16,24,.94);backdrop-filter:blur(18px);border-top:1px solid #182833;z-index:40}
 nav button{border:0;background:transparent;color:#8d9aa7;padding:9px 3px;border-radius:17px;font-weight:800}
 nav button.active{color:var(--green);background:#10231a}
@@ -313,6 +359,29 @@ nav button.active{color:var(--green);background:#10231a}
 .summary-metric.workout-shortcut:active{transform:scale(.98)}
 .workout-save{display:none}
 .workout-save.ready{display:block}
+
+
+/* Fix Day Off / Rest Day alignment */
+.rest-toggle{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:14px 0 2px;
+  border-top:1px solid rgba(255,255,255,.06);
+}
+.rest-toggle > div{
+  flex:1;
+  min-width:0;
+}
+.rest-toggle .switch{
+  flex:0 0 48px;
+  margin:0;
+  align-self:center;
+}
+.rest-toggle .note{
+  line-height:1.35;
+}
 
 </style>
 </head>
@@ -574,7 +643,8 @@ nav button.active{color:var(--green);background:#10231a}
 
 </div>
 
-<button class="chat" id="chatBtn">✨ Ask ChatGPT</button>
+<button class="chat" id="chatBtn">✨ Ask GPT</button>
+<button class="chat-handle" id="chatHandle" aria-label="Show Ask GPT">‹</button>
 
 <nav>
   <button class="active" data-view="today">☀️<br>Today</button>
@@ -927,6 +997,62 @@ document.querySelectorAll("nav button").forEach(b=>{
   b.addEventListener("click",()=>switchView(b.dataset.view));
   b.addEventListener("touchend",e=>{e.preventDefault();switchView(b.dataset.view)},{passive:false});
 });
+
+const chatBtn=document.getElementById("chatBtn");
+const chatHandle=document.getElementById("chatHandle");
+let chatTouchStartX=null;
+let chatTouchStartY=null;
+
+function setChatCollapsed(collapsed){
+  if(!chatBtn || !chatHandle) return;
+  chatBtn.classList.toggle("collapsed",collapsed);
+  chatHandle.classList.toggle("show",collapsed);
+  try{localStorage.setItem("dt_chat_collapsed",collapsed?"1":"0")}catch(e){}
+}
+try{
+  setChatCollapsed(localStorage.getItem("dt_chat_collapsed")==="1");
+}catch(e){setChatCollapsed(false)}
+
+if(chatBtn){
+  chatBtn.addEventListener("touchstart",e=>{
+    const t=e.changedTouches?.[0];
+    if(!t)return;
+    chatTouchStartX=t.clientX;
+    chatTouchStartY=t.clientY;
+  },{passive:true});
+  chatBtn.addEventListener("touchend",e=>{
+    const t=e.changedTouches?.[0];
+    if(!t || chatTouchStartX==null)return;
+    const dx=t.clientX-chatTouchStartX;
+    const dy=t.clientY-chatTouchStartY;
+    chatTouchStartX=null;chatTouchStartY=null;
+    if(Math.abs(dx)>45 && Math.abs(dx)>Math.abs(dy) && dx>0){
+      e.preventDefault();
+      setChatCollapsed(true);
+    }
+  },{passive:false});
+}
+if(chatHandle){
+  chatHandle.onclick=()=>setChatCollapsed(false);
+  chatHandle.addEventListener("touchstart",e=>{
+    const t=e.changedTouches?.[0];
+    if(!t)return;
+    chatTouchStartX=t.clientX;
+    chatTouchStartY=t.clientY;
+  },{passive:true});
+  chatHandle.addEventListener("touchend",e=>{
+    const t=e.changedTouches?.[0];
+    if(!t || chatTouchStartX==null)return;
+    const dx=t.clientX-chatTouchStartX;
+    const dy=t.clientY-chatTouchStartY;
+    chatTouchStartX=null;chatTouchStartY=null;
+    if(Math.abs(dx)>35 && Math.abs(dx)>Math.abs(dy) && dx<0){
+      e.preventDefault();
+      setChatCollapsed(false);
+    }
+  },{passive:false});
+}
+
 document.getElementById("chatBtn").onclick=async()=>{
   const webUrl="https://chatgpt.com/";
   try{
