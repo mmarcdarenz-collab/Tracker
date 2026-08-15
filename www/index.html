@@ -216,13 +216,72 @@ nav button.active{color:var(--green);background:#10231a}
 .health-test-note{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.45}
 
 
-.exercise-remove{width:34px;height:34px;flex:none;border:1px solid #5a3036;background:#211419;color:var(--red);border-radius:10px;font-size:16px;font-weight:900}
-.exercise-remove:active{transform:scale(.96)}
 .exercise-add-row{display:grid;grid-template-columns:1fr;gap:10px;margin-top:14px}
 .add-exercise-btn{width:100%;padding:13px;border:1px dashed #2d5d88;background:#0b1824;color:var(--blue);border-radius:14px;font-weight:900}
 .custom-ex-form{display:grid;gap:10px}
 .custom-ex-form label{font-size:12px;color:var(--muted)}
 .custom-ex-form input{margin:4px 0 0}
+
+
+/* Workout UI refinement */
+.exercise{
+  border:0 !important;
+  border-bottom:1px solid rgba(255,255,255,.055) !important;
+  border-radius:0 !important;
+  background:transparent !important;
+  margin-top:0 !important;
+}
+.exercise:last-child{border-bottom:0 !important}
+.exercise-head{
+  padding:14px 2px !important;
+  gap:10px;
+}
+.exnum{
+  background:#0c1c2b;
+  border-color:#28588b;
+}
+.exname{min-width:0}
+.exname b{font-size:15px}
+.exsum{font-size:11px;color:var(--muted);white-space:nowrap}
+.exercise-menu-btn{
+  width:34px;height:34px;flex:none;
+  border:0;background:transparent;color:var(--muted);
+  border-radius:10px;font-size:22px;line-height:1;
+  display:grid;place-items:center;
+}
+.exercise-menu-btn:active{background:#14202a;color:#fff}
+.exercise-chevron{
+  width:30px;height:30px;flex:none;
+  border:0;background:transparent;color:var(--blue);
+  font-size:20px;display:grid;place-items:center;
+  transition:transform .2s ease;
+}
+.exercise.open .exercise-chevron{transform:rotate(180deg)}
+.exbody{padding:0 0 14px 44px !important}
+.exercise-menu{
+  position:fixed;inset:auto 16px auto 16px;z-index:160;
+  background:#0d1720;border:1px solid var(--line);border-radius:18px;
+  box-shadow:0 18px 50px rgba(0,0,0,.45);padding:8px;display:none;
+}
+.exercise-menu.show{display:block}
+.exercise-menu button{
+  width:100%;display:flex;align-items:center;justify-content:space-between;
+  border:0;background:transparent;color:#fff;padding:14px 13px;
+  border-radius:12px;text-align:left;font-weight:800;
+}
+.exercise-menu button:active{background:#15212b}
+.exercise-menu .remove{color:var(--red)}
+.exercise-edit-grid{display:grid;gap:10px}
+.exercise-edit-grid label{font-size:12px;color:var(--muted)}
+.exercise-edit-grid input{
+  width:100%;margin-top:5px;padding:13px 14px;border-radius:13px;
+  border:1px solid var(--line);background:#071018;color:#fff;
+}
+.set-target-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.set-target-actions button{
+  border:1px solid var(--line);background:#111d27;color:var(--blue);
+  padding:10px;border-radius:12px;font-weight:800;
+}
 
 </style>
 </head>
@@ -337,7 +396,7 @@ nav button.active{color:var(--green);background:#10231a}
   </div>
 </section>
 
-<section id="workout" class="view"><h1>🏋️ Workout</h1><div class="subtitle">Track your workouts. Get stronger over time.</div><div class="workout-tabs"><button class="workout-tab active" data-wday="push">🔵 Push Day</button><button class="workout-tab" data-wday="pull">🟢 Pull Day</button><button class="workout-tab" data-wday="legs">🟡 Leg Day</button></div><div class="card workout-card"><h2 id="wtitle">PUSH DAY 💪</h2><div class="subtitle" id="wsub" style="font-size:13px;margin:4px 0 12px"></div><div id="wlist"></div>
+<section id="workout" class="view"><h1>🏋️ Workout</h1><div class="subtitle">Track your workouts. Get stronger over time.</div><div class="workout-tabs"><button class="workout-tab active" data-wday="push">🔵 Push Day</button><button class="workout-tab" data-wday="pull">🟢 Pull Day</button><button class="workout-tab" data-wday="legs">🟡 Leg Day</button></div><div class="card workout-card"><h2 id="wtitle">PUSH DAY</h2><div class="subtitle" id="wsub" style="font-size:13px;margin:4px 0 12px"></div><div id="wlist"></div>
     <div class="exercise-add-row"><button class="add-exercise-btn" id="addExerciseBtn">＋ Add Exercise</button></div>
     <button class="workout-save" id="saveWorkout">✓ Finish & Save Workout</button></div></section><section id="money" class="view">
   <h1>My Money 💰</h1>
@@ -409,7 +468,7 @@ nav button.active{color:var(--green);background:#10231a}
       <div class="health-connect-row">
         <div style="flex:1">
           <b>Health data source</b>
-          <div class="health-test-note">Auto tries Health Connect first, then Huawei Direct when configured.</div>
+          <div class="health-test-note">Auto uses Health Connect now. Huawei Direct remains an optional future fallback.</div>
         </div>
         <select id="healthSourceSelect" class="currency-select">
           <option value="auto">Auto</option>
@@ -482,6 +541,35 @@ nav button.active{color:var(--green);background:#10231a}
   <button data-view="settings">⚙️<br>Settings</button>
 </nav>
 
+
+
+<div class="exercise-menu" id="exerciseContextMenu">
+  <button id="editExerciseMenu">✏️ <span style="flex:1;margin-left:10px">Edit activity</span><span>›</span></button>
+  <button id="removeExerciseMenu" class="remove">🗑️ <span style="flex:1;margin-left:10px">Remove activity</span><span>›</span></button>
+</div>
+
+<div class="modal" id="editExerciseModal">
+  <div class="sheet">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div><h3 style="margin:0">Edit Activity</h3><div class="subtitle" style="font-size:12px;margin:4px 0 0">Change the exercise details and sets.</div></div>
+      <button class="secondary" id="closeEditExercise" style="padding:8px 12px">✕</button>
+    </div>
+    <div class="exercise-edit-grid">
+      <label>Exercise name<input id="editExName" type="text"></label>
+      <label>Equipment / type<input id="editExType" type="text"></label>
+      <label>Target muscle<input id="editExMuscle" type="text"></label>
+      <label>Number of sets<input id="editExSets" type="number" min="1" max="10"></label>
+    </div>
+    <div class="set-target-actions">
+      <button id="editAddSet">＋ Add Set</button>
+      <button id="editRemoveSet">− Remove Set</button>
+    </div>
+    <div class="sheet-actions" style="margin-top:12px">
+      <button class="secondary" id="cancelEditExercise">Cancel</button>
+      <button class="primary" id="saveEditExercise">Save Changes</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal" id="exerciseModal">
   <div class="sheet">
@@ -825,16 +913,27 @@ if(fxStatus){
 
 if(!state.workouts)state.workouts={sessions:[],drafts:{}};
 if(!state.workouts.custom)state.workouts.custom={push:[],pull:[],legs:[]};
-if(!state.workouts.removed)state.workouts.removed={push:[],pull:[],legs:[]};const plans={push:{title:'PUSH DAY 💪',sub:'Strength + Muscle • Lean & Strong',ex:[['Chest Press','Machine','Chest',[[47,'6–8'],[54,'5–8'],[54,'5–8']]],['Incline Machine Press','','Upper Chest',[[25,'8–10'],[27.5,'8–10'],[30,'5–8']]],['Shoulder Press','Machine','Shoulders',[[33,'6–10'],[39,'5–8']]],['Pec Fly','Machine','Chest',[[40,'12–15'],[47,'10–12'],[54,'8–12']]],['Lateral Raise','Dumbbells','Side Delts',[[6,'12–20'],[7,'12–20'],[8,'12–20']]],['Triceps Pushdown','Cable','Triceps',[[12.5,'8–15'],[15,'8–15'],[17.5,'8–15']]],['Triceps Pushdown','Unilateral • Optional','Triceps',[[5,'10–15'],[5,'10–15']]]]},pull:{title:'PULL DAY 💪',sub:'Strong Back • Bigger Arms • Better Posture',ex:[['Lat Pulldown','Wide Grip','Lats',[[40,'8–10'],[47,'6–10'],[54,'3–8']]],['Chest Supported Row','Machine','Mid Back',[[33,'8–10'],[40,'6–10'],[47,'6–10']]],['Close Grip Pulldown','Neutral / Close','Lats',[[40,'8–10'],[47,'6–10'],[54,'3–8']]],['Rear Delt Fly','Machine','Rear Delts',[[12,'15–20'],[19,'12–15'],[25,'10–15']]],['DB Biceps Curl','','Biceps',[[8,'10–12'],[9,'8–12'],[9,'6–10']]],['Hammer Curl','Dumbbells','Biceps',[[8,'10–12'],[9,'8–12'],[9,'6–10']]],['Abs Work','Choose 2','Abs',[[null,'10–20'],[null,'10–20']]],['DB Shrugs','','Traps',[[null,'10–15'],[null,'10–15'],[null,'10–15']]]]},legs:{title:'LEG DAY 🦵',sub:'Strong Legs • Power • Balance',ex:[['Leg Extension','Machine','Quadriceps',[[33,'10–15'],[40,'8–12'],[47,'8–12'],[54,'8–12']]],['Hamstring Curl','Machine','Hamstrings',[[25,'10–12'],[33,'8–10'],[40,'3–6']]],['Leg Press','Plate Loaded','Quads / Glutes',[[50,'10–15'],[80,'8–12'],[120,'6–10']]],['Seated Calf Raise','Machine','Calves',[[55,'10–15'],[75,'10–15'],[95,'10–15']]],['Abs Workout','Choose 2','Abs',[[null,'10–20'],[null,'10–20']]]]}};
+if(!state.workouts.edits)state.workouts.edits={push:{},pull:{},legs:{}};
+if(!state.workouts.removed)state.workouts.removed={push:[],pull:[],legs:[]};const plans={push:{title:'PUSH DAY',sub:'',ex:[['Chest Press','Machine','Chest',[[47,'6–8'],[54,'5–8'],[54,'5–8']]],['Incline Machine Press','','Upper Chest',[[25,'8–10'],[27.5,'8–10'],[30,'5–8']]],['Shoulder Press','Machine','Shoulders',[[33,'6–10'],[39,'5–8']]],['Pec Fly','Machine','Chest',[[40,'12–15'],[47,'10–12'],[54,'8–12']]],['Lateral Raise','Dumbbells','Side Delts',[[6,'12–20'],[7,'12–20'],[8,'12–20']]],['Triceps Pushdown','Cable','Triceps',[[12.5,'8–15'],[15,'8–15'],[17.5,'8–15']]],['Triceps Pushdown','Unilateral • Optional','Triceps',[[5,'10–15'],[5,'10–15']]]]},pull:{title:'PULL DAY',sub:'',ex:[['Lat Pulldown','Wide Grip','Lats',[[40,'8–10'],[47,'6–10'],[54,'3–8']]],['Chest Supported Row','Machine','Mid Back',[[33,'8–10'],[40,'6–10'],[47,'6–10']]],['Close Grip Pulldown','Neutral / Close','Lats',[[40,'8–10'],[47,'6–10'],[54,'3–8']]],['Rear Delt Fly','Machine','Rear Delts',[[12,'15–20'],[19,'12–15'],[25,'10–15']]],['DB Biceps Curl','','Biceps',[[8,'10–12'],[9,'8–12'],[9,'6–10']]],['Hammer Curl','Dumbbells','Biceps',[[8,'10–12'],[9,'8–12'],[9,'6–10']]],['Abs Work','Choose 2','Abs',[[null,'10–20'],[null,'10–20']]],['DB Shrugs','','Traps',[[null,'10–15'],[null,'10–15'],[null,'10–15']]]]},legs:{title:'LEG DAY',sub:'',ex:[['Leg Extension','Machine','Quadriceps',[[33,'10–15'],[40,'8–12'],[47,'8–12'],[54,'8–12']]],['Hamstring Curl','Machine','Hamstrings',[[25,'10–12'],[33,'8–10'],[40,'3–6']]],['Leg Press','Plate Loaded','Quads / Glutes',[[50,'10–15'],[80,'8–12'],[120,'6–10']]],['Seated Calf Raise','Machine','Calves',[[55,'10–15'],[75,'10–15'],[95,'10–15']]],['Abs Workout','Choose 2','Abs',[[null,'10–20'],[null,'10–20']]]]}};
 let wday='push',effTarget=null;
 const wkey=()=>wday+'_'+todayKey();
 function exerciseKey(e){return (e[0]||"")+"|"+(e[1]||"")}
 function effectiveExercises(day){
   const removed=state.workouts.removed?.[day]||[];
-  const base=plans[day].ex.filter(e=>!removed.includes(exerciseKey(e)));
+  const edits=state.workouts.edits?.[day]||{};
+  const base=plans[day].ex
+    .filter(e=>!removed.includes(exerciseKey(e)))
+    .map(e=>{
+      const key=exerciseKey(e),edit=edits[key];
+      if(!edit) return e;
+      const count=Math.max(1,edit.sets||e[3].length);
+      const sets=Array.from({length:count},(_,i)=>e[3][i]||[null,""]);
+      return [edit.name||e[0],edit.type??e[1],edit.muscle||e[2],sets,key];
+    });
   const custom=(state.workouts.custom?.[day]||[]).map(x=>[
     x.name,x.type||"",x.muscle||"Custom",
-    Array.from({length:x.sets||3},()=>[null,""])
+    Array.from({length:x.sets||3},()=>[null,""]),
+    "custom:"+x.id
   ]);
   return [...base,...custom];
 }
@@ -863,9 +962,14 @@ function removeExercise(e,ei){
 }
 function renderWorkout(){
   const p=plans[wday],exercises=effectiveExercises(wday),d=draft();
-  wtitle.textContent=p.title;wsub.textContent=p.sub;wlist.innerHTML='';
+  wtitle.textContent=p.title;
+  wsub.textContent="";
+  wsub.style.display="none";
+  wlist.innerHTML='';
+
   exercises.forEach((e,ei)=>{
-    const box=document.createElement('div');box.className='exercise'+(ei===0?' open':'');
+    const box=document.createElement('div');
+    box.className='exercise'+(ei===0?' open':'');
     const pv=prev(ei,0),pl=e[3][0]||[null,''];
     box.innerHTML=`<div class="exercise-head">
       <span class="exnum">${ei+1}</span>
@@ -874,12 +978,24 @@ function renderWorkout(){
         <small>${e[2]}</small>
       </button>
       <span class="exsum">${pv?(pv.kg||'–')+' × '+(pv.reps||'–'):(pl[0]??'–')+' × '+(pl[1]||'')}</span>
-      <button class="exercise-remove" title="Remove exercise">✕</button>
+      <button class="exercise-menu-btn" aria-label="Activity menu">⋯</button>
+      <button class="exercise-chevron" aria-label="Expand activity">⌄</button>
     </div>
-    <div class="exbody"><div class="sethead"><span>SET</span><span>PREVIOUS</span><span>KG</span><span>REPS</span><span>EFFORT</span></div><div class="rows"></div><button class="addset">＋ Add Set</button></div>`;
-    box.querySelector('.exname').onclick=()=>box.classList.toggle('open');
-    box.querySelector('.exsum').onclick=()=>box.classList.toggle('open');
-    box.querySelector('.exercise-remove').onclick=()=>removeExercise(e,ei);
+    <div class="exbody">
+      <div class="sethead"><span>SET</span><span>PREVIOUS</span><span>KG</span><span>REPS</span><span>EFFORT</span></div>
+      <div class="rows"></div>
+      <button class="addset">＋ Add Set</button>
+    </div>`;
+
+    const toggle=()=>box.classList.toggle('open');
+    box.querySelector('.exname').onclick=toggle;
+    box.querySelector('.exsum').onclick=toggle;
+    box.querySelector('.exercise-chevron').onclick=toggle;
+    box.querySelector('.exercise-menu-btn').onclick=(ev)=>{
+      ev.stopPropagation();
+      openExerciseMenu(e,ei,ev.currentTarget);
+    };
+
     const rows=box.querySelector('.rows');
     d[ei].sets.forEach((x,si)=>{
       const old=prev(ei,si),pln=e[3][si]||[null,''];
@@ -891,13 +1007,97 @@ function renderWorkout(){
         <button class="effort ${x.effort}"></button>`;
       row.querySelector('.kg').oninput=z=>{x.kg=z.target.value;save()};
       row.querySelector('.reps').oninput=z=>{x.reps=z.target.value;save()};
-      row.querySelector('.effort').onclick=()=>{effTarget={ei,si};effortModal.classList.add('show')};
+      row.querySelector('.effort').onclick=()=>{
+        // If this set already has an effort selected, tapping the circle again clears it.
+        if(x.effort){
+          x.effort="";
+          save();
+          renderWorkout();
+          return;
+        }
+        effTarget={ei,si};
+        effortModal.classList.add('show');
+      };
       rows.appendChild(row);
     });
-    box.querySelector('.addset').onclick=()=>{d[ei].sets.push({kg:'',reps:'',effort:''});save();renderWorkout()};
+
+    box.querySelector('.addset').onclick=()=>{
+      d[ei].sets.push({kg:'',reps:'',effort:''});
+      save();renderWorkout();
+    };
     wlist.appendChild(box);
   });
 }
+
+let exerciseMenuTarget=null;
+function openExerciseMenu(e,ei,button){
+  exerciseMenuTarget={e,ei};
+  const menu=document.getElementById("exerciseContextMenu");
+  const rect=button.getBoundingClientRect();
+  menu.style.top=Math.min(window.innerHeight-150,rect.bottom+6)+"px";
+  menu.classList.add("show");
+}
+function closeExerciseMenu(){
+  document.getElementById("exerciseContextMenu")?.classList.remove("show");
+}
+document.addEventListener("click",ev=>{
+  const menu=document.getElementById("exerciseContextMenu");
+  if(menu?.classList.contains("show") && !menu.contains(ev.target) && !ev.target.closest(".exercise-menu-btn")) closeExerciseMenu();
+});
+document.getElementById("removeExerciseMenu").onclick=()=>{
+  if(!exerciseMenuTarget)return;
+  const {e,ei}=exerciseMenuTarget;
+  closeExerciseMenu();
+  removeExercise(e,ei);
+};
+document.getElementById("editExerciseMenu").onclick=()=>{
+  if(!exerciseMenuTarget)return;
+  const {e,ei}=exerciseMenuTarget;
+  closeExerciseMenu();
+  const modal=document.getElementById("editExerciseModal");
+  document.getElementById("editExName").value=e[0]||"";
+  document.getElementById("editExType").value=e[1]||"";
+  document.getElementById("editExMuscle").value=e[2]||"";
+  document.getElementById("editExSets").value=draft()[ei]?.sets?.length||e[3]?.length||3;
+  modal.dataset.ei=ei;
+  modal.classList.add("show");
+};
+function changeEditSetCount(delta){
+  const input=document.getElementById("editExSets");
+  input.value=Math.max(1,Math.min(10,(parseInt(input.value)||1)+delta));
+}
+document.getElementById("editAddSet").onclick=()=>changeEditSetCount(1);
+document.getElementById("editRemoveSet").onclick=()=>changeEditSetCount(-1);
+document.getElementById("closeEditExercise").onclick=()=>document.getElementById("editExerciseModal").classList.remove("show");
+document.getElementById("cancelEditExercise").onclick=()=>document.getElementById("editExerciseModal").classList.remove("show");
+document.getElementById("saveEditExercise").onclick=()=>{
+  const modal=document.getElementById("editExerciseModal");
+  const ei=parseInt(modal.dataset.ei);
+  const exercises=effectiveExercises(wday);
+  const e=exercises[ei];
+  if(!e)return;
+  const name=document.getElementById("editExName").value.trim()||e[0];
+  const type=document.getElementById("editExType").value.trim();
+  const muscle=document.getElementById("editExMuscle").value.trim()||e[2];
+  const sets=Math.max(1,Math.min(10,parseInt(document.getElementById("editExSets").value)||3));
+
+  const baseKey=e[4] && String(e[4]).startsWith("custom:") ? null : (e[4]||exerciseKey(e));
+  if(baseKey){
+    state.workouts.edits[wday][baseKey]={name,type,muscle,sets};
+  }else{
+    const id=String(e[4]||"").replace("custom:","");
+    const custom=state.workouts.custom[wday].find(x=>x.id===id) || state.workouts.custom[wday].find(x=>x.name===e[0]);
+    if(custom){custom.name=name;custom.type=type;custom.muscle=muscle;custom.sets=sets;}
+  }
+
+  const dd=draft();
+  const existing=dd[ei]?.sets||[];
+  dd[ei].sets=Array.from({length:sets},(_,i)=>existing[i]||{kg:"",reps:"",effort:""});
+  save();
+  modal.classList.remove("show");
+  renderWorkout();
+};
+
 document.querySelectorAll('[data-wday]').forEach(b=>b.onclick=()=>{
   wday=b.dataset.wday;
   document.querySelectorAll('[data-wday]').forEach(x=>x.classList.remove('active'));b.classList.add('active');
@@ -924,7 +1124,7 @@ document.getElementById("saveExercise").onclick=()=>{
   const muscle=document.getElementById("customExMuscle").value.trim();
   const sets=Math.max(1,Math.min(8,parseInt(document.getElementById("customExSets").value)||3));
   if(!name){alert("Enter an exercise name.");return}
-  state.workouts.custom[wday].push({name,type,muscle,sets});
+  state.workouts.custom[wday].push({id:"ex_"+Date.now()+"_"+Math.random().toString(36).slice(2,7),name,type,muscle,sets});
   delete state.workouts.drafts[wkey()];
   save();
   ["customExName","customExType","customExMuscle"].forEach(id=>document.getElementById(id).value="");
@@ -1114,13 +1314,25 @@ async function syncRealHealth(){
   if(mode==="healthconnect") result=await tryHealthConnect();
   else if(mode==="huawei") result=await tryHuaweiDirect();
   else{
+    // AUTO: Health Connect is the active working integration.
+    // Only try Huawei Direct when the native Huawei bridge actually exists.
     result=await tryHealthConnect();
-    if(!result.ok) result=await tryHuaweiDirect();
+    if(!result.ok && window.Capacitor?.Plugins?.HuaweiHealthNative){
+      result=await tryHuaweiDirect();
+    }
   }
 
   const status=document.getElementById("healthSourceStatus");
-  if(status) status.textContent=result.ok ? `${state.health.provider} active` : `No health source: ${result.reason}`;
-  if(!result.ok) alert(result.reason);
+  if(status){
+    if(result.ok) status.textContent=`${state.health.provider} active`;
+    else if(mode==="auto" && !window.Capacitor?.Plugins?.HuaweiHealthNative)
+      status.textContent=`Health Connect: ${result.reason} • Huawei Direct not configured`;
+    else status.textContent=`No health source: ${result.reason}`;
+  }
+
+  // In Auto mode, don't show the misleading "Huawei Direct is not configured yet" popup.
+  // The source-status text is enough while Health Connect has no records.
+  if(!result.ok && mode!=="auto") alert(result.reason);
 }
 const healthSourceSelect=document.getElementById("healthSourceSelect");
 if(healthSourceSelect){
@@ -1145,6 +1357,10 @@ async function diagnoseHealthData(){
   const box=document.getElementById("healthDiagResults");
   if(box) box.innerHTML="<div>Checking Health Connect…</div>";
   try{
+    if(typeof plugin.diagnose!=="function"){
+      if(box) box.innerHTML='<div style="color:var(--red)">Diagnostic bridge is missing in this APK. Install the newest build.</div>';
+      return;
+    }
     const r=await plugin.diagnose();
     if(r.needsPermission){
       if(box) box.innerHTML="<div>Permissions are not granted.</div>";
