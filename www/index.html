@@ -383,6 +383,75 @@ nav button.active{color:var(--green);background:#10231a}
   line-height:1.35;
 }
 
+
+/* Minimal Money UI */
+.money-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.money-title-row h1{margin-bottom:2px}
+.money-reset-link{
+  margin-top:6px;border:0;background:transparent;color:var(--red);
+  font-size:13px;font-weight:850;padding:8px 2px
+}
+.money-hero-minimal{padding:20px}
+.quick-actions-title{font-size:13px;font-weight:850;margin:18px 2px 9px;color:#dfe8ef}
+.money-quick-grid{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:0;
+  border:1px solid var(--line);border-radius:18px;overflow:hidden;background:#0b151e
+}
+.money-quick{
+  min-width:0;border:0;border-right:1px solid rgba(255,255,255,.07);
+  background:transparent;color:#fff;padding:14px 5px 12px;
+  display:grid;place-items:center;gap:6px
+}
+.money-quick:last-child{border-right:0}
+.money-quick-icon{font-size:27px;line-height:1;font-weight:500}
+.money-quick small{font-size:11px;color:#dce6ee}
+.money-quick.income .money-quick-icon{color:var(--green)}
+.money-quick.transfer .money-quick-icon{color:var(--blue)}
+.money-quick.expense .money-quick-icon{color:var(--red)}
+.money-quick:active{background:#14212c}
+.money-edit-link{
+  border:1px solid var(--line);background:#111b24;color:#fff;
+  padding:8px 12px;border-radius:12px;font-size:12px;font-weight:850
+}
+.spending-history-card{padding:16px 20px 15px}
+.spending-history-head{
+  width:100%;border:0;background:transparent;color:#fff;padding:0;
+  display:flex;justify-content:space-between;align-items:center;text-align:left
+}
+.spending-history-head h2{margin:0}
+.spending-chevron{font-size:20px;color:var(--muted);transition:transform .2s ease}
+.spending-history-card.open .spending-chevron{transform:rotate(180deg)}
+.spending-chart-wrap{display:none}
+.spending-history-card.open .spending-chart-wrap{display:block}
+.spending-chart-summary{
+  display:flex;justify-content:space-between;gap:10px;margin-top:10px;
+  color:var(--muted);font-size:11px
+}
+.spending-chart-summary b{color:#fff;margin-left:4px}
+.recent-mini{margin-top:13px;padding-top:11px;border-top:1px solid rgba(255,255,255,.06)}
+.recent-mini-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.recent-mini .tx{padding:8px 0;gap:8px}
+.recent-mini .tx-icon{display:none}
+.recent-mini .tx-main b{font-size:12px;font-weight:750}
+.recent-mini .tx-main small{font-size:10px}
+.recent-mini .tx-amount{font-size:12px}
+.money-mini-sheet,.money-reset-sheet{max-width:430px}
+.sheet-grabber{width:42px;height:4px;border-radius:999px;background:#41505c;margin:0 auto 16px}
+.savings-choice{
+  width:100%;border:1px solid var(--line);background:#111d27;color:#fff;
+  border-radius:14px;padding:14px;margin-top:8px;font-weight:850;text-align:left
+}
+.savings-choice.add{color:var(--green);border-color:#28513e}
+.savings-choice.withdraw{color:#e6edf2}
+.reset-warning-icon{
+  width:48px;height:48px;border-radius:50%;display:grid;place-items:center;
+  border:2px solid var(--red);color:var(--red);font-size:27px;font-weight:900;margin:0 auto
+}
+.reset-confirm-btn{
+  width:100%;border:0;background:#e94149;color:#fff;border-radius:14px;
+  padding:13px;margin-top:18px;font-weight:900
+}
+
 </style>
 </head>
 <body>
@@ -511,23 +580,40 @@ nav button.active{color:var(--green);background:#10231a}
 <section id="workout" class="view"><h1>🏋️ Workout</h1><div class="subtitle">Track your workouts. Get stronger over time.</div><div class="workout-tabs"><button class="workout-tab active" data-wday="push">🔵 Push Day</button><button class="workout-tab" data-wday="pull">🟢 Pull Day</button><button class="workout-tab" data-wday="legs">🟡 Leg Day</button></div><div class="card workout-card"><h2 id="wtitle">PUSH DAY</h2><div class="subtitle" id="wsub" style="font-size:13px;margin:4px 0 12px"></div><div id="wlist"></div>
     <div class="exercise-add-row"><button class="add-exercise-btn" id="addExerciseBtn">＋ Add Exercise</button></div>
     <button class="workout-save" id="saveWorkout">✓ Finish Workout</button></div></section><section id="money" class="view">
-  <h1>My Money 💰</h1>
-  <div class="subtitle">Manage your money, simply.</div>
+  <div class="money-title-row">
+    <div>
+      <h1>My Money 💰</h1>
+      <div class="subtitle">Manage your money, simply.</div>
+    </div>
+    <button class="money-reset-link" id="moneyResetBtn">↻ Reset</button>
+  </div>
 
-  <div class="card money-hero">
+  <div class="card money-hero money-hero-minimal">
     <div class="balance-grid">
-      <div class="balance available"><span class="subtitle" style="font-size:13px;margin:0">Available Balance</span><strong id="available">$850.00</strong></div>
-      <div class="balance savings"><span class="subtitle" style="font-size:13px;margin:0">Savings</span><strong id="savings">$2,400.00</strong></div>
+      <div class="balance available">
+        <span class="subtitle" style="font-size:13px;margin:0">Available Balance</span>
+        <strong id="available">$850.00</strong>
+      </div>
+      <div class="balance savings">
+        <span class="subtitle" style="font-size:13px;margin:0">Savings</span>
+        <strong id="savings">$2,400.00</strong>
+      </div>
     </div>
-    <div class="money-actions">
-      <button class="money-btn income" data-action="income">＋ Income</button>
-      <button class="money-btn transfer" data-action="transfer">⇄ Transfer</button>
-      <button class="money-btn expense" data-action="expense">− Expense</button>
-    </div>
-    <div class="savings-actions">
-      <button class="money-btn" data-action="savingsAdd">＋ Add Savings</button>
-      <button class="money-btn" data-action="savingsWithdraw">− Withdraw Savings</button>
-      <button class="money-btn transfer" data-action="transfer">⇄ Transfer</button>
+
+    <div class="quick-actions-title">Quick Actions</div>
+    <div class="money-quick-grid">
+      <button class="money-quick income" data-action="income">
+        <span class="money-quick-icon">↓</span><small>Income</small>
+      </button>
+      <button class="money-quick transfer" data-action="transfer">
+        <span class="money-quick-icon">⇄</span><small>Transfer</small>
+      </button>
+      <button class="money-quick expense" data-action="expense">
+        <span class="money-quick-icon">↑</span><small>Expense</small>
+      </button>
+      <button class="money-quick savings-quick" id="savingsQuickBtn">
+        <span class="money-quick-icon">🐷</span><small>Savings</small>
+      </button>
     </div>
   </div>
 
@@ -537,24 +623,37 @@ nav button.active{color:var(--green);background:#10231a}
         <h2>Spending Limit</h2>
         <div class="subtitle" style="font-size:13px;margin:4px 0 0">Weekly limit</div>
       </div>
-      <button class="money-btn" data-action="setLimit">Edit Limit</button>
+      <button class="money-edit-link" data-action="setLimit">Edit</button>
     </div>
     <div class="limit-values">
-      <div class="limit-box"><span class="subtitle" style="font-size:12px;margin:0">Limit</span><strong id="limitValue">$300.00</strong></div>
-      <div class="limit-box"><span class="subtitle" style="font-size:12px;margin:0">Remaining</span><strong id="limitRemaining">$300.00</strong></div>
+      <div class="limit-box"><span class="subtitle" style="font-size:12px;margin:0">Limit</span><strong id="limitValue">$0.00</strong></div>
+      <div class="limit-box"><span class="subtitle" style="font-size:12px;margin:0">Remaining</span><strong id="limitRemaining">$0.00</strong></div>
     </div>
     <div class="limit-track"><div class="limit-fill" id="limitFill"></div></div>
     <div class="subtitle" id="limitStatus" style="font-size:12px;margin:0">Spent $0 this week</div>
   </div>
 
-  <div class="card mini-card">
-    <div class="topbar"><h2>Spending Mini History</h2><div class="subtitle" style="font-size:12px;margin:0">This week</div></div>
-    <div class="mini-bars" id="miniBars"></div>
-  </div>
+  <div class="card mini-card spending-history-card" id="spendingHistoryCard">
+    <button class="spending-history-head" id="spendingHistoryToggle">
+      <div>
+        <h2>Spending Mini History</h2>
+        <div class="subtitle" style="font-size:12px;margin:4px 0 0">This week</div>
+      </div>
+      <span class="spending-chevron">⌄</span>
+    </button>
 
-  <div class="card tx-card">
-    <h2>Recent Transactions</h2>
-    <div id="txList"></div>
+    <div class="spending-chart-wrap">
+      <div class="mini-bars" id="miniBars"></div>
+      <div class="spending-chart-summary">
+        <span>Total spent <b id="miniTotal">$0.00</b></span>
+        <span>Daily avg <b id="miniAverage">$0.00</b></span>
+      </div>
+    </div>
+
+    <div class="recent-mini">
+      <div class="recent-mini-title">Recent</div>
+      <div id="txList"></div>
+    </div>
   </div>
 </section>
 
@@ -702,7 +801,31 @@ nav button.active{color:var(--green);background:#10231a}
   </div>
 </div>
 
-<div class="modal" id="effortModal"><div class="sheet"><div style="display:flex;justify-content:space-between"><div><h3 style="margin:0">Rate Effort Level</h3><div class="subtitle" style="font-size:12px;margin:4px 0 14px">How hard was this set?</div></div><button class="secondary" id="closeEffort" style="height:42px">✕</button></div><div class="effort-options"><button class="effopt easy" data-eff="easy"><b>EASY</b><small>Could have done 3+ more reps</small></button><button class="effopt ideal" data-eff="ideal"><b>IDEAL</b><small>Could have done 1–3 more reps</small></button><button class="effopt max" data-eff="max"><b>MAX EFFORT</b><small>No more reps with good form</small></button></div></div></div><div class="modal" id="modal">
+<div class="modal" id="effortModal"><div class="sheet"><div style="display:flex;justify-content:space-between"><div><h3 style="margin:0">Rate Effort Level</h3><div class="subtitle" style="font-size:12px;margin:4px 0 14px">How hard was this set?</div></div><button class="secondary" id="closeEffort" style="height:42px">✕</button></div><div class="effort-options"><button class="effopt easy" data-eff="easy"><b>EASY</b><small>Could have done 3+ more reps</small></button><button class="effopt ideal" data-eff="ideal"><b>IDEAL</b><small>Could have done 1–3 more reps</small></button><button class="effopt max" data-eff="max"><b>MAX EFFORT</b><small>No more reps with good form</small></button></div></div></div>
+<div class="modal" id="savingsActionModal">
+  <div class="sheet money-mini-sheet">
+    <div class="sheet-grabber"></div>
+    <h3 style="margin:0 0 4px">Savings</h3>
+    <div class="subtitle" style="font-size:12px;margin-bottom:12px">What would you like to do?</div>
+    <button class="savings-choice add" data-savings-choice="savingsAdd">＋ Add Savings</button>
+    <button class="savings-choice withdraw" data-savings-choice="savingsWithdraw">− Withdraw Savings</button>
+    <button class="secondary" id="closeSavingsSheet" style="width:100%;margin-top:8px">Cancel</button>
+  </div>
+</div>
+
+<div class="modal" id="moneyResetModal">
+  <div class="sheet money-reset-sheet">
+    <div class="reset-warning-icon">!</div>
+    <h3 style="text-align:center;margin:8px 0 6px">Reset all money?</h3>
+    <div class="subtitle" style="text-align:center;font-size:13px;line-height:1.5">
+      Available balance, savings, spending limit and all money transactions will be reset to zero.
+    </div>
+    <button class="reset-confirm-btn" id="confirmMoneyReset">Yes, reset everything</button>
+    <button class="secondary" id="cancelMoneyReset" style="width:100%;margin-top:8px">Cancel</button>
+  </div>
+</div>
+
+<div class="modal" id="modal">
   <div class="sheet">
     <h3 id="modalTitle">Add</h3>
     <div class="dir-grid" id="dirWrap" style="display:none">
@@ -877,7 +1000,7 @@ function weekExpenses(){
 function renderMoney(){
   document.getElementById("available").textContent=fmt(state.money.available);
   document.getElementById("savings").textContent=fmt(state.money.savings);
-  const spent=weekExpenses(),limit=state.money.weeklyLimit||300,remain=Math.max(0,limit-spent),ratio=Math.min(100,spent/limit*100);
+  const spent=weekExpenses(),limit=Number(state.money.weeklyLimit||0),remain=Math.max(0,limit-spent),ratio=limit>0?Math.min(100,spent/limit*100):0;
   document.getElementById("limitValue").textContent=fmt(limit);document.getElementById("limitRemaining").textContent=fmt(remain);
   document.getElementById("limitFill").style.width=ratio+"%";document.getElementById("limitStatus").textContent=`Spent ${fmt(spent)} this week • ${Math.round(ratio)}% of limit`;
 
@@ -887,6 +1010,11 @@ function renderMoney(){
     const k=d.toISOString().slice(0,10);
     return state.money.transactions.filter(t=>t.type==="expense"&&t.date.slice(0,10)===k).reduce((s,t)=>s+t.amount,0)
   });
+  const miniTotal=vals.reduce((a,b)=>a+b,0);
+  const miniAverage=miniTotal/7;
+  const mt=document.getElementById("miniTotal"),ma=document.getElementById("miniAverage");
+  if(mt)mt.textContent=fmt(miniTotal);
+  if(ma)ma.textContent=fmt(miniAverage);
   const max=Math.max(...vals,1),bars=document.getElementById("miniBars");bars.innerHTML="";
   vals.forEach((v,i)=>{
     const h=Math.max(8,Math.round(v/max*110)),cls=v/max>.7?"high":v/max>.35?"mid":"";
@@ -896,7 +1024,7 @@ function renderMoney(){
   });
 
   const list=document.getElementById("txList");list.innerHTML="";
-  const txs=state.money.transactions.slice().reverse().slice(0,6);
+  const txs=state.money.transactions.slice().reverse().slice(0,5);
   if(!txs.length){list.innerHTML="<div class='subtitle' style='font-size:13px;margin:14px 0 0'>No transactions yet.</div>";return}
   txs.forEach(t=>{
     let cls="neutral",sign="",icon="⇄",title=t.note||"Transfer",sub="";
@@ -922,6 +1050,50 @@ function openModal(action){
   document.getElementById("modal").classList.add("show");
 }
 document.querySelectorAll("[data-action]").forEach(b=>b.onclick=()=>openModal(b.dataset.action));
+
+const savingsQuickBtn=document.getElementById("savingsQuickBtn");
+const savingsActionModal=document.getElementById("savingsActionModal");
+if(savingsQuickBtn && savingsActionModal){
+  savingsQuickBtn.onclick=()=>savingsActionModal.classList.add("show");
+}
+document.querySelectorAll("[data-savings-choice]").forEach(btn=>{
+  btn.onclick=()=>{
+    savingsActionModal.classList.remove("show");
+    openModal(btn.dataset.savingsChoice);
+  };
+});
+const closeSavingsSheet=document.getElementById("closeSavingsSheet");
+if(closeSavingsSheet)closeSavingsSheet.onclick=()=>savingsActionModal.classList.remove("show");
+if(savingsActionModal)savingsActionModal.onclick=e=>{
+  if(e.target===savingsActionModal)savingsActionModal.classList.remove("show");
+};
+
+const spendingHistoryCard=document.getElementById("spendingHistoryCard");
+const spendingHistoryToggle=document.getElementById("spendingHistoryToggle");
+if(spendingHistoryCard && spendingHistoryToggle){
+  spendingHistoryToggle.onclick=()=>spendingHistoryCard.classList.toggle("open");
+}
+
+const moneyResetBtn=document.getElementById("moneyResetBtn");
+const moneyResetModal=document.getElementById("moneyResetModal");
+if(moneyResetBtn && moneyResetModal)moneyResetBtn.onclick=()=>moneyResetModal.classList.add("show");
+const cancelMoneyReset=document.getElementById("cancelMoneyReset");
+if(cancelMoneyReset)cancelMoneyReset.onclick=()=>moneyResetModal.classList.remove("show");
+if(moneyResetModal)moneyResetModal.onclick=e=>{
+  if(e.target===moneyResetModal)moneyResetModal.classList.remove("show");
+};
+const confirmMoneyReset=document.getElementById("confirmMoneyReset");
+if(confirmMoneyReset)confirmMoneyReset.onclick=()=>{
+  state.money.available=0;
+  state.money.savings=0;
+  state.money.weeklyLimit=0;
+  state.money.transactions=[];
+  save();
+  renderMoney();
+  renderTodayDashboardExtras();
+  moneyResetModal.classList.remove("show");
+};
+
 function setDir(dir){
   transferDirection=dir;
   document.getElementById("toSavings").classList.toggle("active",dir==="toSavings");
