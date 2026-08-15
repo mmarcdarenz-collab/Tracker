@@ -123,7 +123,11 @@ public class HealthConnectNativePlugin extends Plugin {
 
         CompletableFuture.allOf(sleepF, restF, heartF, calF).whenComplete((v, err) -> {
             if (err != null) {
-                call.reject("Unable to read Health Connect data.", err);
+                if (err instanceof Exception) {
+                    call.reject("Unable to read Health Connect data.", (Exception) err);
+                } else {
+                    call.reject("Unable to read Health Connect data.", new Exception(err));
+                }
                 return;
             }
             try {
