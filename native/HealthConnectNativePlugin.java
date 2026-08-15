@@ -14,7 +14,7 @@ import android.health.connect.datatypes.SleepSessionRecord;
 import android.health.connect.datatypes.RestingHeartRateRecord;
 import android.health.connect.datatypes.HeartRateRecord;
 import android.health.connect.datatypes.ActiveCaloriesBurnedRecord;
-import android.health.connect.datatypes.DataOrigin;
+import android.health.connect.datatypes.StepsRecord;
 import android.os.Build;
 import android.os.OutcomeReceiver;
 
@@ -79,7 +79,8 @@ public class HealthConnectNativePlugin extends Plugin {
         return c.checkSelfPermission(HealthPermissions.READ_SLEEP) == PackageManager.PERMISSION_GRANTED
             && c.checkSelfPermission(HealthPermissions.READ_RESTING_HEART_RATE) == PackageManager.PERMISSION_GRANTED
             && c.checkSelfPermission(HealthPermissions.READ_HEART_RATE) == PackageManager.PERMISSION_GRANTED
-            && c.checkSelfPermission(HealthPermissions.READ_ACTIVE_CALORIES_BURNED) == PackageManager.PERMISSION_GRANTED;
+            && c.checkSelfPermission(HealthPermissions.READ_ACTIVE_CALORIES_BURNED) == PackageManager.PERMISSION_GRANTED
+            && c.checkSelfPermission(HealthPermissions.READ_STEPS) == PackageManager.PERMISSION_GRANTED;
     }
 
     private <T extends Record> CompletableFuture<List<T>> read(Class<T> cls, Instant start, Instant end) {
@@ -133,8 +134,9 @@ public class HealthConnectNativePlugin extends Plugin {
         CompletableFuture<List<RestingHeartRateRecord>> restF = read(RestingHeartRateRecord.class, sleepStart, now);
         CompletableFuture<List<HeartRateRecord>> heartF = read(HeartRateRecord.class, dayStart, now);
         CompletableFuture<List<ActiveCaloriesBurnedRecord>> calF = read(ActiveCaloriesBurnedRecord.class, dayStart, now);
+        CompletableFuture<List<StepsRecord>> stepsF = read(StepsRecord.class, dayStart, now);
 
-        CompletableFuture.allOf(sleepF, restF, heartF, calF).whenComplete((v, err) -> {
+        CompletableFuture.allOf(sleepF, restF, heartF, calF, stepsF).whenComplete((v, err) -> {
             if (err != null) {
                 if (err instanceof Exception) {
                     call.reject("Unable to read Health Connect data.", (Exception) err);
@@ -181,98 +183,14 @@ public class HealthConnectNativePlugin extends Plugin {
                 if (calories > 5000) calories = calories / 1000.0;
                 out.put("activeCalories", Math.round(calories));
 
+                long steps = 0;
+                for (StepsRecord r : stepsF.join()) steps += r.getCount();
+                out.put("steps", steps);
+
                 call.resolve(out);
             } catch (Exception e) {
                 call.reject("Unable to process Health Connect data.", e);
             }
         });
     }
-    @PluginMethod
-    public void diagnose(PluginCall call) {
-        HealthConnectManager mgr = manager();
-        if (mgr == null) {
-            call.reject("Health Connect is unavailable.");
-            return;
-        }
-
-        if (!hasReadPermissions()) {
-            JSObject o = new JSObject();
-            o.put("needsPermission", true);
-            call.resolve(o);
-            return;
-        }
-
-        Instant now = Instant.now();
-        Instant start = now.minus(Duration.ofDays(7));
-
-        CompletableFuture<List<SleepSessionRecord>> sleepF = read(SleepSessionRecord.class, start, now);
-        CompletableFuture<List<RestingHeartRateRecord>> restF = read(RestingHeartRateRecord.class, start, now);
-        CompletableFuture<List<HeartRateRecord>> heartF = read(HeartRateRecord.class, start, now);
-        CompletableFuture<List<ActiveCaloriesBurnedRecord>> calF = read(ActiveCaloriesBurnedRecord.class, start, now);
-
-        CompletableFuture.allOf(sleepF, restF, heartF, calF).whenComplete((v, err) -> {
-            if (err != null) {
-                if (err instanceof Exception) {
-                    call.reject("Unable to diagnose Health Connect data.", (Exception) err);
-                } else {
-                    call.reject("Unable to diagnose Health Connect data.", new Exception(err));
-                }
-                return;
-            }
-
-            try {
-                List<SleepSessionRecord> sleeps = sleepF.join();
-                List<RestingHeartRateRecord> rests = restF.join();
-                List<HeartRateRecord> hearts = heartF.join();
-                List<ActiveCaloriesBurnedRecord> cals = calF.join();
-
-                java.util.LinkedHashSet<String> sources = new java.util.LinkedHashSet<>();
-
-                for (SleepSessionRecord r : sleeps) {
-                    if (r.getMetadata() != null && r.getMetadata().getDataOrigin() != null) {
-                        sources.add(r.getMetadata().getDataOrigin().getPackageName());
-                    }
-                }
-                for (RestingHeartRateRecord r : rests) {
-                    if (r.getMetadata() != null && r.getMetadata().getDataOrigin() != null) {
-                        sources.add(r.getMetadata().getDataOrigin().getPackageName());
-                    }
-                }
-                for (HeartRateRecord r : hearts) {
-                    if (r.getMetadata() != null && r.getMetadata().getDataOrigin() != null) {
-                        sources.add(r.getMetadata().getDataOrigin().getPackageName());
-                    }
-                }
-                for (ActiveCaloriesBurnedRecord r : cals) {
-                    if (r.getMetadata() != null && r.getMetadata().getDataOrigin() != null) {
-                        sources.add(r.getMetadata().getDataOrigin().getPackageName());
-                    }
-                }
-
-                double calTotal = 0;
-                for (ActiveCaloriesBurnedRecord r : cals) {
-                    calTotal += r.getEnergy().getInCalories();
-                }
-                if (calTotal > 5000) calTotal = calTotal / 1000.0;
-
-                long hrSamples = 0;
-                for (HeartRateRecord r : hearts) hrSamples += r.getSamples().size();
-
-                JSObject out = new JSObject();
-                out.put("needsPermission", false);
-                out.put("windowDays", 7);
-                out.put("sleepRecords", sleeps.size());
-                out.put("restingHrRecords", rests.size());
-                out.put("heartRateRecords", hearts.size());
-                out.put("heartRateSamples", hrSamples);
-                out.put("activeCalorieRecords", cals.size());
-                out.put("activeCaloriesTotal", Math.round(calTotal));
-                out.put("sources", String.join(", ", sources));
-                call.resolve(out);
-            } catch (Exception e) {
-                call.reject("Unable to process Health Connect diagnostics.", e);
-            }
-        });
-    }
-
 }
