@@ -283,6 +283,37 @@ nav button.active{color:var(--green);background:#10231a}
   padding:10px;border-radius:12px;font-weight:800;
 }
 
+
+.workout-history-card{padding:18px}
+.workout-history-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.history-toggle-btn{
+  width:36px;height:36px;border:0;border-radius:11px;background:#111d27;color:var(--blue);
+  font-size:20px;display:grid;place-items:center;transition:transform .2s ease
+}
+.workout-history-card.open .history-toggle-btn{transform:rotate(180deg)}
+.workout-history-list{display:none;margin-top:10px}
+.workout-history-card.open .workout-history-list{display:block}
+.workout-history-empty{padding:16px 2px;color:var(--muted);font-size:13px}
+.workout-history-row{
+  display:flex;align-items:center;gap:12px;padding:13px 2px;border-top:1px solid rgba(255,255,255,.06);
+  cursor:pointer
+}
+.workout-history-row:first-child{border-top:0}
+.workout-history-icon{width:38px;height:38px;border-radius:12px;background:#0d1b29;display:grid;place-items:center;flex:none}
+.workout-history-main{flex:1;min-width:0}
+.workout-history-main b{display:block;font-size:14px}
+.workout-history-main small{display:block;color:var(--muted);margin-top:3px}
+.workout-history-right{text-align:right;flex:none}
+.workout-history-right b{display:block;font-size:13px}
+.workout-history-right small{color:var(--muted);font-size:10px}
+.workout-detail{display:none;padding:9px 0 6px 50px;color:var(--muted);font-size:12px;line-height:1.6}
+.workout-history-row-wrap.open .workout-detail{display:block}
+.workout-history-row-wrap.open .workout-history-row{color:var(--blue)}
+.summary-metric.workout-shortcut{cursor:pointer;transition:transform .14s ease,border-color .14s ease}
+.summary-metric.workout-shortcut:active{transform:scale(.98)}
+.workout-save{display:none}
+.workout-save.ready{display:block}
+
 </style>
 </head>
 <body>
@@ -345,7 +376,7 @@ nav button.active{color:var(--green);background:#10231a}
     <div class="summary-grid">
       <div class="summary-metric"><span>Avg. completion</span><b id="sumCompletion">0%</b></div>
       <div class="summary-metric"><span>Successful days</span><b id="sumDays">0 / 7</b></div>
-      <div class="summary-metric"><span>Workouts logged</span><b id="sumWorkouts">0</b></div>
+      <div class="summary-metric workout-shortcut" id="workoutsLoggedShortcut" role="button" tabindex="0"><span>Workouts logged</span><b id="sumWorkouts">0</b><small style="color:var(--blue);font-size:10px;margin-top:3px">View history</small></div>
       <div class="summary-metric"><span>Weekly spending</span><b id="sumSpending">$0</b></div>
       <div class="summary-metric"><span>Savings change</span><b id="sumSavings">$0</b></div>
       <div class="summary-metric"><span>Spending limit left</span><b id="sumLimitLeft">$0</b></div>
@@ -386,6 +417,18 @@ nav button.active{color:var(--green);background:#10231a}
     <div id="recent"></div>
   </div>
 
+
+  <div class="card workout-history-card" id="workoutHistoryCard">
+    <div class="workout-history-head">
+      <div>
+        <h2 style="margin:0">Workout history</h2>
+        <div class="subtitle" style="font-size:12px;margin:4px 0 0">Saved workout sessions</div>
+      </div>
+      <button class="history-toggle-btn" id="workoutHistoryToggle" aria-label="Toggle workout history">⌄</button>
+    </div>
+    <div id="workoutHistoryList" class="workout-history-list"></div>
+  </div>
+
   <div class="card weekly">
     <div class="weekly-top">
       <div><div class="subtitle" style="margin:0 0 4px;font-size:13px">Weekly progress</div><div class="weekly-score" id="weeklyScore">0%</div></div>
@@ -398,7 +441,7 @@ nav button.active{color:var(--green);background:#10231a}
 
 <section id="workout" class="view"><h1>🏋️ Workout</h1><div class="subtitle">Track your workouts. Get stronger over time.</div><div class="workout-tabs"><button class="workout-tab active" data-wday="push">🔵 Push Day</button><button class="workout-tab" data-wday="pull">🟢 Pull Day</button><button class="workout-tab" data-wday="legs">🟡 Leg Day</button></div><div class="card workout-card"><h2 id="wtitle">PUSH DAY</h2><div class="subtitle" id="wsub" style="font-size:13px;margin:4px 0 12px"></div><div id="wlist"></div>
     <div class="exercise-add-row"><button class="add-exercise-btn" id="addExerciseBtn">＋ Add Exercise</button></div>
-    <button class="workout-save" id="saveWorkout">✓ Finish & Save Workout</button></div></section><section id="money" class="view">
+    <button class="workout-save" id="saveWorkout">✓ Finish Workout</button></div></section><section id="money" class="view">
   <h1>My Money 💰</h1>
   <div class="subtitle">Manage your money, simply.</div>
 
@@ -852,7 +895,7 @@ function switchView(viewName){
     target.classList.add("active");
     window.scrollTo({top:0,behavior:"instant"});
 
-    if(viewName==="history") renderHistory();
+    if(viewName==="history"){renderHistory();renderWorkoutHistory();}
     if(viewName==="workout") renderWorkout();
     if(viewName==="money") renderMoney();
     if(viewName==="today"){
@@ -915,6 +958,97 @@ if(fxStatus){
   const fx=state.money.fx;
   fxStatus.textContent=fx?.updatedAt ? "Rates cached • updated "+new Date(fx.updatedAt).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}) : "Rates refresh every 24 hours.";
 }renderToday();renderHistory();renderMoney();renderWorkout()}};
+
+
+function workoutDayLabel(day){
+  if(day==="push") return "Push Day";
+  if(day==="pull") return "Pull Day";
+  if(day==="legs") return "Leg Day";
+  return "Workout";
+}
+function workoutDayIcon(day){
+  return day==="push"?"🔵":day==="pull"?"🟢":day==="legs"?"🟡":"🏋️";
+}
+function workoutSessionExercises(session){
+  if(Array.isArray(session.snapshot)) return session.snapshot;
+  const current=effectiveExercises(session.day||"push");
+  return (session.exercises||[]).map((entry,i)=>({
+    name:current[i]?.[0]||`Exercise ${i+1}`,
+    type:current[i]?.[1]||"",
+    muscle:current[i]?.[2]||"",
+    sets:entry.sets||[]
+  }));
+}
+function workoutSessionSets(session){
+  return workoutSessionExercises(session).reduce((total,ex)=>{
+    return total+(ex.sets||[]).filter(s=>s.kg||s.reps||s.effort).length;
+  },0);
+}
+function renderWorkoutHistory(){
+  const list=document.getElementById("workoutHistoryList");
+  if(!list) return;
+  const sessions=(state.workouts?.sessions||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
+  list.innerHTML="";
+  if(!sessions.length){
+    list.innerHTML='<div class="workout-history-empty">No saved workouts yet.</div>';
+    return;
+  }
+
+  sessions.slice(0,30).forEach(s=>{
+    const when=new Date(s.date);
+    const exercises=workoutSessionExercises(s);
+    const wrap=document.createElement("div");
+    wrap.className="workout-history-row-wrap";
+
+    const detailHtml=exercises.map(ex=>{
+      const logged=(ex.sets||[]).filter(x=>x.kg||x.reps||x.effort);
+      if(!logged.length) return "";
+      const sets=logged.map(x=>{
+        const kg=(x.kg!==""&&x.kg!=null)?`${x.kg} kg`:"—";
+        const reps=(x.reps!==""&&x.reps!=null)?`${x.reps} reps`:"—";
+        return `${kg} × ${reps}`;
+      }).join(" · ");
+      return `<div><b style="color:#dce7ef">${ex.name}</b> — ${sets}</div>`;
+    }).filter(Boolean).join("");
+
+    wrap.innerHTML=`
+      <div class="workout-history-row">
+        <div class="workout-history-icon">${workoutDayIcon(s.day)}</div>
+        <div class="workout-history-main">
+          <b>${workoutDayLabel(s.day)}</b>
+          <small>${when.toLocaleDateString([], {day:"numeric",month:"short",year:"numeric"})} • ${when.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}</small>
+        </div>
+        <div class="workout-history-right">
+          <b>${workoutSessionSets(s)} sets</b>
+          <small>View</small>
+        </div>
+      </div>
+      <div class="workout-detail">${detailHtml||"No detailed set data was stored for this older workout."}</div>
+    `;
+    wrap.querySelector(".workout-history-row").onclick=()=>wrap.classList.toggle("open");
+    list.appendChild(wrap);
+  });
+}
+function openWorkoutHistory(){
+  switchView("history");
+  setTimeout(()=>{
+    const card=document.getElementById("workoutHistoryCard");
+    if(!card) return;
+    card.classList.add("open");
+    renderWorkoutHistory();
+    card.scrollIntoView({behavior:"smooth",block:"start"});
+  },120);
+}
+function workoutDraftHasData(){
+  try{
+    return draft().some(ex=>ex.sets.some(s=>s.kg||s.reps||s.effort));
+  }catch(e){ return false; }
+}
+function updateFinishWorkoutButton(){
+  const btn=document.getElementById("saveWorkout");
+  if(!btn) return;
+  btn.classList.toggle("ready",workoutDraftHasData());
+}
 
 if(!state.workouts)state.workouts={sessions:[],drafts:{}};
 if(!state.workouts.custom)state.workouts.custom={push:[],pull:[],legs:[]};
@@ -1010,8 +1144,8 @@ function renderWorkout(){
         <input class="loginput kg" type="number" step=".5" value="${x.kg}" placeholder="${old?.kg??pln[0]??'KG'}">
         <input class="loginput reps" type="number" value="${x.reps}" placeholder="${old?.reps??'Reps'}">
         <button class="effort ${x.effort}"></button>`;
-      row.querySelector('.kg').oninput=z=>{x.kg=z.target.value;save()};
-      row.querySelector('.reps').oninput=z=>{x.reps=z.target.value;save()};
+      row.querySelector('.kg').oninput=z=>{x.kg=z.target.value;save();updateFinishWorkoutButton()};
+      row.querySelector('.reps').oninput=z=>{x.reps=z.target.value;save();updateFinishWorkoutButton()};
       row.querySelector('.effort').onclick=()=>{
         // If this set already has an effort selected, tapping the circle again clears it.
         if(x.effort){
@@ -1032,6 +1166,7 @@ function renderWorkout(){
     };
     wlist.appendChild(box);
   });
+  updateFinishWorkoutButton();
 }
 
 let exerciseMenuTarget=null;
@@ -1103,6 +1238,23 @@ document.getElementById("saveEditExercise").onclick=()=>{
   renderWorkout();
 };
 
+
+const workoutHistoryCard=document.getElementById("workoutHistoryCard");
+const workoutHistoryToggle=document.getElementById("workoutHistoryToggle");
+if(workoutHistoryToggle && workoutHistoryCard){
+  workoutHistoryToggle.onclick=()=>{
+    workoutHistoryCard.classList.toggle("open");
+    if(workoutHistoryCard.classList.contains("open")) renderWorkoutHistory();
+  };
+}
+const workoutsLoggedShortcut=document.getElementById("workoutsLoggedShortcut");
+if(workoutsLoggedShortcut){
+  workoutsLoggedShortcut.onclick=openWorkoutHistory;
+  workoutsLoggedShortcut.onkeydown=e=>{
+    if(e.key==="Enter"||e.key===" "){e.preventDefault();openWorkoutHistory();}
+  };
+}
+
 document.querySelectorAll('[data-wday]').forEach(b=>b.onclick=()=>{
   wday=b.dataset.wday;
   document.querySelectorAll('[data-wday]').forEach(x=>x.classList.remove('active'));b.classList.add('active');
@@ -1114,9 +1266,31 @@ document.querySelectorAll('[data-eff]').forEach(b=>b.onclick=()=>{
 closeEffort.onclick=()=>effortModal.classList.remove('show');
 saveWorkout.onclick=()=>{
   const d=JSON.parse(JSON.stringify(draft()));
-  if(!d.some(e=>e.sets.some(x=>x.kg||x.reps||x.effort))){alert('Enter at least one set first.');return}
-  state.workouts.sessions.push({day:wday,date:new Date().toISOString(),exercises:d});
-  delete state.workouts.drafts[wkey()];save();alert('Workout saved ✓');renderWorkout()
+  if(!d.some(e=>e.sets.some(x=>x.kg||x.reps||x.effort))){
+    alert("Enter at least one set first.");
+    return;
+  }
+
+  const snapshot=effectiveExercises(wday).map((e,i)=>({
+    name:e[0],
+    type:e[1]||"",
+    muscle:e[2]||"",
+    sets:(d[i]?.sets||[]).map(s=>({kg:s.kg,reps:s.reps,effort:s.effort}))
+  }));
+
+  state.workouts.sessions.push({
+    day:wday,
+    date:new Date().toISOString(),
+    exercises:d,
+    snapshot
+  });
+
+  delete state.workouts.drafts[wkey()];
+  save();
+  renderWorkout();
+  renderWorkoutHistory();
+  renderTodayDashboardExtras();
+  alert("Workout finished and saved ✓");
 };
 const addExerciseBtn=document.getElementById("addExerciseBtn");
 const exerciseModal=document.getElementById("exerciseModal");
