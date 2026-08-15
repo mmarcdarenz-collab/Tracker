@@ -274,7 +274,7 @@ nav button.active{color:var(--green);background:#10231a}
         <div class="health-metric"><span class="label">🌙 Sleep</span><b id="healthSleep">—</b></div>
         <div class="health-metric"><span class="label">❤️ Resting HR</span><b id="healthRhr">—</b></div>
         <div class="health-metric"><span class="label">💓 Workout HR</span><b id="healthWhr">—</b></div>
-        <div class="health-metric"><span class="label">🔥 Active calories</span><b id="healthCalories">—</b></div>
+        <div class="health-metric"><span class="label">👣 Steps</span><b id="healthSteps">—</b></div>
       </div>
       <div class="health-status"><span>Health Connect</span><span>Not connected</span></div>
     </div>
@@ -407,6 +407,23 @@ nav button.active{color:var(--green);background:#10231a}
       <h2 style="font-size:19px;margin-bottom:4px">⌚ Health Integration</h2>
       <div class="subtitle" style="font-size:12px;margin-bottom:6px">Connect to Android Health Connect and read available health data.</div>
       <div class="health-connect-row">
+        <div style="flex:1">
+          <b>Health data source</b>
+          <div class="health-test-note">Auto tries Health Connect first, then Huawei Direct when configured.</div>
+        </div>
+        <select id="healthSourceSelect" class="currency-select">
+          <option value="auto">Auto</option>
+          <option value="healthconnect">Health Connect</option>
+          <option value="huawei">Huawei Direct</option>
+        </select>
+      </div>
+      <div class="health-connect-row">
+        <div>
+          <b>Source status</b>
+          <div class="health-test-note" id="healthSourceStatus">Health Connect ready • Huawei Direct not configured</div>
+        </div>
+      </div>
+      <div class="health-connect-row">
         <div>
           <b>Watch connection</b>
           <div class="health-test-note" id="watchProvider">Health Connect • not connected</div>
@@ -506,7 +523,8 @@ if(!state.money.weeklyLimit) state.money.weeklyLimit=300;
 if(!state.money.currency) state.money.currency="AUD";
 if(!state.money.baseCurrency) state.money.baseCurrency="AUD";
 if(!state.money.fx) state.money.fx={rates:{AUD:1,PHP:null,USD:null},updatedAt:0,sourceDate:null};
-if(!state.health) state.health={connected:false,provider:"Android Health Connect",lastSync:0,sleepMinutes:null,restingHR:null,workoutHR:null,activeCalories:null};
+if(!state.health) state.health={connected:false,provider:"Android Health Connect",sourceMode:"auto",lastSync:0,sleepMinutes:null,restingHR:null,workoutHR:null,steps:null};
+if(!state.health.sourceMode) state.health.sourceMode="auto";
 let calendarDate=new Date();
 let currentAction=null;
 let transferDirection="toSavings";
@@ -992,7 +1010,7 @@ function renderHealth(){
   const sleepEl=document.getElementById("healthSleep");
   const rhrEl=document.getElementById("healthRhr");
   const whrEl=document.getElementById("healthWhr");
-  const calEl=document.getElementById("healthCalories");
+  const stepsEl=document.getElementById("healthSteps");
   if(sleepEl){
     if(h.connected){
       if(h.sleepMinutes!=null){
@@ -1003,7 +1021,7 @@ function renderHealth(){
       whrEl.textContent=h.workoutHR!=null?`${Math.round(h.workoutHR)} bpm`:"—";
       calEl.textContent=h.activeCalories!=null?`${Math.round(h.activeCalories)} kcal`:"—";
     }else{
-      sleepEl.textContent="—";rhrEl.textContent="—";whrEl.textContent="—";calEl.textContent="—";
+      sleepEl.textContent="—";rhrEl.textContent="—";whrEl.textContent="—";stepsEl.textContent="—";
     }
   }
   const ws=document.getElementById("watchStatus");
@@ -1017,6 +1035,14 @@ function renderHealth(){
   if(wp) wp.textContent=h.connected?"Android Health Connect":"Health Connect • not connected";
   if(ls) ls.textContent=h.lastSync?`Last synced ${new Date(h.lastSync).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})}`:"No sync yet";
   if(btn) btn.textContent=h.connected?"Manage access":"Connect";
+  const sourceSel=document.getElementById("healthSourceSelect");
+  const sourceStatus=document.getElementById("healthSourceStatus");
+  if(sourceSel) sourceSel.value=h.sourceMode||"auto";
+  if(sourceStatus){
+    if(h.provider==="Huawei Direct") sourceStatus.textContent="Huawei Direct active";
+    else if(h.connected) sourceStatus.textContent="Health Connect active";
+    else sourceStatus.textContent="Health Connect ready • Huawei Direct not configured";
+  }
 }
 async function openHealthPermissions(){
   const plugin=healthPlugin();
@@ -1036,31 +1062,74 @@ async function openHealthPermissions(){
   }
 }
 async function syncRealHealth(){
-  const plugin=healthPlugin();
-  if(!plugin){
-    alert("Health Connect is only available in the Android app build.");
-    return;
-  }
-  try{
-    const result=await plugin.readSummary();
-    if(result.needsPermission){
-      alert("Health permissions are not granted yet. Tap Connect and allow the health data you want to share.");
-      await plugin.openPermissions();
-      return;
+  const mode=state.health.sourceMode||"auto";
+
+  async function tryHealthConnect(){
+    const plugin=healthPlugin();
+    if(!plugin) return {ok:false,reason:"Health Connect bridge unavailable"};
+    try{
+      const result=await plugin.readSummary();
+      if(result.needsPermission){
+        await plugin.openPermissions();
+        return {ok:false,reason:"Health Connect permission required"};
+      }
+      const hasData=(result.steps||0)>0 || result.sleepMinutes!=null || result.restingHR!=null || result.workoutHR!=null;
+      if(!hasData) return {ok:false,reason:"Health Connect has no usable records"};
+      state.health.connected=true;
+      state.health.provider="Android Health Connect";
+      state.health.lastSync=Date.now();
+      state.health.sleepMinutes=result.sleepMinutes ?? null;
+      state.health.restingHR=result.restingHR ?? null;
+      state.health.workoutHR=result.workoutHR ?? null;
+      state.health.steps=result.steps ?? null;
+      save();renderHealth();renderTodayDashboardExtras();
+      return {ok:true};
+    }catch(e){
+      return {ok:false,reason:e?.message||String(e)};
     }
-    state.health.connected=true;
-    state.health.provider="Android Health Connect";
-    state.health.lastSync=Date.now();
-    state.health.sleepMinutes=result.sleepMinutes ?? null;
-    state.health.restingHR=result.restingHR ?? null;
-    state.health.workoutHR=result.workoutHR ?? null;
-    state.health.activeCalories=result.activeCalories ?? null;
+  }
+
+  async function tryHuaweiDirect(){
+    const hp=window.Capacitor?.Plugins?.HuaweiHealthNative;
+    if(!hp) return {ok:false,reason:"Huawei Direct is not configured yet"};
+    try{
+      const result=await hp.readSummary();
+      const hasData=(result.steps||0)>0 || result.sleepMinutes!=null || result.restingHR!=null || result.heartRate!=null;
+      if(!hasData) return {ok:false,reason:"Huawei Direct returned no usable records"};
+      state.health.connected=true;
+      state.health.provider="Huawei Direct";
+      state.health.lastSync=Date.now();
+      state.health.sleepMinutes=result.sleepMinutes ?? null;
+      state.health.restingHR=result.restingHR ?? result.heartRate ?? null;
+      state.health.workoutHR=result.heartRate ?? null;
+      state.health.steps=result.steps ?? null;
+      save();renderHealth();renderTodayDashboardExtras();
+      return {ok:true};
+    }catch(e){
+      return {ok:false,reason:e?.message||String(e)};
+    }
+  }
+
+  let result;
+  if(mode==="healthconnect") result=await tryHealthConnect();
+  else if(mode==="huawei") result=await tryHuaweiDirect();
+  else{
+    result=await tryHealthConnect();
+    if(!result.ok) result=await tryHuaweiDirect();
+  }
+
+  const status=document.getElementById("healthSourceStatus");
+  if(status) status.textContent=result.ok ? `${state.health.provider} active` : `No health source: ${result.reason}`;
+  if(!result.ok) alert(result.reason);
+}
+const healthSourceSelect=document.getElementById("healthSourceSelect");
+if(healthSourceSelect){
+  healthSourceSelect.value=state.health.sourceMode||"auto";
+  healthSourceSelect.onchange=e=>{
+    state.health.sourceMode=e.target.value;
     save();
     renderHealth();
-    renderTodayDashboardExtras();
-  }catch(e){
-    alert("Health sync failed: "+(e?.message||e));
-  }
+  };
 }
 const connectBtn=document.getElementById("connectTestWatch");
 if(connectBtn) connectBtn.onclick=openHealthPermissions;
@@ -1099,7 +1168,7 @@ if(diagnoseBtn) diagnoseBtn.onclick=diagnoseHealthData;
 
 const disconnectBtn=document.getElementById("disconnectWatch");
 if(disconnectBtn) disconnectBtn.onclick=()=>{
-  state.health={connected:false,provider:"Android Health Connect",lastSync:0,sleepMinutes:null,restingHR:null,workoutHR:null,activeCalories:null};
+  state.health={connected:false,provider:"Android Health Connect",sourceMode:state.health.sourceMode||"auto",lastSync:0,sleepMinutes:null,restingHR:null,workoutHR:null,steps:null};
   save();renderHealth();
 };
 
