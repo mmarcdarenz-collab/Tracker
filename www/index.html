@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Daily Tracker</title>
+<style>
+:root{
+  --bg:#071018;
+  --bg2:#08131d;
+  --panel:#0d1822;
+  --panel2:#101d28;
+  --line:#223442;
+  --text:#f5f8fb;
+  --muted:#8fa0af;
+  --green:#54e097;
+  --green2:#2fc57d;
+  --blue:#4da6ff;
+  --purple:#a061ff;
+  --red:#ff646d;
+  --orange:#ff9a2f;
+  --yellow:#ffc438;
+  --shadow:0 18px 44px rgba(0,0,0,.28);
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:linear-gradient(180deg,var(--bg),#061019);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+body{min-height:100dvh}
+button,input{font:inherit}
+button{cursor:pointer}
+.app{max-width:560px;margin:auto;min-height:100dvh;padding:22px 18px 118px}
+.view{display:none}
+.view.active{display:block}
+h1{margin:22px 0 5px;font-size:39px;line-height:1.05;letter-spacing:-1.2px}
+h2{margin:0;font-size:22px}
+.subtitle{color:var(--muted);font-size:17px;margin-bottom:20px}
+.card{background:linear-gradient(180deg,var(--panel),#0b151e);border:1px solid var(--line);border-radius:25px;box-shadow:var(--shadow)}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.greeting{font-size:13px;color:var(--muted)}
+.hero{padding:20px;position:relative;overflow:hidden}
+.hero:before{content:"";position:absolute;width:240px;height:240px;left:-70px;top:-90px;background:radial-gradient(circle,rgba(84,224,151,.12),transparent 65%);border-radius:50%}
+.hero-grid{display:grid;grid-template-columns:150px 1fr;gap:18px;align-items:center;margin-top:15px}
+.ring{width:144px;height:144px;border-radius:50%;background:conic-gradient(var(--green) calc(var(--p)*1%),#1b2935 0);display:grid;place-items:center;position:relative;box-shadow:0 0 28px rgba(84,224,151,.18)}
+.ring:after{content:"";position:absolute;width:112px;height:112px;border-radius:50%;background:#0b1620;border:1px solid #1f3240}
+.ring-content{position:relative;z-index:2;text-align:center}
+.ring-content b{display:block;font-size:34px;color:var(--green)}
+.ring-content small{color:var(--muted)}
+.ring.complete{animation:pop .8s ease}
+@keyframes pop{
+  0%{transform:scale(1)}
+  35%{transform:scale(1.08);box-shadow:0 0 50px rgba(84,224,151,.55)}
+  100%{transform:scale(1)}
+}
+.sparkle{position:absolute;width:5px;height:5px;border-radius:50%;background:var(--green);opacity:0;animation:spark 1s ease forwards}
+@keyframes spark{
+  0%{transform:translate(0,0) scale(.3);opacity:0}
+  20%{opacity:1}
+  100%{transform:translate(var(--x),var(--y)) scale(0);opacity:0}
+}
+.streak{display:inline-flex;align-items:center;gap:7px;border:1px solid #244637;background:#10251c;border-radius:14px;padding:9px 11px;color:var(--green);font-size:13px}
+.task-list{display:grid;gap:8px}
+.task{display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.055)}
+.task:last-child{border-bottom:0}
+.task input{width:20px;height:20px;accent-color:var(--green)}
+.task label{flex:1;font-size:15px}
+.success-banner{display:none;margin-top:16px;padding:14px 15px;border-radius:17px;border:1px solid #1d6846;background:linear-gradient(90deg,#0e2c1d,#10231c);color:var(--green)}
+.success-banner.show{display:block;animation:fadeUp .4s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.daily-spark{margin-top:16px;padding:19px;border-color:#3c2759;background:radial-gradient(circle at 85% 20%,rgba(160,97,255,.12),transparent 35%),linear-gradient(180deg,#151128,#0e1220)}
+.spark-head{display:flex;justify-content:space-between;align-items:center}
+.chip{font-size:12px;padding:6px 10px;border-radius:999px;border:1px solid #4e2a7a;background:#211238;color:#c89cff}
+.quote{font-size:21px;line-height:1.45;margin:22px 0 10px;letter-spacing:-.2px}
+.quote-author{color:#be8cff;font-size:14px}
+.rest-row{display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding:10px 0}
+.switch{position:relative;width:48px;height:28px}
+.switch input{display:none}
+.slider{position:absolute;inset:0;background:#273642;border-radius:99px}
+.slider:before{content:"";position:absolute;width:20px;height:20px;left:4px;top:4px;background:white;border-radius:50%;transition:.2s}
+.switch input:checked + .slider{background:var(--green2)}
+.switch input:checked + .slider:before{transform:translateX(20px)}
+
+.history-card{padding:20px;margin-bottom:16px}
+.month-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:17px}
+.month-nav{display:flex;gap:9px}
+.icon-btn{width:42px;height:42px;border-radius:13px;border:1px solid var(--line);background:#16232e;color:white;font-size:22px}
+.weekdays,.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}
+.weekdays div{text-align:center;color:var(--muted);font-size:11px;padding-bottom:4px}
+.day{aspect-ratio:1;border-radius:12px;border:1px solid #263440;background:#17232e;color:#e4eaf0;position:relative}
+.day.empty{visibility:hidden}
+.day.today{border-color:var(--green);box-shadow:0 0 0 2px rgba(84,224,151,.1)}
+.day.done:after,.day.partial:after,.day.missed:after{content:"";position:absolute;width:6px;height:6px;border-radius:50%;left:50%;bottom:5px;transform:translateX(-50%)}
+.day.done:after{background:var(--green)} .day.partial:after{background:var(--yellow)} .day.missed:after{background:var(--red)}
+.recent-row{display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.recent-row:last-child{border-bottom:0}
+.weekly{padding:20px}
+.weekly-top{display:flex;justify-content:space-between;align-items:end}
+.weekly-score{font-size:42px;color:var(--green);font-weight:900}
+.hex-row{display:grid;grid-template-columns:repeat(7,1fr);gap:7px;margin:18px 0}
+.hexwrap{text-align:center}
+.hex{width:36px;height:40px;margin:auto;clip-path:polygon(25% 6%,75% 6%,100% 50%,75% 94%,25% 94%,0 50%);background:#183024;color:var(--green);display:grid;place-items:center;box-shadow:inset 0 0 0 2px var(--green);font-weight:900}
+.hex.partial{background:#332916;color:var(--yellow);box-shadow:inset 0 0 0 2px var(--yellow)}
+.hex.off{background:#17242e;color:#71818e;box-shadow:inset 0 0 0 2px #64717c}
+.hexwrap small{color:var(--muted)}
+.geo{height:46px;position:relative;margin-top:6px}
+.track{position:absolute;left:0;right:0;top:16px;height:12px;background:#1b2935;border-radius:999px;overflow:hidden;transform:skewX(-10deg)}
+.fill{height:100%;width:0;background:linear-gradient(90deg,#31c87e,#7df2ad);box-shadow:0 0 22px rgba(84,224,151,.36);transition:.35s}
+
+.money-hero{padding:20px;margin-bottom:16px}
+.balance-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.balance{padding:17px;border:1px solid var(--line);border-radius:18px;background:#0c1620}
+.balance strong{display:block;font-size:30px;margin-top:6px}
+.available strong{color:var(--green)}
+.savings strong{color:var(--blue)}
+.money-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:15px}
+.money-btn{border:1px solid var(--line);background:#111e28;color:white;border-radius:14px;padding:12px 8px;font-weight:800;font-size:14px}
+.money-btn.income{color:var(--green);border-color:#1f5039}
+.money-btn.transfer{color:var(--blue);border-color:#214b71}
+.money-btn.expense{color:var(--red);border-color:#6b2c35}
+.savings-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-top:11px}
+.limit-card,.mini-card,.tx-card{padding:20px;margin-bottom:16px}
+.limit-top{display:flex;justify-content:space-between;gap:12px;align-items:start}
+.limit-values{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:15px}
+.limit-box{padding:13px;border-radius:15px;background:#0b151e;border:1px solid var(--line)}
+.limit-box strong{display:block;font-size:23px;margin-top:5px}
+.limit-box:last-child strong{color:var(--green)}
+.limit-track{height:12px;background:#1b2834;border-radius:999px;overflow:hidden;margin:15px 0 6px}
+.limit-fill{height:100%;width:0;background:linear-gradient(90deg,#9f61ff,#d56cff);transition:.3s}
+.mini-bars{display:grid;grid-template-columns:repeat(7,1fr);gap:9px;align-items:end;height:150px;margin-top:18px}
+.barcol{text-align:center}
+.bar{width:100%;min-height:8px;border-radius:10px 10px 4px 4px;background:linear-gradient(180deg,var(--green),#77d63e);box-shadow:0 0 14px rgba(84,224,151,.1)}
+.bar.mid{background:linear-gradient(180deg,var(--yellow),var(--orange))}
+.bar.high{background:linear-gradient(180deg,var(--red),#ff7b3a)}
+.barlabel{font-size:10px;color:var(--muted);margin-top:6px}
+.baramt{font-size:10px;margin-bottom:5px}
+.tx{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.tx:last-child{border-bottom:0}
+.tx-icon{width:42px;height:42px;border-radius:14px;background:#192631;display:grid;place-items:center}
+.tx-main{flex:1}.tx-main small{display:block;color:var(--muted);margin-top:2px;font-size:12px}
+.tx-amount{font-weight:900}.pos{color:var(--green)}.neg{color:var(--red)}.neutral{color:var(--blue)}
+
+.settings-card{padding:20px}
+.setting-row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.setting-row:last-child{border-bottom:0}
+
+.chat{position:fixed;right:max(18px,calc((100vw - 560px)/2 + 18px));bottom:90px;z-index:30;padding:11px 15px;border-radius:999px;border:1px solid #2a4153;background:#101d28;color:white;font-weight:900;box-shadow:var(--shadow)}
+nav{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:min(560px,100%);display:grid;grid-template-columns:repeat(5,1fr);gap:3px;padding:9px 11px calc(10px + env(safe-area-inset-bottom));background:rgba(7,16,24,.94);backdrop-filter:blur(18px);border-top:1px solid #182833;z-index:40}
+nav button{border:0;background:transparent;color:#8d9aa7;padding:9px 3px;border-radius:17px;font-weight:800}
+nav button.active{color:var(--green);background:#10231a}
+
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center;z-index:100}
+.modal.show{display:flex}
+.sheet{width:min(560px,100%);background:#0d1720;border:1px solid var(--line);border-radius:25px 25px 0 0;padding:21px 18px calc(24px + env(safe-area-inset-bottom))}
+.sheet h3{margin:0 0 14px}
+.sheet input{width:100%;padding:14px 15px;margin-bottom:10px;border-radius:14px;border:1px solid var(--line);background:#071018;color:white}
+.sheet-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.primary,.secondary{padding:13px;border-radius:14px;font-weight:900}
+.primary{border:0;background:var(--green);color:#072316}.secondary{border:1px solid var(--line);background:#17232e;color:white}
+.dir-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px}
+.dir-btn{padding:11px;border-radius:13px;border:1px solid var(--line);background:#111d27;color:white}
+.dir-btn.active{border-color:var(--blue);color:var(--blue)}
+
+@media(max-width:420px){
+  .hero-grid{grid-template-columns:130px 1fr}
+  .ring{width:126px;height:126px}.ring:after{width:98px;height:98px}
+  .ring-content b{font-size:30px}
+  .money-actions,.savings-actions{grid-template-columns:1fr}
+  h1{font-size:35px}
+}
+.workout-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:15px}.workout-tab{padding:13px 6px;border:1px solid var(--line);border-radius:15px;background:#0d1822;color:var(--muted);font-weight:800}.workout-tab.active{color:var(--blue);border-color:var(--blue);background:#0d1b29}.workout-card{padding:18px}.exercise{border:1px solid var(--line);border-radius:17px;background:#0b151e;margin-top:10px;overflow:hidden}.exercise-head{display:flex;align-items:center;gap:10px;width:100%;padding:13px;border:0;background:transparent;color:#fff;text-align:left}.exnum{width:35px;height:35px;border-radius:9px;border:1px solid #28588b;background:#0c1c2b;color:var(--blue);display:grid;place-items:center;font-weight:900}.exname{flex:1}.exname small{display:block;color:var(--blue);margin-top:3px}.exsum{font-size:11px;color:var(--muted)}.exbody{display:none;padding:0 12px 12px}.exercise.open .exbody{display:block}.sethead,.setrow{display:grid;grid-template-columns:32px 1fr .8fr .8fr 44px;gap:7px;align-items:center}.sethead{padding:8px 0;color:var(--muted);font-size:9px}.setrow{padding:8px 0;border-top:1px solid rgba(255,255,255,.06)}.prevval{font-size:10px;color:#687784}.loginput{width:100%;min-width:0;padding:10px 5px;border:1px solid #263846;border-radius:10px;background:#07111a;color:#fff;text-align:center}.loginput::placeholder{color:#4f5b65}.effort{width:32px;height:32px;border-radius:50%;border:2px solid #9aa5af;background:transparent}.effort.easy{border-color:#32c6b1;background:#32c6b1;box-shadow:inset 0 0 0 7px #173c37}.effort.ideal{border-color:#f1c65b;background:#f1c65b;box-shadow:inset 0 0 0 7px #443b23}.effort.max{border-color:#ef725c;background:#ef725c;box-shadow:inset 0 0 0 7px #462b26}.addset{width:100%;margin-top:8px;padding:10px;border:1px dashed #31506a;border-radius:11px;background:transparent;color:var(--blue)}.workout-save{width:100%;margin-top:14px;padding:14px;border:0;border-radius:15px;background:linear-gradient(90deg,#226bd5,#3285ff);color:white;font-weight:900}.effort-options{display:grid;gap:10px}.effopt{padding:15px;border-radius:16px;color:#fff;text-align:left}.effopt small{display:block;margin-top:3px}.effopt.easy{border:1px solid #2e9f8f;background:#173c37}.effopt.ideal{border:1px solid #c7a758;background:#4a4230}.effopt.max{border:1px solid #bd5b4c;background:#4c342f}
+.currency-select{background:#0b151e;color:var(--text);border:1px solid var(--line);border-radius:12px;padding:9px 12px;font-weight:800;outline:none}
+.currency-select:focus{border-color:var(--blue)}
+
+
+.today-clean-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.today-clean-grid .card{padding:18px}
+.today-progress-card{grid-column:1/2}
+.today-spark-card{grid-column:2/3;border-color:#3a2b56;background:radial-gradient(circle at 85% 20%,rgba(160,97,255,.12),transparent 35%),linear-gradient(180deg,#151128,#0e1220)}
+.health-card{grid-column:1/3;border-color:#1d5338;background:linear-gradient(180deg,#0d2119,#0c1715)}
+.health-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.health-metric{padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:#0b151e}
+.health-metric b{display:block;font-size:18px;margin-top:3px}
+.health-status{display:flex;justify-content:space-between;align-items:center;margin-top:13px;padding-top:12px;border-top:1px solid rgba(255,255,255,.07);color:var(--muted);font-size:12px}
+.week-summary{margin-top:16px;padding:18px}
+.week-summary-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.week-grade{padding:16px;border:1px solid #234b37;border-radius:17px;background:#0e2018;margin-bottom:12px}
+.week-grade strong{display:block;color:var(--green);font-size:24px;margin-top:5px}
+.summary-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.summary-metric{padding:13px;border:1px solid var(--line);border-radius:15px;background:#0b151e}
+.summary-metric span{display:block;color:var(--muted);font-size:11px}
+.summary-metric b{display:block;font-size:19px;margin-top:4px}
+.glance-card{margin-top:16px;padding:18px}
+.glance-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
+.glance-item{text-align:center;padding:12px 5px;border-right:1px solid rgba(255,255,255,.06)}
+.glance-item:last-child{border-right:0}.glance-item b{display:block;margin-top:5px;font-size:15px}.glance-item small{color:var(--muted);font-size:10px}
+.focus-card{margin-top:16px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.tasks-toggle{margin-top:14px;border-top:1px solid rgba(255,255,255,.06);padding-top:12px}
+.tasks-toggle summary{cursor:pointer;color:var(--blue);font-weight:800}
+.tasks-toggle .task-list{margin-top:8px}
+.fx-note{font-size:11px;color:var(--muted);margin-top:6px}
+@media(max-width:420px){
+ .today-clean-grid{grid-template-columns:1fr}
+ .today-progress-card,.today-spark-card,.health-card{grid-column:1}
+ .glance-grid{grid-template-columns:repeat(2,1fr)}
+ .glance-item{border-right:0}
+}
+
+
+.health-connect-card{padding:18px}
+.health-connect-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.health-connect-row:last-child{border-bottom:0}
+.health-btn{border:1px solid var(--line);background:#111d27;color:white;border-radius:13px;padding:10px 13px;font-weight:800}
+.health-btn.primary{color:var(--green);border-color:#24543c}
+.health-btn.blue{color:var(--blue);border-color:#24517a}
+.health-badge{font-size:12px;padding:6px 10px;border-radius:999px;background:#15231d;color:var(--green);border:1px solid #24543c}
+.health-badge.off{background:#1b1f24;color:#8f9aa4;border-color:#303a43}
+.health-test-note{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.45}
+
+</style>
+</head>
+<body>
+<div class="app">
+
+<section id="today" class="view active">
+  <div class="topbar">
+    <div>
+      <h1 style="margin-bottom:6px">Good day 👋</h1>
+      <div class="subtitle" style="margin-bottom:4px">Stay consistent and the results will follow.</div>
+      <div id="todayDate" class="greeting"></div>
+    </div>
+    <div class="streak">🔥 <span id="streakToday">0 days</span></div>
+  </div>
+
+  <div class="today-clean-grid" style="margin-top:18px">
+    <div class="card today-progress-card">
+      <div class="label">TODAY'S PROGRESS</div>
+      <div class="progress-ring" id="progressRing" style="--p:0;margin:18px auto 8px">
+        <div><b id="progressText">0%</b><span>complete</span></div>
+      </div>
+      <div id="todayCompleteText" style="text-align:center;color:var(--blue);font-weight:800;margin-top:8px">Keep going.</div>
+      <details class="tasks-toggle">
+        <summary>Today's activities</summary>
+        <div class="task-list">
+          <div class="task"><input type="checkbox" class="task-check" data-key="work" id="work"><label for="work">💼 Work</label></div>
+          <div class="task"><input type="checkbox" class="task-check" data-key="workout" id="workoutTask"><label for="workoutTask">🏋️ Workout</label></div>
+          <div class="task"><input type="checkbox" class="task-check" data-key="water" id="water"><label for="water">💧 Water goal</label></div>
+          <div class="task"><input type="checkbox" class="task-check" data-key="protein" id="protein"><label for="protein">🥩 Protein goal</label></div>
+          <div class="task"><input type="checkbox" class="task-check" data-key="sleep" id="sleep"><label for="sleep">😴 Sleep / recovery</label></div>
+          <div class="rest-toggle">
+            <div><b>🌙 Day Off / Rest Day</b><div class="note" style="margin-top:3px">Work is excluded from your score.</div></div>
+            <label class="switch"><input type="checkbox" id="restDay"><span class="slider"></span></label>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <div class="card today-spark-card">
+      <div class="spark-head"><h2 style="font-size:18px">Daily Spark</h2><div class="chip" id="sparkCategory">Wisdom</div></div>
+      <div class="quote" id="sparkText"></div>
+      <div class="quote-author" id="sparkAuthor"></div>
+    </div>
+
+    <div class="card health-card">
+      <div class="topbar"><div><div class="label">WATCH / HEALTH</div><h2 style="margin-top:4px;font-size:19px">Health snapshot</h2></div><div>⌚</div></div>
+      <div class="health-row">
+        <div class="health-metric"><span class="label">🌙 Sleep</span><b id="healthSleep">—</b></div>
+        <div class="health-metric"><span class="label">❤️ Resting HR</span><b id="healthRhr">—</b></div>
+        <div class="health-metric"><span class="label">💓 Workout HR</span><b id="healthWhr">—</b></div>
+        <div class="health-metric"><span class="label">🔥 Active calories</span><b id="healthCalories">—</b></div>
+      </div>
+      <div class="health-status"><span>Smartwatch integration ready for later setup</span><span>Not connected</span></div>
+    </div>
+  </div>
+
+  <div class="card week-summary">
+    <div class="week-summary-head"><h2>Weekly Summary</h2><span class="label">This week</span></div>
+    <div class="week-grade"><span class="label">OVERALL RESULT</span><strong id="weekGrade">Building Week</strong><div class="note" id="weekGradeNote">Keep building consistency.</div></div>
+    <div class="summary-grid">
+      <div class="summary-metric"><span>Avg. completion</span><b id="sumCompletion">0%</b></div>
+      <div class="summary-metric"><span>Successful days</span><b id="sumDays">0 / 7</b></div>
+      <div class="summary-metric"><span>Workouts logged</span><b id="sumWorkouts">0</b></div>
+      <div class="summary-metric"><span>Weekly spending</span><b id="sumSpending">$0</b></div>
+      <div class="summary-metric"><span>Savings change</span><b id="sumSavings">$0</b></div>
+      <div class="summary-metric"><span>Spending limit left</span><b id="sumLimitLeft">$0</b></div>
+    </div>
+  </div>
+
+  <div class="card glance-card">
+    <h2 style="font-size:18px">At a glance</h2>
+    <div class="glance-grid">
+      <div class="glance-item">✅<b id="glanceTasks">0/0</b><small>Tasks</small></div>
+      <div class="glance-item">🏋️<b id="glanceWorkout">—</b><small>Latest workout</small></div>
+      <div class="glance-item">💳<b id="glanceSpent">$0</b><small>Spent today</small></div>
+      <div class="glance-item">🏦<b id="glanceSavings">$0</b><small>Savings</small></div>
+    </div>
+  </div>
+
+  <div class="card focus-card">
+    <div><div class="label">FOCUS FOR TOMORROW</div><b id="tomorrowFocus">Stay consistent, one day at a time.</b></div>
+    <span style="font-size:24px;color:var(--blue)">→</span>
+  </div>
+</section>
+
+<section id="history" class="view">
+  <h1>History 📅</h1>
+  <div class="subtitle">Your recent consistency</div>
+
+  <div class="card history-card">
+    <div class="month-head">
+      <h2 id="monthTitle">August 2026</h2>
+      <div class="month-nav"><button class="icon-btn" id="prevMonth">‹</button><button class="icon-btn" id="nextMonth">›</button></div>
+    </div>
+    <div class="weekdays"><div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div></div>
+    <div class="cal" id="cal"></div>
+  </div>
+
+  <div class="card history-card">
+    <h2>Recent days</h2>
+    <div id="recent"></div>
+  </div>
+
+  <div class="card weekly">
+    <div class="weekly-top">
+      <div><div class="subtitle" style="margin:0 0 4px;font-size:13px">Weekly progress</div><div class="weekly-score" id="weeklyScore">0%</div></div>
+      <div class="subtitle" style="margin:0;font-size:13px" id="weeklyStreak">0 day streak</div>
+    </div>
+    <div class="hex-row" id="hexRow"></div>
+    <div class="geo"><div class="track"><div class="fill" id="geoFill"></div></div></div>
+  </div>
+</section>
+
+<section id="workout" class="view"><h1>🏋️ Workout</h1><div class="subtitle">Track your workouts. Get stronger over time.</div><div class="workout-tabs"><button class="workout-tab active" data-wday="push">🔵 Push Day</button><button class="workout-tab" data-wday="pull">🟢 Pull Day</button><button class="workout-tab" data-wday="legs">🟡 Leg Day</button></div><div class="card workout-card"><h2 id="wtitle">PUSH DAY 💪</h2><div class="subtitle" id="wsub" style="font-size:13px;margin:4px 0 12px"></div><div id="wlist"></div><button class="workout-save" id="saveWorkout">✓ Finish & Save Workout</button></div></section><section id="money" class="view">
+  <h1>My Money 💰</h1>
+  <div class="subtitle">Manage your money, simply.</div>
+
+  <div class="card money-hero">
+    <div class="balance-grid">
+      <div class="balance available"><span class="subtitle" style="font-size:13px;margin:0">Available Balance</span><strong id="available">$850.00</strong></div>
+      <div class="balance savings"><span class="subtitle" style="font-size:13px;margin:0">Savings</span><strong id="savings">$2,400.00</strong></div>
+    </div>
+    <div class="money-actions">
+      <button class="money-btn income" data-action="income">＋ Income</button>
+      <button class="money-btn transfer" data-action="transfer">⇄ Transfer</button>
+      <button class="money-btn expense" data-action="expense">− Expense</button>
+    </div>
+    <div class="savings-actions">
+      <button class="money-btn" data-action="savingsAdd">＋ Add Savings</button>
+      <button class="money-btn" data-action="savingsWithdraw">− Withdraw Savings</button>
+      <button class="money-btn transfer" data-action="transfer">⇄ Transfer</button>
+    </div>
+  </div>
+
+  <div class="card limit-card">
+    <div class="limit-top">
+      <div>
+        <h2>Spending Limit</h2>
+        <div class="subtitle" style="font-size:13px;margin:4px 0 0">Weekly limit</div>
+      </div>
+      <button class="money-btn" data-action="setLimit">Edit Limit</button>
+    </div>
+    <div class="limit-values">
+      <div class="limit-box"><span class="subtitle" style="font-size:12px;margin:0">Limit</span><strong id="limitValue">$300.00</strong></div>
+      <div class="limit-box"><span class="subtitle" style="font-size:12px;margin:0">Remaining</span><strong id="limitRemaining">$300.00</strong></div>
+    </div>
+    <div class="limit-track"><div class="limit-fill" id="limitFill"></div></div>
+    <div class="subtitle" id="limitStatus" style="font-size:12px;margin:0">Spent $0 this week</div>
+  </div>
+
+  <div class="card mini-card">
+    <div class="topbar"><h2>Spending Mini History</h2><div class="subtitle" style="font-size:12px;margin:0">This week</div></div>
+    <div class="mini-bars" id="miniBars"></div>
+  </div>
+
+  <div class="card tx-card">
+    <h2>Recent Transactions</h2>
+    <div id="txList"></div>
+  </div>
+</section>
+
+<section id="settings" class="view">
+  <h1>Settings ⚙️</h1>
+  <div class="subtitle">Tracker preferences</div>
+  <div class="card settings-card">
+    <div class="setting-row"><span>Theme</span><b>Dark</b></div>
+    <div class="setting-row">
+      <span>Currency</span>
+      <select id="currencySelect" class="currency-select">
+        <option value="AUD">AUD (A$)</option>
+        <option value="PHP">PHP (₱)</option>
+        <option value="USD">USD ($)</option>
+      </select>
+      <div class="fx-note" id="fxStatus">Rates refresh every 24 hours.</div>
+    </div>
+    <div class="setting-row"><span>Storage</span><b>On device</b></div>
+    
+    <div class="card health-connect-card" style="margin-top:16px">
+      <h2 style="font-size:19px;margin-bottom:4px">⌚ Health Integration</h2>
+      <div class="subtitle" style="font-size:12px;margin-bottom:6px">Test the future smartwatch experience using simulated data.</div>
+      <div class="health-connect-row">
+        <div>
+          <b>Watch connection</b>
+          <div class="health-test-note" id="watchProvider">Test mode • no real watch connected</div>
+        </div>
+        <span class="health-badge off" id="watchStatus">Disconnected</span>
+      </div>
+      <div class="health-connect-row">
+        <div>
+          <b>Test Watch Connection</b>
+          <div class="health-test-note">Loads realistic demo health data into Today.</div>
+        </div>
+        <button class="health-btn primary" id="connectTestWatch">Connect</button>
+      </div>
+      <div class="health-connect-row">
+        <div>
+          <b>Sync Now</b>
+          <div class="health-test-note" id="lastHealthSync">No sync yet</div>
+        </div>
+        <button class="health-btn blue" id="syncHealthNow">Sync</button>
+      </div>
+      <div class="health-connect-row">
+        <div>
+          <b>Disconnect</b>
+          <div class="health-test-note">Clears simulated watch data only.</div>
+        </div>
+        <button class="health-btn" id="disconnectWatch">Disconnect</button>
+      </div>
+    </div>
+
+    <button class="setting-row" id="resetBtn" style="width:100%;background:transparent;border-left:0;border-right:0;border-top:0;color:var(--red)">Reset app data <span>›</span></button>
+  </div>
+</section>
+
+</div>
+
+<button class="chat" id="chatBtn">✨ Ask ChatGPT</button>
+
+<nav>
+  <button class="active" data-view="today">☀️<br>Today</button>
+  <button data-view="history">📅<br>History</button>
+  <button data-view="workout">🏋️<br>Workout</button><button data-view="money">💰<br>Money</button>
+  <button data-view="settings">⚙️<br>Settings</button>
+</nav>
+
+<div class="modal" id="effortModal"><div class="sheet"><div style="display:flex;justify-content:space-between"><div><h3 style="margin:0">Rate Effort Level</h3><div class="subtitle" style="font-size:12px;margin:4px 0 14px">How hard was this set?</div></div><button class="secondary" id="closeEffort" style="height:42px">✕</button></div><div class="effort-options"><button class="effopt easy" data-eff="easy"><b>EASY</b><small>Could have done 3+ more reps</small></button><button class="effopt ideal" data-eff="ideal"><b>IDEAL</b><small>Could have done 1–3 more reps</small></button><button class="effopt max" data-eff="max"><b>MAX EFFORT</b><small>No more reps with good form</small></button></div></div></div><div class="modal" id="modal">
+  <div class="sheet">
+    <h3 id="modalTitle">Add</h3>
+    <div class="dir-grid" id="dirWrap" style="display:none">
+      <button class="dir-btn active" id="toSavings">Available → Savings</button>
+      <button class="dir-btn" id="toAvailable">Savings → Available</button>
+    </div>
+    <input id="amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Amount" />
+    <input id="note" type="text" placeholder="Note (optional)" />
+    <div class="sheet-actions"><button class="secondary" id="cancel">Cancel</button><button class="primary" id="saveAction">Save</button></div>
+  </div>
+</div>
+
+<script>
+const KEY="dailyTrackerPremium";
+const defaults={days:{},money:{available:850,savings:2400,weeklyLimit:300,currency:"AUD",transactions:[]}};
+let state=JSON.parse(localStorage.getItem(KEY)||"null")||defaults;
+if(!state.money.weeklyLimit) state.money.weeklyLimit=300;
+if(!state.money.currency) state.money.currency="AUD";
+if(!state.money.baseCurrency) state.money.baseCurrency="AUD";
+if(!state.money.fx) state.money.fx={rates:{AUD:1,PHP:null,USD:null},updatedAt:0,sourceDate:null};
+if(!state.health) state.health={connected:false,provider:"Test Watch",lastSync:0,sleepMinutes:null,restingHR:null,workoutHR:null,activeCalories:null};
+let calendarDate=new Date();
+let currentAction=null;
+let transferDirection="toSavings";
+
+const todayKey=()=>new Date().toISOString().slice(0,10);
+const convertMoney=n=>{
+  const c=state.money.currency||"AUD";
+  const rate=(state.money.fx&&state.money.fx.rates&&state.money.fx.rates[c])||1;
+  return n*rate;
+};
+const fmt=n=>{
+  const currency=state.money.currency||"AUD";
+  const locale=currency==="PHP"?"en-PH":currency==="USD"?"en-US":"en-AU";
+  return new Intl.NumberFormat(locale,{style:"currency",currency,maximumFractionDigits:currency==="PHP"?0:2}).format(convertMoney(n));
+};
+
+function save(){localStorage.setItem(KEY,JSON.stringify(state))}
+function ensureToday(){
+  const k=todayKey();
+  if(!state.days[k])state.days[k]={work:false,workout:false,water:false,protein:false,sleep:false,restDay:false};
+  return state.days[k];
+}
+function getPct(r){
+  const keys=["work","workout","water","protein","sleep"];
+  const counted=r.restDay?keys.filter(k=>k!=="work"):keys;
+  const done=counted.filter(k=>r[k]).length;
+  return {pct:Math.round(done/counted.length*100),done,total:counted.length};
+}
+function streakCount(){
+  let n=0;
+  let d=new Date();
+  for(let i=0;i<365;i++){
+    const k=d.toISOString().slice(0,10);
+    const r=state.days[k];
+    if(r && (r.percent??getPct(r).pct)>=80) n++;
+    else if(i===0 && !r) {}
+    else break;
+    d.setDate(d.getDate()-1);
+  }
+  return n;
+}
+document.getElementById("todayDate").textContent=new Date().toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"});
+
+function launchCompletionAnimation(){
+  const ring=document.getElementById("ring");
+  ring.classList.remove("complete"); void ring.offsetWidth; ring.classList.add("complete");
+  for(let i=0;i<14;i++){
+    const s=document.createElement("i");s.className="sparkle";
+    s.style.left="70px";s.style.top="70px";
+    const a=(Math.PI*2/14)*i, dist=55+Math.random()*30;
+    s.style.setProperty("--x",Math.cos(a)*dist+"px");
+    s.style.setProperty("--y",Math.sin(a)*dist+"px");
+    ring.appendChild(s); setTimeout(()=>s.remove(),1100);
+  }
+}
+function renderToday(){
+  const r=ensureToday();
+  document.querySelectorAll(".task-check").forEach(el=>el.checked=!!r[el.dataset.key]);
+  document.getElementById("restDay").checked=!!r.restDay;
+  const res=getPct(r),old=r.percent||0;
+  r.percent=res.pct;r.done=res.done;r.total=res.total;save();
+  const pt=document.getElementById("progressText"),pr=document.getElementById("progressRing");
+  if(pt) pt.textContent=res.pct+"%";
+  if(pr) pr.style.setProperty("--p",res.pct);
+  const msg=document.getElementById("todayCompleteText");
+  if(msg) msg.textContent=res.pct===100?"✓ All tasks completed!":res.pct>=80?"Daily goal reached ✓":"Keep going.";
+  document.getElementById("streakToday").textContent=streakCount()+" days";
+  if(res.pct===100 && old<100 && pr){
+    pr.animate([{transform:"scale(1)"},{transform:"scale(1.06)",filter:"drop-shadow(0 0 18px rgba(84,224,151,.8))"},{transform:"scale(1)"}],{duration:700,easing:"ease"});
+  }
+  if(typeof renderTodayDashboardExtras==="function") renderTodayDashboardExtras();
+}
+document.querySelectorAll(".task-check").forEach(el=>el.onchange=()=>{const r=ensureToday();r[el.dataset.key]=el.checked;renderToday();renderHistory()});
+document.getElementById("restDay").onchange=e=>{const r=ensureToday();r.restDay=e.target.checked;renderToday();renderHistory()};
+
+const sparks=[
+  ["Wisdom","The chief task in life is simply this: identify what is in your control, and act on it.","Epictetus"],
+  ["Time","You will never find time for anything. If you want time, you must make it.","Charles Buxton"],
+  ["Habits","We are what we repeatedly do. Excellence, then, is not an act, but a habit.","Often attributed to Aristotle"],
+  ["Patience","No great thing is created suddenly.","Epictetus"],
+  ["Discipline","Discipline is choosing between what you want now and what you want most.","Modern maxim"],
+  ["Money","Beware of little expenses; a small leak will sink a great ship.","Benjamin Franklin"],
+  ["Mindset","A calm mind sees more than an angry one.","Daily Spark"],
+  ["Logic","It is the mark of an educated mind to entertain a thought without accepting it.","Attributed to Aristotle"],
+  ["Trivia","Octopuses have three hearts and blue blood.","Trivia"],
+  ["Self-awareness","Knowing others is intelligence; knowing yourself is true wisdom.","Lao Tzu"],
+  ["Power","He who controls others may be powerful, but he who has mastered himself is mightier still.","Lao Tzu"],
+  ["Respect","Respect yourself, and others will respect you.","Confucius"]
+];
+function renderSpark(){
+  const idx=Math.floor((new Date().setHours(0,0,0,0)/86400000))%sparks.length;
+  const [cat,text,author]=sparks[idx];
+  document.getElementById("sparkCategory").textContent=cat;
+  document.getElementById("sparkText").textContent="“"+text+"”";
+  document.getElementById("sparkAuthor").textContent="— "+author;
+}
+
+function renderCalendar(){
+  const y=calendarDate.getFullYear(),m=calendarDate.getMonth();
+  document.getElementById("monthTitle").textContent=calendarDate.toLocaleDateString("en-AU",{month:"long",year:"numeric"});
+  const cal=document.getElementById("cal");cal.innerHTML="";
+  const first=new Date(y,m,1).getDay(),count=new Date(y,m+1,0).getDate();
+  for(let i=0;i<first;i++){const e=document.createElement("button");e.className="day empty";cal.appendChild(e)}
+  for(let d=1;d<=count;d++){
+    const dt=new Date(y,m,d),key=dt.toISOString().slice(0,10),r=state.days[key];
+    const b=document.createElement("button");b.className="day";b.textContent=d;
+    if(key===todayKey())b.classList.add("today");
+    if(r){const p=r.percent??getPct(r).pct;b.classList.add(p>=80?"done":p>0?"partial":"missed")}
+    b.onclick=()=>alert(r?`${key}\n${r.done||0}/${r.total||0} tasks • ${r.percent||0}%${r.restDay?" • Rest day":""}`:`${key}\nNo saved data.`);
+    cal.appendChild(b);
+  }
+}
+function renderRecent(){
+  const box=document.getElementById("recent");box.innerHTML="";
+  const items=Object.entries(state.days).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,5);
+  if(!items.length){box.innerHTML="<div class='subtitle' style='margin:14px 0 0;font-size:13px'>No history yet.</div>";return}
+  items.forEach(([k,r])=>{
+    const row=document.createElement("div");row.className="recent-row";
+    row.innerHTML=`<div><b>${new Date(k+"T12:00:00").toLocaleDateString("en-AU",{day:"numeric",month:"short"})}</b><div class="subtitle" style="margin:3px 0 0;font-size:12px">${r.restDay?"Rest day":"Tracked day"}</div></div><b style="color:var(--green)">${r.percent||0}%</b>`;
+    box.appendChild(row);
+  })
+}
+function last7(){
+  let arr=[],now=new Date();
+  for(let i=6;i>=0;i--){let d=new Date(now);d.setDate(now.getDate()-i);let k=d.toISOString().slice(0,10);arr.push({d,k,r:state.days[k]})}
+  return arr;
+}
+function renderWeekly(){
+  const days=last7(),scores=days.map(x=>x.r?.percent||0),avg=Math.round(scores.reduce((a,b)=>a+b,0)/7);
+  document.getElementById("weeklyScore").textContent=avg+"%";document.getElementById("geoFill").style.width=avg+"%";
+  document.getElementById("weeklyStreak").textContent=streakCount()+" day streak";
+  const row=document.getElementById("hexRow");row.innerHTML="";
+  days.forEach(x=>{
+    const p=x.r?.percent||0,w=document.createElement("div");w.className="hexwrap";
+    const c=p>=80?"":p>0?"partial":"off",icon=p>=80?"✓":p>0?"–":"";
+    w.innerHTML=`<div class="hex ${c}">${icon}</div><small>${x.d.toLocaleDateString("en-AU",{weekday:"narrow"})}</small>`;row.appendChild(w)
+  })
+}
+function renderHistory(){renderCalendar();renderRecent();renderWeekly()}
+document.getElementById("prevMonth").onclick=()=>{calendarDate=new Date(calendarDate.getFullYear(),calendarDate.getMonth()-1,1);renderCalendar()}
+document.getElementById("nextMonth").onclick=()=>{calendarDate=new Date(calendarDate.getFullYear(),calendarDate.getMonth()+1,1);renderCalendar()}
+
+function startOfWeek(d=new Date()){
+  const x=new Date(d);const day=(x.getDay()+6)%7;x.setDate(x.getDate()-day);x.setHours(0,0,0,0);return x;
+}
+function weekExpenses(){
+  const start=startOfWeek().getTime();
+  return state.money.transactions.filter(t=>t.type==="expense" && new Date(t.date).getTime()>=start).reduce((s,t)=>s+t.amount,0);
+}
+function renderMoney(){
+  document.getElementById("available").textContent=fmt(state.money.available);
+  document.getElementById("savings").textContent=fmt(state.money.savings);
+  const spent=weekExpenses(),limit=state.money.weeklyLimit||300,remain=Math.max(0,limit-spent),ratio=Math.min(100,spent/limit*100);
+  document.getElementById("limitValue").textContent=fmt(limit);document.getElementById("limitRemaining").textContent=fmt(remain);
+  document.getElementById("limitFill").style.width=ratio+"%";document.getElementById("limitStatus").textContent=`Spent ${fmt(spent)} this week • ${Math.round(ratio)}% of limit`;
+
+  const days=[];const start=startOfWeek();
+  for(let i=0;i<7;i++){let d=new Date(start);d.setDate(start.getDate()+i);days.push(d)}
+  const vals=days.map(d=>{
+    const k=d.toISOString().slice(0,10);
+    return state.money.transactions.filter(t=>t.type==="expense"&&t.date.slice(0,10)===k).reduce((s,t)=>s+t.amount,0)
+  });
+  const max=Math.max(...vals,1),bars=document.getElementById("miniBars");bars.innerHTML="";
+  vals.forEach((v,i)=>{
+    const h=Math.max(8,Math.round(v/max*110)),cls=v/max>.7?"high":v/max>.35?"mid":"";
+    const c=document.createElement("div");c.className="barcol";
+    c.innerHTML=`<div class="baramt">${v?fmt(v).replace(".00",""):"–"}</div><div class="bar ${cls}" style="height:${h}px"></div><div class="barlabel">${days[i].toLocaleDateString("en-AU",{weekday:"short"}).slice(0,1)}</div>`;
+    bars.appendChild(c)
+  });
+
+  const list=document.getElementById("txList");list.innerHTML="";
+  const txs=state.money.transactions.slice().reverse().slice(0,6);
+  if(!txs.length){list.innerHTML="<div class='subtitle' style='font-size:13px;margin:14px 0 0'>No transactions yet.</div>";return}
+  txs.forEach(t=>{
+    let cls="neutral",sign="",icon="⇄",title=t.note||"Transfer",sub="";
+    if(t.type==="income"){cls="pos";sign="+";icon="💵";title=t.note||"Income"}
+    else if(t.type==="expense"){cls="neg";sign="-";icon="🧾";title=t.note||"Expense"}
+    else if(t.type==="savingsAdd"||t.type==="save"){cls="pos";sign="+";icon="🏦";title=t.note||"Added to savings"}
+    else if(t.type==="savingsWithdraw"||t.type==="withdraw"){cls="neg";sign="-";icon="↩️";title=t.note||"Savings withdrawal"}
+    else if(t.type==="transfer"){sub=t.direction==="toSavings"?"Available → Savings":"Savings → Available"}
+    const row=document.createElement("div");row.className="tx";
+    row.innerHTML=`<div class="tx-icon">${icon}</div><div class="tx-main"><b>${title}</b><small>${new Date(t.date).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})}${sub?" • "+sub:""}</small></div><div class="tx-amount ${cls}">${sign}${fmt(t.amount)}</div>`;
+    list.appendChild(row)
+  })
+}
+
+function openModal(action){
+  currentAction=action;
+  const titles={income:"Add Income",expense:"Add Expense",savingsAdd:"Add to Savings",savingsWithdraw:"Withdraw from Savings",transfer:"Transfer Money",setLimit:"Set Weekly Spending Limit"};
+  document.getElementById("modalTitle").textContent=titles[action];
+  document.getElementById("dirWrap").style.display=action==="transfer"?"grid":"none";
+  document.getElementById("note").style.display=action==="setLimit"?"none":"block";
+  document.getElementById("amount").value="";
+  document.getElementById("note").value="";
+  document.getElementById("modal").classList.add("show");
+}
+document.querySelectorAll("[data-action]").forEach(b=>b.onclick=()=>openModal(b.dataset.action));
+function setDir(dir){
+  transferDirection=dir;
+  document.getElementById("toSavings").classList.toggle("active",dir==="toSavings");
+  document.getElementById("toAvailable").classList.toggle("active",dir==="toAvailable");
+}
+document.getElementById("toSavings").onclick=()=>setDir("toSavings");
+document.getElementById("toAvailable").onclick=()=>setDir("toAvailable");
+document.getElementById("cancel").onclick=()=>document.getElementById("modal").classList.remove("show");
+document.getElementById("modal").onclick=e=>{if(e.target.id==="modal")e.currentTarget.classList.remove("show")};
+document.getElementById("saveAction").onclick=()=>{
+  const amount=parseFloat(document.getElementById("amount").value),note=document.getElementById("note").value.trim();
+  if(!amount||amount<=0)return;
+  if(currentAction==="setLimit"){state.money.weeklyLimit=amount;save();renderMoney();document.getElementById("modal").classList.remove("show");return}
+  if(currentAction==="income")state.money.available+=amount;
+  if(currentAction==="expense"){if(amount>state.money.available){alert("Not enough available balance.");return}state.money.available-=amount}
+  if(currentAction==="savingsAdd")state.money.savings+=amount;
+  if(currentAction==="savingsWithdraw"){if(amount>state.money.savings){alert("Not enough savings.");return}state.money.savings-=amount}
+  if(currentAction==="transfer"){
+    if(transferDirection==="toSavings"){if(amount>state.money.available){alert("Not enough available balance.");return}state.money.available-=amount;state.money.savings+=amount}
+    else{if(amount>state.money.savings){alert("Not enough savings.");return}state.money.savings-=amount;state.money.available+=amount}
+  }
+  state.money.transactions.push({type:currentAction,direction:currentAction==="transfer"?transferDirection:null,amount,note,date:new Date().toISOString()});
+  save();renderMoney();document.getElementById("modal").classList.remove("show");
+};
+
+function switchView(viewName){
+  const target=document.querySelector("section#"+CSS.escape(viewName)+".view");
+  if(!target) return;
+  document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("active",x.dataset.view===viewName));
+  document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
+  target.classList.add("active");
+  window.scrollTo({top:0,behavior:"instant"});
+  if(viewName==="history") renderHistory();
+  if(viewName==="workout") renderWorkout();
+  if(viewName==="money") renderMoney();
+}
+document.querySelectorAll("nav button").forEach(b=>{
+  b.addEventListener("click",()=>switchView(b.dataset.view));
+  b.addEventListener("touchend",e=>{e.preventDefault();switchView(b.dataset.view)},{passive:false});
+});
+document.getElementById("chatBtn").onclick=()=>{
+  const fallback="https://chatgpt.com/";
+  window.location.href="intent://chatgpt.com/#Intent;scheme=https;package=com.openai.chatgpt;S.browser_fallback_url="+encodeURIComponent(fallback)+";end";
+};
+const currencySelect=document.getElementById("currencySelect");
+currencySelect.value=state.money.currency||"AUD";
+const fxStatus=document.getElementById("fxStatus");
+if(fxStatus){
+  const fx=state.money.fx;
+  fxStatus.textContent=fx?.updatedAt ? "Rates cached • updated "+new Date(fx.updatedAt).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}) : "Rates refresh every 24 hours.";
+}
+currencySelect.onchange=e=>{
+  state.money.currency=e.target.value;
+  save();
+  renderMoney();
+  renderTodayDashboardExtras();
+};
+
+document.getElementById("resetBtn").onclick=()=>{if(confirm("Reset all app data?")){localStorage.removeItem(KEY);state=JSON.parse(JSON.stringify(defaults));currencySelect.value=state.money.currency||"AUD";
+const fxStatus=document.getElementById("fxStatus");
+if(fxStatus){
+  const fx=state.money.fx;
+  fxStatus.textContent=fx?.updatedAt ? "Rates cached • updated "+new Date(fx.updatedAt).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}) : "Rates refresh every 24 hours.";
+}renderToday();renderHistory();renderMoney();renderWorkout()}};
+
+if(!state.workouts)state.workouts={sessions:[],drafts:{}};const plans={push:{title:'PUSH DAY 💪',sub:'Strength + Muscle • Lean & Strong',ex:[['Chest Press','Machine','Chest',[[47,'6–8'],[54,'5–8'],[54,'5–8']]],['Incline Machine Press','','Upper Chest',[[25,'8–10'],[27.5,'8–10'],[30,'5–8']]],['Shoulder Press','Machine','Shoulders',[[33,'6–10'],[39,'5–8']]],['Pec Fly','Machine','Chest',[[40,'12–15'],[47,'10–12'],[54,'8–12']]],['Lateral Raise','Dumbbells','Side Delts',[[6,'12–20'],[7,'12–20'],[8,'12–20']]],['Triceps Pushdown','Cable','Triceps',[[12.5,'8–15'],[15,'8–15'],[17.5,'8–15']]],['Triceps Pushdown','Unilateral • Optional','Triceps',[[5,'10–15'],[5,'10–15']]]]},pull:{title:'PULL DAY 💪',sub:'Strong Back • Bigger Arms • Better Posture',ex:[['Lat Pulldown','Wide Grip','Lats',[[40,'8–10'],[47,'6–10'],[54,'3–8']]],['Chest Supported Row','Machine','Mid Back',[[33,'8–10'],[40,'6–10'],[47,'6–10']]],['Close Grip Pulldown','Neutral / Close','Lats',[[40,'8–10'],[47,'6–10'],[54,'3–8']]],['Rear Delt Fly','Machine','Rear Delts',[[12,'15–20'],[19,'12–15'],[25,'10–15']]],['DB Biceps Curl','','Biceps',[[8,'10–12'],[9,'8–12'],[9,'6–10']]],['Hammer Curl','Dumbbells','Biceps',[[8,'10–12'],[9,'8–12'],[9,'6–10']]],['Abs Work','Choose 2','Abs',[[null,'10–20'],[null,'10–20']]],['DB Shrugs','','Traps',[[null,'10–15'],[null,'10–15'],[null,'10–15']]]]},legs:{title:'LEG DAY 🦵',sub:'Strong Legs • Power • Balance',ex:[['Leg Extension','Machine','Quadriceps',[[33,'10–15'],[40,'8–12'],[47,'8–12'],[54,'8–12']]],['Hamstring Curl','Machine','Hamstrings',[[25,'10–12'],[33,'8–10'],[40,'3–6']]],['Leg Press','Plate Loaded','Quads / Glutes',[[50,'10–15'],[80,'8–12'],[120,'6–10']]],['Seated Calf Raise','Machine','Calves',[[55,'10–15'],[75,'10–15'],[95,'10–15']]],['Abs Workout','Choose 2','Abs',[[null,'10–20'],[null,'10–20']]]]}};let wday='push',effTarget=null;const wkey=()=>wday+'_'+todayKey();function latest(d){return state.workouts.sessions.filter(x=>x.day===d).sort((a,b)=>b.date.localeCompare(a.date))[0]||null}function draft(){if(!state.workouts.drafts[wkey()])state.workouts.drafts[wkey()]=plans[wday].ex.map(e=>({sets:e[3].map(()=>({kg:'',reps:'',effort:''}))}));return state.workouts.drafts[wkey()]}function prev(ei,si){return latest(wday)?.exercises?.[ei]?.sets?.[si]||null}function renderWorkout(){const p=plans[wday],d=draft();wtitle.textContent=p.title;wsub.textContent=p.sub;wlist.innerHTML='';p.ex.forEach((e,ei)=>{const box=document.createElement('div');box.className='exercise'+(ei===0?' open':'');const pv=prev(ei,0),pl=e[3][0];box.innerHTML=`<button class="exercise-head"><span class="exnum">${ei+1}</span><span class="exname"><b>${e[0]} ${e[1]?'<span style="color:var(--muted);font-weight:500">('+e[1]+')</span>':''}</b><small>${e[2]}</small></span><span class="exsum">${pv?(pv.kg||'–')+' × '+(pv.reps||'–'):(pl[0]??'–')+' × '+pl[1]}</span></button><div class="exbody"><div class="sethead"><span>SET</span><span>PREVIOUS</span><span>KG</span><span>REPS</span><span>EFFORT</span></div><div class="rows"></div><button class="addset">＋ Add Set</button></div>`;box.querySelector('.exercise-head').onclick=()=>box.classList.toggle('open');const rows=box.querySelector('.rows');d[ei].sets.forEach((x,si)=>{const old=prev(ei,si),pln=e[3][si]||[null,''];const row=document.createElement('div');row.className='setrow';row.innerHTML=`<b style="text-align:center">${si+1}</b><div class="prevval">${old?(old.kg||'–')+' × '+(old.reps||'–'):(pln[0]??'–')+' × '+pln[1]}<br><span style="opacity:.5">${old?'previous':'plan'}</span></div><input class="loginput kg" type="number" step=".5" value="${x.kg}" placeholder="${old?.kg??pln[0]??'KG'}"><input class="loginput reps" type="number" value="${x.reps}" placeholder="${old?.reps??'Reps'}"><button class="effort ${x.effort}"></button>`;row.querySelector('.kg').oninput=z=>{x.kg=z.target.value;save()};row.querySelector('.reps').oninput=z=>{x.reps=z.target.value;save()};row.querySelector('.effort').onclick=()=>{effTarget={ei,si};effortModal.classList.add('show')};rows.appendChild(row)});box.querySelector('.addset').onclick=()=>{d[ei].sets.push({kg:'',reps:'',effort:''});save();renderWorkout()};wlist.appendChild(box)})}document.querySelectorAll('[data-wday]').forEach(b=>b.onclick=()=>{wday=b.dataset.wday;document.querySelectorAll('[data-wday]').forEach(x=>x.classList.remove('active'));b.classList.add('active');renderWorkout()});document.querySelectorAll('[data-eff]').forEach(b=>b.onclick=()=>{if(effTarget){draft()[effTarget.ei].sets[effTarget.si].effort=b.dataset.eff;save();effortModal.classList.remove('show');renderWorkout()}});closeEffort.onclick=()=>effortModal.classList.remove('show');saveWorkout.onclick=()=>{const d=JSON.parse(JSON.stringify(draft()));if(!d.some(e=>e.sets.some(x=>x.kg||x.reps||x.effort))){alert('Enter at least one set first.');return}state.workouts.sessions.push({day:wday,date:new Date().toISOString(),exercises:d});delete state.workouts.drafts[wkey()];save();alert('Workout saved ✓');renderWorkout()};
+async function refreshFxRates(force=false){
+  const now=Date.now(), day=24*60*60*1000;
+  const fx=state.money.fx||{rates:{AUD:1},updatedAt:0};
+  if(!force && fx.updatedAt && (now-fx.updatedAt)<day) return;
+  try{
+    const resp=await fetch("https://api.frankfurter.dev/v1/latest?base=AUD&symbols=PHP,USD");
+    if(!resp.ok) throw new Error("FX request failed");
+    const data=await resp.json();
+    if(data.rates?.PHP && data.rates?.USD){
+      state.money.fx={rates:{AUD:1,PHP:data.rates.PHP,USD:data.rates.USD},updatedAt:now,sourceDate:data.date||null};
+      save();
+      renderMoney();renderTodayDashboardExtras();
+    }
+  }catch(err){
+    console.warn("Using cached currency rates.",err);
+  }
+}
+function getWeekDates(){
+  const start=startOfWeek(),arr=[];
+  for(let i=0;i<7;i++){let d=new Date(start);d.setDate(start.getDate()+i);arr.push(d)}
+  return arr;
+}
+function weeklyTaskStats(){
+  const dates=getWeekDates();let total=0,success=0;
+  dates.forEach(d=>{
+    const r=state.days[d.toISOString().slice(0,10)];
+    const p=r?.percent||0;total+=p;if(p>=80)success++;
+  });
+  return {avg:Math.round(total/7),success};
+}
+function weeklyWorkoutCount(){
+  const start=startOfWeek().getTime();
+  return (state.workouts?.sessions||[]).filter(s=>new Date(s.date).getTime()>=start).length;
+}
+function weeklySavingsChange(){
+  const start=startOfWeek().getTime();
+  return state.money.transactions.filter(t=>new Date(t.date).getTime()>=start).reduce((sum,t)=>{
+    if(t.type==="savingsAdd"||t.type==="save") return sum+t.amount;
+    if(t.type==="savingsWithdraw"||t.type==="withdraw") return sum-t.amount;
+    if(t.type==="transfer") return sum+(t.direction==="toSavings"?t.amount:-t.amount);
+    return sum;
+  },0);
+}
+function todayExpense(){
+  const k=todayKey();
+  return state.money.transactions.filter(t=>t.type==="expense"&&t.date.slice(0,10)===k).reduce((a,t)=>a+t.amount,0);
+}
+function renderTodayDashboardExtras(){
+  const r=ensureToday(),stats=weeklyTaskStats(),spent=weekExpenses(),limit=state.money.weeklyLimit||300,left=Math.max(0,limit-spent),schange=weeklySavingsChange(),wc=weeklyWorkoutCount();
+  document.getElementById("sumCompletion").textContent=stats.avg+"%";
+  document.getElementById("sumDays").textContent=stats.success+" / 7";
+  document.getElementById("sumWorkouts").textContent=wc;
+  document.getElementById("sumSpending").textContent=fmt(spent);
+  document.getElementById("sumSavings").textContent=(schange>0?"+":"")+fmt(schange);
+  document.getElementById("sumSavings").style.color=schange>=0?"var(--green)":"var(--red)";
+  document.getElementById("sumLimitLeft").textContent=fmt(left);
+  let grade="Building Week",note="Keep building consistency.";
+  if(stats.avg>=85 && stats.success>=5){grade="Strong Week";note="Great consistency. Keep the standard high."}
+  else if(stats.avg>=65){grade="Solid Week";note="Good base. A few stronger days will lift the week."}
+  else if(stats.avg<40){grade="Reset & Rebuild";note="Keep it simple and win the next day."}
+  document.getElementById("weekGrade").textContent=grade;
+  document.getElementById("weekGradeNote").textContent=note;
+  document.getElementById("glanceTasks").textContent=(r.done||0)+"/"+(r.total||0);
+  const latest=(state.workouts?.sessions||[]).slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
+  document.getElementById("glanceWorkout").textContent=latest?latest.day.charAt(0).toUpperCase()+latest.day.slice(1):"—";
+  document.getElementById("glanceSpent").textContent=fmt(todayExpense());
+  document.getElementById("glanceSavings").textContent=fmt(state.money.savings);
+}
+
+
+function renderHealth(){
+  const h=state.health||{};
+  const sleepEl=document.getElementById("healthSleep");
+  const rhrEl=document.getElementById("healthRhr");
+  const whrEl=document.getElementById("healthWhr");
+  const calEl=document.getElementById("healthCalories");
+  if(sleepEl){
+    if(h.connected && h.sleepMinutes!=null){
+      const hrs=Math.floor(h.sleepMinutes/60),mins=h.sleepMinutes%60;
+      sleepEl.textContent=`${hrs}h ${mins}m`;
+      rhrEl.textContent=h.restingHR?`${h.restingHR} bpm`:"—";
+      whrEl.textContent=h.workoutHR?`${h.workoutHR} bpm`:"—";
+      calEl.textContent=h.activeCalories?`${h.activeCalories} kcal`:"—";
+    }else{
+      sleepEl.textContent="—";rhrEl.textContent="—";whrEl.textContent="—";calEl.textContent="—";
+    }
+  }
+  const ws=document.getElementById("watchStatus"),wp=document.getElementById("watchProvider"),ls=document.getElementById("lastHealthSync"),btn=document.getElementById("connectTestWatch");
+  if(ws){
+    ws.textContent=h.connected?"Connected":"Disconnected";
+    ws.classList.toggle("off",!h.connected);
+  }
+  if(wp) wp.textContent=h.connected?`${h.provider||"Test Watch"} • simulated data`:"Test mode • no real watch connected";
+  if(ls) ls.textContent=h.lastSync?`Last synced ${new Date(h.lastSync).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})}`:"No sync yet";
+  if(btn) btn.textContent=h.connected?"Connected":"Connect";
+}
+function generateMockHealth(){
+  const now=new Date();
+  const seed=now.getDate()+now.getMonth()*31;
+  return {
+    sleepMinutes: 410 + (seed%55),
+    restingHR: 58 + (seed%8),
+    workoutHR: 118 + (seed%18),
+    activeCalories: 430 + (seed%230)
+  };
+}
+function syncMockHealth(){
+  if(!state.health.connected){
+    alert("Connect the Test Watch first.");
+    return;
+  }
+  const d=generateMockHealth();
+  Object.assign(state.health,d,{lastSync:Date.now()});
+  save();renderHealth();renderTodayDashboardExtras();
+}
+const connectBtn=document.getElementById("connectTestWatch");
+if(connectBtn) connectBtn.onclick=()=>{
+  state.health.connected=true;
+  state.health.provider="Test Watch";
+  const d=generateMockHealth();
+  Object.assign(state.health,d,{lastSync:Date.now()});
+  save();renderHealth();
+};
+const syncBtn=document.getElementById("syncHealthNow");
+if(syncBtn) syncBtn.onclick=syncMockHealth;
+const disconnectBtn=document.getElementById("disconnectWatch");
+if(disconnectBtn) disconnectBtn.onclick=()=>{
+  state.health={connected:false,provider:"Test Watch",lastSync:0,sleepMinutes:null,restingHR:null,workoutHR:null,activeCalories:null};
+  save();renderHealth();
+};
+
+renderSpark();renderToday();renderHistory();renderMoney();renderWorkout();
+renderHealth();
+renderTodayDashboardExtras();refreshFxRates(false);
+</script>
+</body>
+</html>
