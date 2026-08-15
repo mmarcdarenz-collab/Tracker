@@ -34,6 +34,21 @@ jobs:
       - name: Sync web app
         run: npx cap sync android
 
+      - name: Install Health Connect native bridge
+        run: |
+          PKG="android/app/src/main/java/com/mrcdrnzz/dailytracker"
+          mkdir -p "$PKG"
+          cp native/HealthConnectNativePlugin.java "$PKG/HealthConnectNativePlugin.java"
+          cp native/MainActivity.java "$PKG/MainActivity.java"
+          cp native/PermissionsRationaleActivity.java "$PKG/PermissionsRationaleActivity.java"
+          python3 native/patch_manifest.py android/app/src/main/AndroidManifest.xml
+
+      - name: Verify native bridge was installed
+        run: |
+          grep -q "registerPlugin(HealthConnectNativePlugin.class)" android/app/src/main/java/com/mrcdrnzz/dailytracker/MainActivity.java
+          grep -q "android.permission.health.READ_SLEEP" android/app/src/main/AndroidManifest.xml
+          echo "Health Connect bridge and permissions are present."
+
       - name: Build debug APK
         run: |
           cd android
