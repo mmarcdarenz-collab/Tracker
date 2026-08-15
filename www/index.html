@@ -452,6 +452,80 @@ nav button.active{color:var(--green);background:#10231a}
   padding:13px;margin-top:18px;font-weight:900
 }
 
+
+.training-goal-card{margin:14px 0 12px}
+.training-goal-main{
+  width:100%;border:1px solid #27445c;border-radius:17px;background:
+  radial-gradient(circle at 95% 20%,rgba(55,151,240,.16),transparent 36%),
+  linear-gradient(135deg,#0c1923,#0b151d);
+  color:#fff;display:flex;align-items:center;gap:11px;text-align:left;padding:13px 14px
+}
+.training-goal-icon{width:38px;height:38px;border-radius:12px;background:#10283a;display:grid;place-items:center;font-size:19px;flex:none}
+.training-goal-copy{display:grid;gap:2px;min-width:0;flex:1}
+.training-goal-copy small{font-size:9px;letter-spacing:.1em;color:#7993a7}
+.training-goal-copy b{font-size:15px}
+.training-goal-copy span{font-size:10px;color:var(--muted)}
+.training-goal-change{font-size:10px;color:var(--blue);font-weight:800;white-space:nowrap}
+
+.program-modal{align-items:flex-end;padding:0}
+.program-sheet{
+  width:100%;max-width:620px;margin:0 auto;background:#08131b;border:1px solid #223744;
+  border-radius:24px 24px 0 0;padding:20px 16px calc(24px + env(safe-area-inset-bottom));
+  max-height:92vh;overflow:auto
+}
+.program-sheet-head{display:flex;gap:12px;align-items:flex-start}
+.program-sheet-head>div{flex:1}
+.program-sheet-head small{color:#7f94a4;font-size:9px;letter-spacing:.12em}
+.program-sheet-head h2{font-size:23px;margin:4px 0 5px}
+.program-sheet-head p{font-size:12px;line-height:1.45;color:var(--muted);margin:0}
+.program-close{border:1px solid #293b47;background:#101b24;color:#fff;border-radius:12px;width:39px;height:39px;flex:none}
+.program-carousel{
+  display:grid;grid-auto-flow:column;grid-auto-columns:min(83vw,325px);gap:12px;
+  overflow-x:auto;scroll-snap-type:x mandatory;padding:17px 1px 10px;
+  scrollbar-width:none
+}
+.program-carousel::-webkit-scrollbar{display:none}
+.program-option{
+  scroll-snap-align:center;border:1px solid #294150;border-radius:20px;overflow:hidden;background:#0c171f
+}
+.program-option.selected{box-shadow:0 0 0 2px var(--blue) inset}
+.program-option.lean{border-color:#205c38}.program-option.growth{border-color:#27547e}
+.program-option.strength-muscle{border-color:#5e3d7c}.program-option.strength{border-color:#745021}
+.program-image-wrap{height:190px;overflow:hidden;background:#05090d}
+.program-image-wrap img{width:100%;height:100%;object-fit:cover;object-position:center 30%;display:block}
+.program-option-body{padding:14px}
+.program-kicker{font-size:14px;font-weight:950;letter-spacing:.03em}
+.program-option.lean .program-kicker{color:#56dd79}
+.program-option.growth .program-kicker{color:#5da8ff}
+.program-option.strength-muscle .program-kicker{color:#c17aff}
+.program-option.strength .program-kicker{color:#ffae50}
+.program-tags{font-size:10px;color:#c8d3da;margin-top:3px}
+.program-option-body p{color:var(--muted);font-size:11px;line-height:1.5;min-height:50px}
+.program-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+.program-stats span{border:1px solid #223440;border-radius:12px;padding:9px;background:#08121a}
+.program-stats small{display:block;font-size:8px;color:#6e8494;margin-bottom:3px}
+.program-stats b{font-size:12px}
+.program-best{font-size:10px;color:#b9c7d0;min-height:27px}
+.program-select{width:100%;border:0;border-radius:12px;background:#1d76d2;color:white;padding:11px;margin-top:11px;font-weight:900}
+.program-option.lean .program-select{background:#238c50}
+.program-option.strength-muscle .program-select{background:#7445a3}
+.program-option.strength .program-select{background:#a66019}
+.program-how{border:1px solid #2b3943;border-radius:17px;background:#0c161e;padding:14px;margin-top:6px}
+.program-how>b{font-size:13px;color:#f4ca59}
+.program-how p{font-size:11px;color:#aebcc7;line-height:1.55;margin:7px 0 9px}
+.program-effort-key{display:grid;grid-template-columns:1fr;gap:5px;font-size:10px;color:#cad4db;margin-bottom:10px}
+.program-how>small{font-size:9px;color:#6f818e;line-height:1.45;display:block}
+
+.smart-next{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin:1px 0 11px;padding:10px 11px;border:1px solid #23455f;border-radius:13px;
+  background:linear-gradient(90deg,#0d1c28,#0c171e)
+}
+.smart-next-copy{min-width:0}
+.smart-next-copy small{display:block;color:#6e8da4;font-size:8px;letter-spacing:.08em}
+.smart-next-copy b{display:block;font-size:13px;margin-top:2px;color:#6db5ff}
+.smart-next-reason{font-size:9px;color:var(--muted);max-width:42%;text-align:right;line-height:1.35}
+
 </style>
 </head>
 <body>
@@ -577,7 +651,19 @@ nav button.active{color:var(--green);background:#10231a}
   </div>
 </section>
 
-<section id="workout" class="view"><h1>🏋️ Workout</h1><div class="subtitle">Track your workouts. Get stronger over time.</div><div class="workout-tabs"><button class="workout-tab active" data-wday="push">🔵 Push Day</button><button class="workout-tab" data-wday="pull">🟢 Pull Day</button><button class="workout-tab" data-wday="legs">🟡 Leg Day</button></div><div class="card workout-card"><h2 id="wtitle">PUSH DAY</h2><div class="subtitle" id="wsub" style="font-size:13px;margin:4px 0 12px"></div><div id="wlist"></div>
+<section id="workout" class="view"><h1>🏋️ Workout</h1><div class="subtitle">Track your workouts. Get stronger over time.</div>
+<div class="training-goal-card" id="trainingGoalCard">
+  <button class="training-goal-main" id="openTrainingGoal">
+    <div class="training-goal-icon">🎯</div>
+    <div class="training-goal-copy">
+      <small>TRAINING GOAL</small>
+      <b id="trainingGoalName">Lean Muscle</b>
+      <span id="trainingGoalTagline">Defined • Athletic • Balanced</span>
+    </div>
+    <span class="training-goal-change">View / Change ›</span>
+  </button>
+</div>
+<div class="workout-tabs"><button class="workout-tab active" data-wday="push">🔵 Push Day</button><button class="workout-tab" data-wday="pull">🟢 Pull Day</button><button class="workout-tab" data-wday="legs">🟡 Leg Day</button></div><div class="card workout-card"><h2 id="wtitle">PUSH DAY</h2><div class="subtitle" id="wsub" style="font-size:13px;margin:4px 0 12px"></div><div id="wlist"></div>
     <div class="exercise-add-row"><button class="add-exercise-btn" id="addExerciseBtn">＋ Add Exercise</button></div>
     <button class="workout-save" id="saveWorkout">✓ Finish Workout</button></div></section><section id="money" class="view">
   <div class="money-title-row">
@@ -797,6 +883,93 @@ nav button.active{color:var(--green);background:#10231a}
     <div class="sheet-actions" style="margin-top:10px">
       <button class="secondary" id="cancelExercise">Cancel</button>
       <button class="primary" id="saveExercise">Add Exercise</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="modal program-modal" id="trainingProgramModal">
+  <div class="program-sheet">
+    <div class="program-sheet-head">
+      <div>
+        <small>SMART TRAINING</small>
+        <h2>Choose Your Training Goal</h2>
+        <p>Your goal changes the rep targets, effort range and next-session recommendations.</p>
+      </div>
+      <button class="program-close" id="closeTrainingProgram">✕</button>
+    </div>
+
+    <div class="program-carousel" id="programCarousel">
+      <article class="program-option lean" data-program="lean">
+        <div class="program-image-wrap"><img src="assets/program_lean.jpg" alt="Animated lean muscle physique"></div>
+        <div class="program-option-body">
+          <div class="program-kicker">LEAN MUSCLE</div>
+          <div class="program-tags">Defined • Athletic • Balanced</div>
+          <p>Build muscle while keeping a lean, athletic look. Controlled progression and good form come first.</p>
+          <div class="program-stats">
+            <span><small>REP RANGE</small><b>6–12</b></span>
+            <span><small>EFFORT</small><b>1–3 RIR</b></span>
+          </div>
+          <div class="program-best">Best for: muscle + definition + strength</div>
+          <button class="program-select" data-select-program="lean">Use Lean Muscle</button>
+        </div>
+      </article>
+
+      <article class="program-option growth" data-program="growth">
+        <div class="program-image-wrap"><img src="assets/program_growth.jpg" alt="Animated muscle growth physique"></div>
+        <div class="program-option-body">
+          <div class="program-kicker">MUSCLE GROWTH</div>
+          <div class="program-tags">Size • Hypertrophy • Volume</div>
+          <p>Prioritise muscle size with more training volume and moderate rep ranges. Work close to your limit without forcing failure every set.</p>
+          <div class="program-stats">
+            <span><small>REP RANGE</small><b>6–15</b></span>
+            <span><small>EFFORT</small><b>0–2 RIR</b></span>
+          </div>
+          <div class="program-best">Best for: increasing overall muscle size</div>
+          <button class="program-select" data-select-program="growth">Use Muscle Growth</button>
+        </div>
+      </article>
+
+      <article class="program-option strength-muscle" data-program="strength_muscle">
+        <div class="program-image-wrap"><img src="assets/program_strength_muscle.jpg" alt="Animated strength and muscle physique"></div>
+        <div class="program-option-body">
+          <div class="program-kicker">STRENGTH + MUSCLE</div>
+          <div class="program-tags">Powerful • Muscular • Strong</div>
+          <p>Combine heavier strength work with hypertrophy training. Main lifts stay heavier while accessories build muscle.</p>
+          <div class="program-stats">
+            <span><small>COMPOUNDS</small><b>4–8</b></span>
+            <span><small>ACCESSORIES</small><b>8–12</b></span>
+          </div>
+          <div class="program-best">Best for: getting stronger while adding muscle</div>
+          <button class="program-select" data-select-program="strength_muscle">Use Strength + Muscle</button>
+        </div>
+      </article>
+
+      <article class="program-option strength" data-program="strength">
+        <div class="program-image-wrap"><img src="assets/program_strength.jpg" alt="Animated strength focused physique"></div>
+        <div class="program-option-body">
+          <div class="program-kicker">STRENGTH FOCUS</div>
+          <div class="program-tags">Max Strength • Power • Performance</div>
+          <p>Prioritise heavier loads and lower reps to build raw strength while keeping enough reps in reserve for quality work.</p>
+          <div class="program-stats">
+            <span><small>REP RANGE</small><b>1–5</b></span>
+            <span><small>EFFORT</small><b>1–3 RIR</b></span>
+          </div>
+          <div class="program-best">Best for: maximum strength and power output</div>
+          <button class="program-select" data-select-program="strength">Use Strength Focus</button>
+        </div>
+      </article>
+    </div>
+
+    <div class="program-how">
+      <b>💡 How Smart Progression works</b>
+      <p>Daily Tracker checks your previous weight, reps and effort. If you still had reps left, it usually adds reps first. Once you reach the top of your target range with good form, it suggests the next weight.</p>
+      <div class="program-effort-key">
+        <span>🟢 Easy: 3+ reps left</span>
+        <span>🟡 Ideal: 1–3 reps left</span>
+        <span>🔴 Max: no clean reps left</span>
+      </div>
+      <small>Physique illustrations are visual examples only. Results also depend on nutrition, recovery, body-fat level and genetics.</small>
     </div>
   </div>
 </div>
@@ -1351,7 +1524,111 @@ function updateFinishWorkoutButton(){
 if(!state.workouts)state.workouts={sessions:[],drafts:{}};
 if(!state.workouts.custom)state.workouts.custom={push:[],pull:[],legs:[]};
 if(!state.workouts.edits)state.workouts.edits={push:{},pull:{},legs:{}};
-if(!state.workouts.removed)state.workouts.removed={push:[],pull:[],legs:[]};const plans={push:{title:'PUSH DAY',sub:'',ex:[['Chest Press','Machine','Chest',[[47,'6–8'],[54,'5–8'],[54,'5–8']]],['Incline Machine Press','','Upper Chest',[[25,'8–10'],[27.5,'8–10'],[30,'5–8']]],['Shoulder Press','Machine','Shoulders',[[33,'6–10'],[39,'5–8']]],['Pec Fly','Machine','Chest',[[40,'12–15'],[47,'10–12'],[54,'8–12']]],['Lateral Raise','Dumbbells','Side Delts',[[6,'12–20'],[7,'12–20'],[8,'12–20']]],['Triceps Pushdown','Cable','Triceps',[[12.5,'8–15'],[15,'8–15'],[17.5,'8–15']]],['Triceps Pushdown','Unilateral • Optional','Triceps',[[5,'10–15'],[5,'10–15']]]]},pull:{title:'PULL DAY',sub:'',ex:[['Lat Pulldown','Wide Grip','Lats',[[40,'8–10'],[47,'6–10'],[54,'3–8']]],['Chest Supported Row','Machine','Mid Back',[[33,'8–10'],[40,'6–10'],[47,'6–10']]],['Close Grip Pulldown','Neutral / Close','Lats',[[40,'8–10'],[47,'6–10'],[54,'3–8']]],['Rear Delt Fly','Machine','Rear Delts',[[12,'15–20'],[19,'12–15'],[25,'10–15']]],['DB Biceps Curl','','Biceps',[[8,'10–12'],[9,'8–12'],[9,'6–10']]],['Hammer Curl','Dumbbells','Biceps',[[8,'10–12'],[9,'8–12'],[9,'6–10']]],['Abs Work','Choose 2','Abs',[[null,'10–20'],[null,'10–20']]],['DB Shrugs','','Traps',[[null,'10–15'],[null,'10–15'],[null,'10–15']]]]},legs:{title:'LEG DAY',sub:'',ex:[['Leg Extension','Machine','Quadriceps',[[33,'10–15'],[40,'8–12'],[47,'8–12'],[54,'8–12']]],['Hamstring Curl','Machine','Hamstrings',[[25,'10–12'],[33,'8–10'],[40,'3–6']]],['Leg Press','Plate Loaded','Quads / Glutes',[[50,'10–15'],[80,'8–12'],[120,'6–10']]],['Seated Calf Raise','Machine','Calves',[[55,'10–15'],[75,'10–15'],[95,'10–15']]],['Abs Workout','Choose 2','Abs',[[null,'10–20'],[null,'10–20']]]]}};
+if(!state.workouts.removed)state.workouts.removed={push:[],pull:[],legs:[]};
+const trainingPrograms={
+  lean:{
+    name:"Lean Muscle",tagline:"Defined • Athletic • Balanced",
+    defaultRange:[6,12],rir:"1–3 RIR"
+  },
+  growth:{
+    name:"Muscle Growth",tagline:"Size • Hypertrophy • Volume",
+    defaultRange:[6,15],rir:"0–2 RIR"
+  },
+  strength_muscle:{
+    name:"Strength + Muscle",tagline:"Powerful • Muscular • Strong",
+    defaultRange:[4,8],accessoryRange:[8,12],rir:"1–3 RIR"
+  },
+  strength:{
+    name:"Strength Focus",tagline:"Max Strength • Power • Performance",
+    defaultRange:[1,5],rir:"1–3 RIR"
+  }
+};
+if(!state.workouts.trainingProgram)state.workouts.trainingProgram="lean";
+
+function isAccessoryExercise(e){
+  const text=((e?.[0]||"")+" "+(e?.[1]||"")+" "+(e?.[2]||"")).toLowerCase();
+  return /(curl|fly|raise|extension|pushdown|abs|calf|rear delt|shrug)/.test(text);
+}
+function trainingRangeFor(e){
+  const program=trainingPrograms[state.workouts.trainingProgram]||trainingPrograms.lean;
+  if(state.workouts.trainingProgram==="strength_muscle" && isAccessoryExercise(e)){
+    return program.accessoryRange;
+  }
+  return program.defaultRange;
+}
+function previousExerciseFor(e,ei){
+  const session=latest(wday);
+  if(!session)return null;
+  if(Array.isArray(session.snapshot)){
+    const match=session.snapshot.find(x=>String(x.name||"").toLowerCase()===String(e[0]||"").toLowerCase());
+    if(match)return match;
+  }
+  return session.exercises?.[ei]||null;
+}
+function nextAvailableLoad(e,currentKg){
+  const planned=(e?.[3]||[]).map(x=>Number(x?.[0])).filter(x=>Number.isFinite(x)&&x>Number(currentKg)).sort((a,b)=>a-b);
+  if(planned.length)return planned[0];
+  const kg=Number(currentKg)||0;
+  if(kg<=10)return Math.round((kg+1)*2)/2;
+  if(kg<=30)return Math.round((kg+2)*2)/2;
+  return Math.round((kg+2.5)*2)/2;
+}
+function smartRecommendation(e,ei){
+  const previous=previousExerciseFor(e,ei);
+  const sets=(previous?.sets||[]).filter(s=>Number(s.kg)>0 && Number(s.reps)>0);
+  const range=trainingRangeFor(e);
+  const low=range[0],high=range[1];
+
+  if(!sets.length){
+    const plan=e?.[3]?.[0]||[null,""];
+    return {
+      text:plan[0]?`${plan[0]} kg • ${low}–${high} reps`:`${low}–${high} reps`,
+      reason:"Starting target"
+    };
+  }
+
+  // Use the last completed working set because its effort rating tells us
+  // how much was actually left in reserve.
+  const last=sets[sets.length-1];
+  const kg=Number(last.kg);
+  const reps=Number(last.reps);
+  const effort=last.effort||"";
+
+  if(effort==="max"){
+    return {
+      text:`${kg} kg • ${Math.max(low,Math.min(high,reps))} reps`.replace(":g",""),
+      reason:"Repeat it — last set was max effort"
+    };
+  }
+
+  if(reps>=high){
+    const nextKg=nextAvailableLoad(e,kg);
+    return {
+      text:`${nextKg} kg • ${low}–${Math.min(high,low+2)} reps`,
+      reason:"Top of range reached — add weight"
+    };
+  }
+
+  let add=1;
+  if(effort==="easy")add=2;
+  if(effort==="ideal")add=1;
+  const target=Math.min(high,reps+add);
+  return {
+    text:`${kg} kg • ${target}${target<high?"–"+Math.min(high,target+1):""} reps`,
+    reason:effort==="easy"?"You had 3+ reps left — add reps":effort==="ideal"?"Ideal effort — progress reps":"Build reps before adding weight"
+  };
+}
+function renderTrainingGoal(){
+  const key=state.workouts.trainingProgram||"lean";
+  const p=trainingPrograms[key]||trainingPrograms.lean;
+  const name=document.getElementById("trainingGoalName");
+  const tag=document.getElementById("trainingGoalTagline");
+  if(name)name.textContent=p.name;
+  if(tag)tag.textContent=p.tagline;
+  document.querySelectorAll(".program-option").forEach(x=>x.classList.toggle("selected",x.dataset.program===key));
+}
+
+const plans={push:{title:'PUSH DAY',sub:'',ex:[['Chest Press','Machine','Chest',[[47,'6–8'],[54,'5–8'],[54,'5–8']]],['Incline Machine Press','','Upper Chest',[[25,'8–10'],[27.5,'8–10'],[30,'5–8']]],['Shoulder Press','Machine','Shoulders',[[33,'6–10'],[39,'5–8']]],['Pec Fly','Machine','Chest',[[40,'12–15'],[47,'10–12'],[54,'8–12']]],['Lateral Raise','Dumbbells','Side Delts',[[6,'12–20'],[7,'12–20'],[8,'12–20']]],['Triceps Pushdown','Cable','Triceps',[[12.5,'8–15'],[15,'8–15'],[17.5,'8–15']]],['Triceps Pushdown','Unilateral • Optional','Triceps',[[5,'10–15'],[5,'10–15']]]]},pull:{title:'PULL DAY',sub:'',ex:[['Lat Pulldown','Wide Grip','Lats',[[40,'8–10'],[47,'6–10'],[54,'3–8']]],['Chest Supported Row','Machine','Mid Back',[[33,'8–10'],[40,'6–10'],[47,'6–10']]],['Close Grip Pulldown','Neutral / Close','Lats',[[40,'8–10'],[47,'6–10'],[54,'3–8']]],['Rear Delt Fly','Machine','Rear Delts',[[12,'15–20'],[19,'12–15'],[25,'10–15']]],['DB Biceps Curl','','Biceps',[[8,'10–12'],[9,'8–12'],[9,'6–10']]],['Hammer Curl','Dumbbells','Biceps',[[8,'10–12'],[9,'8–12'],[9,'6–10']]],['Abs Work','Choose 2','Abs',[[null,'10–20'],[null,'10–20']]],['DB Shrugs','','Traps',[[null,'10–15'],[null,'10–15'],[null,'10–15']]]]},legs:{title:'LEG DAY',sub:'',ex:[['Leg Extension','Machine','Quadriceps',[[33,'10–15'],[40,'8–12'],[47,'8–12'],[54,'8–12']]],['Hamstring Curl','Machine','Hamstrings',[[25,'10–12'],[33,'8–10'],[40,'3–6']]],['Leg Press','Plate Loaded','Quads / Glutes',[[50,'10–15'],[80,'8–12'],[120,'6–10']]],['Seated Calf Raise','Machine','Calves',[[55,'10–15'],[75,'10–15'],[95,'10–15']]],['Abs Workout','Choose 2','Abs',[[null,'10–20'],[null,'10–20']]]]}};
 let wday='push',effTarget=null;
 const wkey=()=>wday+'_'+todayKey();
 function exerciseKey(e){return (e[0]||"")+"|"+(e[1]||"")}
@@ -1398,6 +1675,7 @@ function removeExercise(e,ei){
   save();renderWorkout();
 }
 function renderWorkout(){
+  renderTrainingGoal();
   const p=plans[wday],exercises=effectiveExercises(wday),d=draft();
   wtitle.textContent=p.title;
   wsub.textContent="";
@@ -1419,6 +1697,10 @@ function renderWorkout(){
       <button class="exercise-chevron" aria-label="Expand activity">⌄</button>
     </div>
     <div class="exbody">
+      <div class="smart-next">
+        <div class="smart-next-copy"><small>SMART NEXT SESSION</small><b>${(()=>{const r=smartRecommendation(e,ei);return r.text})()}</b></div>
+        <div class="smart-next-reason">${(()=>{const r=smartRecommendation(e,ei);return r.reason})()}</div>
+      </div>
       <div class="sethead"><span>SET</span><span>PREVIOUS</span><span>KG</span><span>REPS</span><span>EFFORT</span></div>
       <div class="rows"></div>
       <button class="addset">＋ Add Set</button>
@@ -1536,6 +1818,30 @@ document.getElementById("saveEditExercise").onclick=()=>{
   renderWorkout();
 };
 
+
+
+const trainingProgramModal=document.getElementById("trainingProgramModal");
+const openTrainingGoal=document.getElementById("openTrainingGoal");
+const closeTrainingProgram=document.getElementById("closeTrainingProgram");
+if(openTrainingGoal)openTrainingGoal.onclick=()=>{
+  renderTrainingGoal();
+  trainingProgramModal.classList.add("show");
+  setTimeout(()=>{
+    document.querySelector(`.program-option[data-program="${state.workouts.trainingProgram||"lean"}"]`)?.scrollIntoView({behavior:"smooth",inline:"center",block:"nearest"});
+  },80);
+};
+if(closeTrainingProgram)closeTrainingProgram.onclick=()=>trainingProgramModal.classList.remove("show");
+if(trainingProgramModal)trainingProgramModal.onclick=e=>{
+  if(e.target===trainingProgramModal)trainingProgramModal.classList.remove("show");
+};
+document.querySelectorAll("[data-select-program]").forEach(btn=>btn.onclick=()=>{
+  state.workouts.trainingProgram=btn.dataset.selectProgram;
+  save();
+  renderTrainingGoal();
+  renderWorkout();
+  trainingProgramModal.classList.remove("show");
+});
+renderTrainingGoal();
 
 const workoutHistoryCard=document.getElementById("workoutHistoryCard");
 const workoutHistoryToggle=document.getElementById("workoutHistoryToggle");
@@ -1886,506 +2192,5 @@ renderSpark();renderToday();renderHistory();renderMoney();renderWorkout();
 renderHealth();
 renderTodayDashboardExtras();refreshFxRates(false);
 </script>
-
-<!-- DAILY_TRACKER_WORKOUT_3MIN_PATCH -->
-<style>
-
-/* Daily Tracker Workout 3-Minute Completion UI */
-.exercise-done-btn{
-  width:100%;
-  margin-top:12px;
-  padding:12px 14px;
-  border:1px solid #24543c;
-  border-radius:13px;
-  background:#10251c;
-  color:var(--green);
-  font-weight:900;
-}
-.exercise-done-btn:active{transform:scale(.99)}
-.pending-workout-wrap{
-  display:grid;
-  gap:9px;
-  margin:2px 0 14px;
-}
-.pending-workout-bubble{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  padding:11px 12px;
-  border:1px solid #24543c;
-  border-radius:16px;
-  background:linear-gradient(90deg,#0e241a,#0c1b18);
-}
-.pending-check{
-  width:34px;height:34px;flex:none;
-  border-radius:50%;
-  display:grid;place-items:center;
-  background:#153b2a;color:var(--green);
-  font-weight:950;
-}
-.pending-main{flex:1;min-width:0}
-.pending-main b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pending-main small{display:block;margin-top:2px;color:var(--muted);font-size:10px}
-.pending-time{color:var(--green);font-weight:900}
-.pending-edit,.pending-undo{
-  border:0;background:transparent;padding:7px 5px;
-  font-size:11px;font-weight:900;
-}
-.pending-edit{color:var(--blue)}
-.pending-undo{color:var(--muted)}
-.all-workouts-done{
-  padding:28px 16px;text-align:center;color:var(--green)
-}
-.all-workouts-done>div{
-  width:50px;height:50px;border-radius:50%;display:grid;place-items:center;
-  margin:0 auto 10px;background:#153b2a;font-size:24px;font-weight:900
-}
-.all-workouts-done b{display:block;color:#fff}
-.all-workouts-done small{display:block;color:var(--muted);margin-top:5px;line-height:1.4}
-.activity-history-title{
-  margin-top:18px;padding-top:13px;border-top:1px solid rgba(255,255,255,.08);
-  color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:900
-}
-.saved-activity-row{
-  display:flex;gap:10px;padding:12px 2px;border-top:1px solid rgba(255,255,255,.055)
-}
-.saved-activity-icon{
-  width:34px;height:34px;flex:none;border-radius:11px;
-  display:grid;place-items:center;background:#153b2a;color:var(--green);font-weight:900
-}
-.saved-activity-main{flex:1;min-width:0}
-.saved-activity-main b{display:block;font-size:13px}
-.saved-activity-main small{display:block;color:var(--muted);font-size:10px;margin-top:3px}
-.saved-activity-detail{color:#b9c7d1;font-size:11px;line-height:1.55;margin-top:7px}
-
-</style>
-<script>
-
-/* Daily Tracker Workout Reliability + 3-Minute Completion Patch
-   Designed for daily_tracker_login_money_minimal.html
-   Add this script AFTER the app's existing script, just before </body>.
-*/
-(() => {
-  "use strict";
-
-  const FINALIZE_MS = 3 * 60 * 1000;
-  const tickers = new Map();
-
-  function deepClone(v){ return JSON.parse(JSON.stringify(v)); }
-  function dayKey(){ return typeof todayKey === "function" ? todayKey() : new Date().toISOString().slice(0,10); }
-  function pendingId(day, key){ return `${day}|${dayKey()}|${key}`; }
-
-  function ensureWorkoutPatchState(){
-    if(!state.workouts) state.workouts = {sessions:[], drafts:{}};
-    if(!state.workouts.drafts) state.workouts.drafts = {};
-    if(!state.workouts.pendingExercises) state.workouts.pendingExercises = {};
-    if(!state.workouts.completedExercises) state.workouts.completedExercises = [];
-    if(!state.workouts.collapsedByDay) state.workouts.collapsedByDay = {push:true,pull:true,legs:true};
-    save();
-  }
-
-  function exerciseStableKey(e, index){
-    if(e?.[4]) return String(e[4]);
-    if(typeof exerciseKey === "function") return exerciseKey(e);
-    return `${e?.[0] || "Exercise"}|${e?.[1] || ""}|${index}`;
-  }
-
-  function hasSetData(entry){
-    return !!entry?.sets?.some(s =>
-      String(s?.kg ?? "").trim() !== "" ||
-      String(s?.reps ?? "").trim() !== "" ||
-      String(s?.effort ?? "").trim() !== ""
-    );
-  }
-
-  function persistNow(){
-    try { save(); } catch(err){ console.warn("Workout autosave failed", err); }
-  }
-
-  function pendingFor(day, key){
-    ensureWorkoutPatchState();
-    return state.workouts.pendingExercises[pendingId(day,key)] || null;
-  }
-
-  function completedToday(day, key){
-    ensureWorkoutPatchState();
-    const d = dayKey();
-    return state.workouts.completedExercises.some(x =>
-      x.day === day && x.dayKey === d && x.exerciseKey === key
-    );
-  }
-
-  function formatLeft(ms){
-    const total = Math.max(0, Math.ceil(ms/1000));
-    const m = Math.floor(total/60);
-    const s = total % 60;
-    return `${m}:${String(s).padStart(2,"0")}`;
-  }
-
-  function finalizePending(id){
-    ensureWorkoutPatchState();
-    const rec = state.workouts.pendingExercises[id];
-    if(!rec) return;
-
-    const already = state.workouts.completedExercises.some(x => x.id === rec.id);
-    if(!already){
-      state.workouts.completedExercises.push({
-        ...deepClone(rec),
-        finalizedAt: new Date().toISOString()
-      });
-    }
-
-    delete state.workouts.pendingExercises[id];
-
-    // Clear only this exercise's active draft after finalization.
-    try{
-      const exs = effectiveExercises(rec.day);
-      const idx = exs.findIndex((e,i)=>exerciseStableKey(e,i) === rec.exerciseKey);
-      const draftKey = `${rec.day}_${rec.dayKey}`;
-      const d = state.workouts.drafts?.[draftKey];
-      if(idx >= 0 && d?.[idx]){
-        d[idx].sets = (d[idx].sets || []).map(() => ({kg:"",reps:"",effort:""}));
-      }
-    }catch(e){ console.warn("Could not clear finalized draft", e); }
-
-    persistNow();
-    if(typeof renderWorkoutHistory === "function") renderWorkoutHistory();
-    if(typeof renderTodayDashboardExtras === "function") renderTodayDashboardExtras();
-    if(typeof renderWorkout === "function") renderWorkout();
-  }
-
-  function schedulePending(id){
-    const old = tickers.get(id);
-    if(old) clearInterval(old);
-
-    const loop = () => {
-      const rec = state.workouts.pendingExercises?.[id];
-      if(!rec){
-        clearInterval(tickers.get(id));
-        tickers.delete(id);
-        return;
-      }
-      const left = rec.expiresAt - Date.now();
-      const el = document.querySelector(`[data-pending-id="${CSS.escape(id)}"] .pending-time`);
-      if(el) el.textContent = formatLeft(left);
-      if(left <= 0){
-        clearInterval(tickers.get(id));
-        tickers.delete(id);
-        finalizePending(id);
-      }
-    };
-    loop();
-    tickers.set(id, setInterval(loop, 1000));
-  }
-
-  function startCompletion(e, ei){
-    ensureWorkoutPatchState();
-    const d = draft();
-    const entry = d[ei];
-    if(!hasSetData(entry)){
-      alert("Enter at least one set before marking this activity done.");
-      return;
-    }
-    const key = exerciseStableKey(e,ei);
-    const id = pendingId(wday,key);
-    state.workouts.pendingExercises[id] = {
-      id,
-      day: wday,
-      dayKey: dayKey(),
-      exerciseKey: key,
-      name: e[0],
-      type: e[1] || "",
-      muscle: e[2] || "",
-      sets: deepClone(entry.sets || []),
-      startedAt: new Date().toISOString(),
-      expiresAt: Date.now() + FINALIZE_MS
-    };
-    persistNow();
-    renderWorkout();
-    schedulePending(id);
-  }
-
-  function undoCompletion(id){
-    ensureWorkoutPatchState();
-    const rec = state.workouts.pendingExercises[id];
-    if(!rec) return;
-
-    try{
-      const exs = effectiveExercises(rec.day);
-      const idx = exs.findIndex((e,i)=>exerciseStableKey(e,i) === rec.exerciseKey);
-      const draftKey = `${rec.day}_${rec.dayKey}`;
-      if(!state.workouts.drafts[draftKey]) state.workouts.drafts[draftKey] = [];
-      if(idx >= 0){
-        if(!state.workouts.drafts[draftKey][idx]) state.workouts.drafts[draftKey][idx] = {sets:[]};
-        state.workouts.drafts[draftKey][idx].sets = deepClone(rec.sets || []);
-      }
-    }catch(e){ console.warn("Could not restore pending exercise", e); }
-
-    delete state.workouts.pendingExercises[id];
-    const timer = tickers.get(id);
-    if(timer) clearInterval(timer);
-    tickers.delete(id);
-    persistNow();
-    renderWorkout();
-  }
-
-  function editPending(id){
-    undoCompletion(id);
-    requestAnimationFrame(() => {
-      const key = id.split("|").slice(2).join("|");
-      document.querySelectorAll(".exercise").forEach(box => {
-        if(box.dataset.exerciseKey === key){
-          box.classList.add("open");
-          box.scrollIntoView({behavior:"smooth", block:"center"});
-        }
-      });
-    });
-  }
-
-  function renderPendingBubbles(container, day){
-    ensureWorkoutPatchState();
-    const active = Object.values(state.workouts.pendingExercises)
-      .filter(x => x.day === day && x.dayKey === dayKey())
-      .sort((a,b)=>a.expiresAt-b.expiresAt);
-
-    if(!active.length) return;
-
-    const wrap = document.createElement("div");
-    wrap.className = "pending-workout-wrap";
-
-    active.forEach(rec => {
-      const item = document.createElement("div");
-      item.className = "pending-workout-bubble";
-      item.dataset.pendingId = rec.id;
-      item.innerHTML = `
-        <div class="pending-check">✓</div>
-        <div class="pending-main">
-          <b>${rec.name}</b>
-          <small>Completed • saving in <span class="pending-time">${formatLeft(rec.expiresAt-Date.now())}</span></small>
-        </div>
-        <button class="pending-edit" type="button">Edit</button>
-        <button class="pending-undo" type="button">Undo</button>
-      `;
-      item.querySelector(".pending-edit").onclick = () => editPending(rec.id);
-      item.querySelector(".pending-undo").onclick = () => undoCompletion(rec.id);
-      wrap.appendChild(item);
-      schedulePending(rec.id);
-    });
-
-    container.appendChild(wrap);
-  }
-
-  function patchedRenderWorkout(){
-    ensureWorkoutPatchState();
-
-    const p = plans[wday];
-    const exercises = effectiveExercises(wday);
-    const d = draft();
-
-    // Persist draft creation immediately too.
-    persistNow();
-
-    wtitle.textContent = p.title;
-    wsub.textContent = "";
-    wsub.style.display = "none";
-    wlist.innerHTML = "";
-
-    // Pending items sit above the remaining list.
-    renderPendingBubbles(wlist, wday);
-
-    exercises.forEach((e,ei) => {
-      const stableKey = exerciseStableKey(e,ei);
-
-      // Hide items once Done was pressed. During 3 min they live in the bubble.
-      if(pendingFor(wday,stableKey) || completedToday(wday,stableKey)) return;
-
-      const box = document.createElement("div");
-      box.className = "exercise"; // all collapsed by default
-      box.dataset.exerciseKey = stableKey;
-
-      const pv = prev(ei,0);
-      const pl = e[3]?.[0] || [null,""];
-      box.innerHTML = `
-        <div class="exercise-head">
-          <span class="exnum">${ei+1}</span>
-          <button class="exname" type="button" style="border:0;background:transparent;color:inherit;text-align:left;padding:0">
-            <b>${e[0]} ${e[1]?'<span style="color:var(--muted);font-weight:500">('+e[1]+')</span>':''}</b>
-            <small>${e[2]}</small>
-          </button>
-          <span class="exsum">${pv?(pv.kg||"–")+" × "+(pv.reps||"–"):(pl[0]??"–")+" × "+(pl[1]||"")}</span>
-          <button class="exercise-menu-btn" type="button" aria-label="Activity menu">⋯</button>
-          <button class="exercise-chevron" type="button" aria-label="Expand activity">⌄</button>
-        </div>
-        <div class="exbody">
-          <div class="sethead"><span>SET</span><span>PREVIOUS</span><span>KG</span><span>REPS</span><span>EFFORT</span></div>
-          <div class="rows"></div>
-          <button class="addset" type="button">＋ Add Set</button>
-          <button class="exercise-done-btn" type="button">✓ Done with ${e[0]}</button>
-        </div>`;
-
-      const toggle = () => box.classList.toggle("open");
-      box.querySelector(".exname").onclick = toggle;
-      box.querySelector(".exsum").onclick = toggle;
-      box.querySelector(".exercise-chevron").onclick = toggle;
-
-      const menu = box.querySelector(".exercise-menu-btn");
-      menu.onclick = ev => {
-        ev.stopPropagation();
-        if(typeof openExerciseMenu === "function") openExerciseMenu(e,ei,ev.currentTarget);
-      };
-
-      const rows = box.querySelector(".rows");
-      (d[ei]?.sets || []).forEach((x,si) => {
-        const old = prev(ei,si);
-        const pln = e[3]?.[si] || [null,""];
-        const row = document.createElement("div");
-        row.className = "setrow";
-        row.innerHTML = `
-          <b style="text-align:center">${si+1}</b>
-          <div class="prevval">${old?(old.kg||"–")+" × "+(old.reps||"–"):(pln[0]??"–")+" × "+(pln[1]||"")}<br><span style="opacity:.5">${old?"previous":"plan"}</span></div>
-          <input class="loginput kg" inputmode="decimal" type="number" step=".5" value="${x.kg ?? ""}" placeholder="${old?.kg ?? pln[0] ?? "KG"}">
-          <input class="loginput reps" inputmode="numeric" type="number" value="${x.reps ?? ""}" placeholder="${old?.reps ?? "Reps"}">
-          <button class="effort ${x.effort || ""}" type="button"></button>`;
-
-        const kg = row.querySelector(".kg");
-        const reps = row.querySelector(".reps");
-        kg.oninput = z => { x.kg = z.target.value; persistNow(); };
-        reps.oninput = z => { x.reps = z.target.value; persistNow(); };
-        kg.onchange = persistNow;
-        reps.onchange = persistNow;
-        kg.onblur = persistNow;
-        reps.onblur = persistNow;
-
-        row.querySelector(".effort").onclick = () => {
-          effTarget = {ei,si};
-          effortModal.classList.add("show");
-        };
-        rows.appendChild(row);
-      });
-
-      box.querySelector(".addset").onclick = () => {
-        if(!d[ei]) d[ei] = {sets:[]};
-        d[ei].sets.push({kg:"",reps:"",effort:""});
-        persistNow();
-        renderWorkout();
-        requestAnimationFrame(()=>{
-          const reopened = [...document.querySelectorAll(".exercise")]
-            .find(x => x.dataset.exerciseKey === stableKey);
-          if(reopened) reopened.classList.add("open");
-        });
-      };
-
-      box.querySelector(".exercise-done-btn").onclick = () => startCompletion(e,ei);
-      wlist.appendChild(box);
-    });
-
-    if(!wlist.querySelector(".exercise") && !wlist.querySelector(".pending-workout-bubble")){
-      const all = document.createElement("div");
-      all.className = "all-workouts-done";
-      all.innerHTML = `<div>✓</div><b>${p.title} complete</b><small>Today's completed activities are saved in History.</small>`;
-      wlist.appendChild(all);
-    }
-
-    if(typeof updateFinishWorkoutButton === "function") updateFinishWorkoutButton();
-  }
-
-  // Keep effort selection autosaved and reopen the same exercise rather than first item.
-  document.querySelectorAll("[data-eff]").forEach(btn => {
-    btn.onclick = () => {
-      if(!effTarget) return;
-      const current = effectiveExercises(wday)[effTarget.ei];
-      const stableKey = current ? exerciseStableKey(current,effTarget.ei) : null;
-      draft()[effTarget.ei].sets[effTarget.si].effort = btn.dataset.eff;
-      persistNow();
-      effortModal.classList.remove("show");
-      renderWorkout();
-      if(stableKey){
-        requestAnimationFrame(()=>{
-          const box = [...document.querySelectorAll(".exercise")].find(x=>x.dataset.exerciseKey===stableKey);
-          if(box) box.classList.add("open");
-        });
-      }
-    };
-  });
-
-  // Rebind category tabs: list only, all collapsed after every switch.
-  document.querySelectorAll("[data-wday]").forEach(btn => {
-    btn.onclick = () => {
-      wday = btn.dataset.wday;
-      document.querySelectorAll("[data-wday]").forEach(x=>x.classList.remove("active"));
-      btn.classList.add("active");
-      renderWorkout();
-    };
-  });
-
-  // Extend workout history with auto-finalized individual activities.
-  const originalHistoryRenderer = (typeof renderWorkoutHistory === "function") ? renderWorkoutHistory : null;
-  if(originalHistoryRenderer){
-    renderWorkoutHistory = function(){
-      originalHistoryRenderer();
-      ensureWorkoutPatchState();
-
-      const list = document.getElementById("workoutHistoryList");
-      if(!list) return;
-
-      const records = [...state.workouts.completedExercises]
-        .sort((a,b)=>String(b.finalizedAt||b.startedAt).localeCompare(String(a.finalizedAt||a.startedAt)))
-        .slice(0,60);
-
-      if(!records.length) return;
-
-      const title = document.createElement("div");
-      title.className = "activity-history-title";
-      title.textContent = "Saved activities";
-      list.appendChild(title);
-
-      records.forEach(rec => {
-        const when = new Date(rec.finalizedAt || rec.startedAt);
-        const logged = (rec.sets||[]).filter(s => s.kg || s.reps || s.effort);
-        const details = logged.map((s,i)=>{
-          const kg = (s.kg!=="" && s.kg!=null) ? `${s.kg} kg` : "—";
-          const reps = (s.reps!=="" && s.reps!=null) ? `${s.reps} reps` : "—";
-          return `Set ${i+1}: ${kg} × ${reps}${s.effort ? ` • ${s.effort}` : ""}`;
-        }).join("<br>");
-
-        const row = document.createElement("div");
-        row.className = "saved-activity-row";
-        row.innerHTML = `
-          <div class="saved-activity-icon">✓</div>
-          <div class="saved-activity-main">
-            <b>${rec.name}</b>
-            <small>${workoutDayLabel(rec.day)} • ${when.toLocaleDateString([], {day:"numeric",month:"short",year:"numeric"})} • ${when.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}</small>
-            <div class="saved-activity-detail">${details || "No set details"}</div>
-          </div>`;
-        list.appendChild(row);
-      });
-    };
-  }
-
-  // Do not use the old whole-workout button as the primary completion path.
-  // It remains available as a manual fallback if already shown by the original app.
-  const finishBtn = document.getElementById("saveWorkout");
-  if(finishBtn){
-    finishBtn.textContent = "Save remaining workout";
-    finishBtn.title = "Optional fallback. Individual activities now save automatically after their 3-minute countdown.";
-  }
-
-  // Reconcile timers after reload/app reopen.
-  ensureWorkoutPatchState();
-  Object.keys(state.workouts.pendingExercises).forEach(id => {
-    const rec = state.workouts.pendingExercises[id];
-    if(rec.expiresAt <= Date.now()) finalizePending(id);
-    else schedulePending(id);
-  });
-
-  // Replace renderer last.
-  renderWorkout = patchedRenderWorkout;
-  renderWorkout();
-
-  console.info("Daily Tracker workout patch active: autosave + collapsed lists + 3-minute completion.");
-})();
-
-</script>
-
 </body>
 </html>
