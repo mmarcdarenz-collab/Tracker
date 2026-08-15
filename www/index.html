@@ -1052,6 +1052,37 @@ const connectBtn=document.getElementById("connectTestWatch");
 if(connectBtn) connectBtn.onclick=openHealthPermissions;
 const syncBtn=document.getElementById("syncHealthNow");
 if(syncBtn) syncBtn.onclick=syncRealHealth;
+
+async function diagnoseHealthData(){
+  const plugin=healthPlugin();
+  if(!plugin){
+    alert("Health Connect is only available in the Android app build.");
+    return;
+  }
+  const box=document.getElementById("healthDiagResults");
+  if(box) box.innerHTML="<div>Checking Health Connect…</div>";
+  try{
+    const r=await plugin.diagnose();
+    if(r.needsPermission){
+      if(box) box.innerHTML="<div>Permissions are not granted.</div>";
+      return;
+    }
+    if(box){
+      box.innerHTML=`
+        <div>Sleep: <b>${r.sleepRecords||0}</b> records</div>
+        <div>Resting HR: <b>${r.restingHrRecords||0}</b> records</div>
+        <div>Heart rate: <b>${r.heartRateRecords||0}</b> records / <b>${r.heartRateSamples||0}</b> samples</div>
+        <div>Active calories: <b>${r.activeCalorieRecords||0}</b> records • <b>${r.activeCaloriesTotal||0}</b> kcal</div>
+        <div>Source: <b>${r.sources||"No source found"}</b></div>
+        <div style="opacity:.7">Window: last ${r.windowDays||7} days</div>`;
+    }
+  }catch(e){
+    if(box) box.innerHTML=`<div style="color:var(--red)">Diagnostic failed: ${e?.message||e}</div>`;
+  }
+}
+const diagnoseBtn=document.getElementById("diagnoseHealth");
+if(diagnoseBtn) diagnoseBtn.onclick=diagnoseHealthData;
+
 const disconnectBtn=document.getElementById("disconnectWatch");
 if(disconnectBtn) disconnectBtn.onclick=()=>{
   state.health={connected:false,provider:"Android Health Connect",lastSync:0,sleepMinutes:null,restingHR:null,workoutHR:null,activeCalories:null};
