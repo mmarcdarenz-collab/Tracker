@@ -31,6 +31,10 @@ jobs:
       - name: Create Android project
         run: npx cap add android
 
+      - name: Add Health Connect AndroidX dependency
+        run: |
+          python3 native/patch_gradle.py android/app/build.gradle
+
       - name: Sync web app
         run: npx cap sync android
 
@@ -47,7 +51,8 @@ jobs:
         run: |
           grep -q "registerPlugin(HealthConnectNativePlugin.class)" android/app/src/main/java/com/mrcdrnzz/dailytracker/MainActivity.java
           grep -q "android.permission.health.READ_SLEEP" android/app/src/main/AndroidManifest.xml
-          echo "Health Connect bridge and permissions are present."
+          grep -q "androidx.health.connect:connect-client:1.1.0" android/app/build.gradle
+          echo "Health Connect bridge, permissions, and AndroidX dependency are present."
 
       - name: Build debug APK
         run: |
