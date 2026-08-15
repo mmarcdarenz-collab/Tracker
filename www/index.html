@@ -332,7 +332,7 @@ nav button.active{color:var(--green);background:#10231a}
       <div class="health-row">
         <div class="health-metric"><span class="label">🌙 Sleep</span><b id="healthSleep">—</b></div>
         <div class="health-metric"><span class="label">🔥 Active Calories</span><b id="healthCalories">—</b></div>
-        <div class="health-metric"><span class="label">❤️ Heart Rate</span><b id="healthWhr">—</b></div>
+        <div class="health-metric"><span class="label">❤️ Latest Heart Rate</span><b id="healthWhr">—</b></div>
         <div class="health-metric"><span class="label">👣 Steps</span><b id="healthSteps">—</b></div>
       </div>
       <div class="health-status"><span>Health Connect</span><span>Not connected</span></div>
@@ -1240,6 +1240,17 @@ function renderHealth(){
   if(wp) wp.textContent=h.connected?"Android Health Connect":"Health Connect • not connected";
   if(ls) ls.textContent=h.lastSync?`Last synced ${new Date(h.lastSync).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})}`:"No sync yet";
   if(btn) btn.textContent=h.connected?"Manage access":"Connect";
+  const freshness=document.getElementById("healthDataFreshness");
+  if(freshness && h.connected){
+    const times=[h.heartRateTime,h.stepsTime,h.activeCaloriesTime,h.sleepEndTime].filter(Boolean);
+    if(times.length){
+      const newest=Math.max(...times);
+      freshness.textContent="Latest health record: "+new Date(newest).toLocaleString([],{
+        day:"numeric",month:"short",hour:"numeric",minute:"2-digit"
+      });
+    }else freshness.textContent="";
+  }
+
   const sourceSel=document.getElementById("healthSourceSelect");
   const sourceStatus=document.getElementById("healthSourceStatus");
   if(sourceSel) sourceSel.value=h.sourceMode||"auto";
@@ -1288,6 +1299,10 @@ async function syncRealHealth(){
       state.health.workoutHR=result.workoutHR ?? null;
       state.health.activeCalories=result.activeCalories ?? null;
       state.health.steps=result.steps ?? null;
+      state.health.heartRateTime=result.heartRateTime ?? null;
+      state.health.stepsTime=result.stepsTime ?? null;
+      state.health.activeCaloriesTime=result.activeCaloriesTime ?? null;
+      state.health.sleepEndTime=result.sleepEndTime ?? null;
       state.health.steps=result.steps ?? null;
       save();renderHealth();renderTodayDashboardExtras();
       return {ok:true};
