@@ -427,6 +427,20 @@ nav button.active{color:var(--green);background:#10231a}
         </div>
         <button class="health-btn blue" id="syncHealthNow">Sync</button>
       </div>
+      <div class="health-connect-row" style="align-items:flex-start">
+        <div style="flex:1">
+          <b>Health Diagnostic</b>
+          <div class="health-test-note">Checks what Health Connect actually has from the last 7 days.</div>
+          <div id="healthDiagResults" style="margin-top:12px;display:grid;gap:7px;font-size:13px;color:var(--muted)">
+            <div>Sleep: —</div>
+            <div>Resting HR: —</div>
+            <div>Heart rate: —</div>
+            <div>Active calories: —</div>
+            <div>Source: —</div>
+          </div>
+        </div>
+        <button class="health-btn blue" id="diagnoseHealth">Check</button>
+      </div>
       <div class="health-connect-row">
         <div>
           <b>Disconnect</b>
