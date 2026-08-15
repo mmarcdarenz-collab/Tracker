@@ -28,8 +28,8 @@ body{min-height:100dvh}
 button,input{font:inherit}
 button{cursor:pointer}
 .app{max-width:560px;margin:auto;min-height:100dvh;padding:22px 18px 118px}
-.view{display:none}
-.view.active{display:block}
+.view{display:none;opacity:0;transform:translateY(4px)}
+.view.active{display:block;opacity:1;transform:none;animation:viewFadeIn .22s ease}
 h1{margin:22px 0 5px;font-size:39px;line-height:1.05;letter-spacing:-1.2px}
 h2{margin:0;font-size:22px}
 .subtitle{color:var(--muted);font-size:17px;margin-bottom:20px}
@@ -64,6 +64,7 @@ h2{margin:0;font-size:22px}
 .task label{flex:1;font-size:15px}
 .success-banner{display:none;margin-top:16px;padding:14px 15px;border-radius:17px;border:1px solid #1d6846;background:linear-gradient(90deg,#0e2c1d,#10231c);color:var(--green)}
 .success-banner.show{display:block;animation:fadeUp .4s ease}
+@keyframes viewFadeIn{from{opacity:.22;transform:translateY(4px)}to{opacity:1;transform:none}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .daily-spark{margin-top:16px;padding:19px;border-color:#3c2759;background:radial-gradient(circle at 85% 20%,rgba(160,97,255,.12),transparent 35%),linear-gradient(180deg,#151128,#0e1220)}
 .spark-head{display:flex;justify-content:space-between;align-items:center}
@@ -141,7 +142,7 @@ h2{margin:0;font-size:22px}
 .setting-row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.06)}
 .setting-row:last-child{border-bottom:0}
 
-.chat{position:fixed;right:max(18px,calc((100vw - 560px)/2 + 18px));bottom:90px;z-index:30;padding:11px 15px;border-radius:999px;border:1px solid #2a4153;background:#101d28;color:white;font-weight:900;box-shadow:var(--shadow)}
+.chat{position:fixed;right:max(18px,calc((100vw - 560px)/2 + 18px));bottom:calc(108px + env(safe-area-inset-bottom));z-index:90;pointer-events:auto;padding:11px 15px;border-radius:999px;border:1px solid #2a4153;background:#101d28;color:white;font-weight:900;box-shadow:var(--shadow)}
 nav{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:min(560px,100%);display:grid;grid-template-columns:repeat(5,1fr);gap:3px;padding:9px 11px calc(10px + env(safe-area-inset-bottom));background:rgba(7,16,24,.94);backdrop-filter:blur(18px);border-top:1px solid #182833;z-index:40}
 nav button{border:0;background:transparent;color:#8d9aa7;padding:9px 3px;border-radius:17px;font-weight:800}
 nav button.active{color:var(--green);background:#10231a}
@@ -214,6 +215,15 @@ nav button.active{color:var(--green);background:#10231a}
 .health-badge.off{background:#1b1f24;color:#8f9aa4;border-color:#303a43}
 .health-test-note{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.45}
 
+
+.exercise-remove{width:34px;height:34px;flex:none;border:1px solid #5a3036;background:#211419;color:var(--red);border-radius:10px;font-size:16px;font-weight:900}
+.exercise-remove:active{transform:scale(.96)}
+.exercise-add-row{display:grid;grid-template-columns:1fr;gap:10px;margin-top:14px}
+.add-exercise-btn{width:100%;padding:13px;border:1px dashed #2d5d88;background:#0b1824;color:var(--blue);border-radius:14px;font-weight:900}
+.custom-ex-form{display:grid;gap:10px}
+.custom-ex-form label{font-size:12px;color:var(--muted)}
+.custom-ex-form input{margin:4px 0 0}
+
 </style>
 </head>
 <body>
@@ -266,7 +276,7 @@ nav button.active{color:var(--green);background:#10231a}
         <div class="health-metric"><span class="label">💓 Workout HR</span><b id="healthWhr">—</b></div>
         <div class="health-metric"><span class="label">🔥 Active calories</span><b id="healthCalories">—</b></div>
       </div>
-      <div class="health-status"><span>Smartwatch integration ready for later setup</span><span>Not connected</span></div>
+      <div class="health-status"><span>Health Connect</span><span>Not connected</span></div>
     </div>
   </div>
 
@@ -327,7 +337,9 @@ nav button.active{color:var(--green);background:#10231a}
   </div>
 </section>
 
-<section id="workout" class="view"><h1>🏋️ Workout</h1><div class="subtitle">Track your workouts. Get stronger over time.</div><div class="workout-tabs"><button class="workout-tab active" data-wday="push">🔵 Push Day</button><button class="workout-tab" data-wday="pull">🟢 Pull Day</button><button class="workout-tab" data-wday="legs">🟡 Leg Day</button></div><div class="card workout-card"><h2 id="wtitle">PUSH DAY 💪</h2><div class="subtitle" id="wsub" style="font-size:13px;margin:4px 0 12px"></div><div id="wlist"></div><button class="workout-save" id="saveWorkout">✓ Finish & Save Workout</button></div></section><section id="money" class="view">
+<section id="workout" class="view"><h1>🏋️ Workout</h1><div class="subtitle">Track your workouts. Get stronger over time.</div><div class="workout-tabs"><button class="workout-tab active" data-wday="push">🔵 Push Day</button><button class="workout-tab" data-wday="pull">🟢 Pull Day</button><button class="workout-tab" data-wday="legs">🟡 Leg Day</button></div><div class="card workout-card"><h2 id="wtitle">PUSH DAY 💪</h2><div class="subtitle" id="wsub" style="font-size:13px;margin:4px 0 12px"></div><div id="wlist"></div>
+    <div class="exercise-add-row"><button class="add-exercise-btn" id="addExerciseBtn">＋ Add Exercise</button></div>
+    <button class="workout-save" id="saveWorkout">✓ Finish & Save Workout</button></div></section><section id="money" class="view">
   <h1>My Money 💰</h1>
   <div class="subtitle">Manage your money, simply.</div>
 
@@ -393,18 +405,18 @@ nav button.active{color:var(--green);background:#10231a}
     
     <div class="card health-connect-card" style="margin-top:16px">
       <h2 style="font-size:19px;margin-bottom:4px">⌚ Health Integration</h2>
-      <div class="subtitle" style="font-size:12px;margin-bottom:6px">Test the future smartwatch experience using simulated data.</div>
+      <div class="subtitle" style="font-size:12px;margin-bottom:6px">Connect to Android Health Connect and read available health data.</div>
       <div class="health-connect-row">
         <div>
           <b>Watch connection</b>
-          <div class="health-test-note" id="watchProvider">Test mode • no real watch connected</div>
+          <div class="health-test-note" id="watchProvider">Health Connect • not connected</div>
         </div>
         <span class="health-badge off" id="watchStatus">Disconnected</span>
       </div>
       <div class="health-connect-row">
         <div>
-          <b>Test Watch Connection</b>
-          <div class="health-test-note">Loads realistic demo health data into Today.</div>
+          <b>Connect Health Connect</b>
+          <div class="health-test-note">Opens Android Health Connect permissions for this app.</div>
         </div>
         <button class="health-btn primary" id="connectTestWatch">Connect</button>
       </div>
@@ -418,7 +430,7 @@ nav button.active{color:var(--green);background:#10231a}
       <div class="health-connect-row">
         <div>
           <b>Disconnect</b>
-          <div class="health-test-note">Clears simulated watch data only.</div>
+          <div class="health-test-note">Disconnects the dashboard locally. Health permissions can still be changed in Android settings.</div>
         </div>
         <button class="health-btn" id="disconnectWatch">Disconnect</button>
       </div>
@@ -438,6 +450,26 @@ nav button.active{color:var(--green);background:#10231a}
   <button data-view="workout">🏋️<br>Workout</button><button data-view="money">💰<br>Money</button>
   <button data-view="settings">⚙️<br>Settings</button>
 </nav>
+
+
+<div class="modal" id="exerciseModal">
+  <div class="sheet">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div><h3 style="margin:0">Add Exercise</h3><div class="subtitle" style="font-size:12px;margin:4px 0 0">Add it to the current workout day.</div></div>
+      <button class="secondary" id="closeExerciseModal" style="padding:8px 12px">✕</button>
+    </div>
+    <div class="custom-ex-form">
+      <label>Exercise name<input id="customExName" type="text" placeholder="e.g. Cable Chest Press"></label>
+      <label>Equipment / type<input id="customExType" type="text" placeholder="e.g. Cable, Machine, Dumbbells"></label>
+      <label>Target muscle<input id="customExMuscle" type="text" placeholder="e.g. Chest"></label>
+      <label>Starting sets<input id="customExSets" type="number" min="1" max="8" value="3"></label>
+    </div>
+    <div class="sheet-actions" style="margin-top:10px">
+      <button class="secondary" id="cancelExercise">Cancel</button>
+      <button class="primary" id="saveExercise">Add Exercise</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal" id="effortModal"><div class="sheet"><div style="display:flex;justify-content:space-between"><div><h3 style="margin:0">Rate Effort Level</h3><div class="subtitle" style="font-size:12px;margin:4px 0 14px">How hard was this set?</div></div><button class="secondary" id="closeEffort" style="height:42px">✕</button></div><div class="effort-options"><button class="effopt easy" data-eff="easy"><b>EASY</b><small>Could have done 3+ more reps</small></button><button class="effopt ideal" data-eff="ideal"><b>IDEAL</b><small>Could have done 1–3 more reps</small></button><button class="effopt max" data-eff="max"><b>MAX EFFORT</b><small>No more reps with good form</small></button></div></div></div><div class="modal" id="modal">
   <div class="sheet">
@@ -460,7 +492,7 @@ if(!state.money.weeklyLimit) state.money.weeklyLimit=300;
 if(!state.money.currency) state.money.currency="AUD";
 if(!state.money.baseCurrency) state.money.baseCurrency="AUD";
 if(!state.money.fx) state.money.fx={rates:{AUD:1,PHP:null,USD:null},updatedAt:0,sourceDate:null};
-if(!state.health) state.health={connected:false,provider:"Test Watch",lastSync:0,sleepMinutes:null,restingHR:null,workoutHR:null,activeCalories:null};
+if(!state.health) state.health={connected:false,provider:"Android Health Connect",lastSync:0,sleepMinutes:null,restingHR:null,workoutHR:null,activeCalories:null};
 let calendarDate=new Date();
 let currentAction=null;
 let transferDirection="toSavings";
@@ -685,22 +717,36 @@ document.getElementById("saveAction").onclick=()=>{
 
 function switchView(viewName){
   const target=document.querySelector("section#"+CSS.escape(viewName)+".view");
-  if(!target) return;
+  if(!target || target.classList.contains("active")) return;
+  const current=document.querySelector(".view.active");
   document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("active",x.dataset.view===viewName));
-  document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
-  target.classList.add("active");
-  window.scrollTo({top:0,behavior:"instant"});
-  if(viewName==="history") renderHistory();
-  if(viewName==="workout") renderWorkout();
-  if(viewName==="money") renderMoney();
+  const showTarget=()=>{
+    document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
+    target.classList.add("active");
+    window.scrollTo({top:0,behavior:"instant"});
+    if(viewName==="history") renderHistory();
+    if(viewName==="workout") renderWorkout();
+    if(viewName==="money") renderMoney();
+    if(viewName==="today") { renderToday(); renderHealth(); renderTodayDashboardExtras(); }
+  };
+  if(current){
+    current.animate([{opacity:1},{opacity:.15}],{duration:110,easing:"ease-out"}).finished.then(showTarget).catch(showTarget);
+  }else showTarget();
 }
 document.querySelectorAll("nav button").forEach(b=>{
   b.addEventListener("click",()=>switchView(b.dataset.view));
   b.addEventListener("touchend",e=>{e.preventDefault();switchView(b.dataset.view)},{passive:false});
 });
-document.getElementById("chatBtn").onclick=()=>{
-  const fallback="https://chatgpt.com/";
-  window.location.href="intent://chatgpt.com/#Intent;scheme=https;package=com.openai.chatgpt;S.browser_fallback_url="+encodeURIComponent(fallback)+";end";
+document.getElementById("chatBtn").onclick=async()=>{
+  const webUrl="https://chatgpt.com/";
+  try{
+    const launcher=window.Capacitor?.Plugins?.AppLauncher;
+    if(launcher){
+      await launcher.openUrl({url:webUrl});
+      return;
+    }
+  }catch(e){console.warn("App launcher fallback",e)}
+  window.open(webUrl,"_blank");
 };
 const currencySelect=document.getElementById("currencySelect");
 currencySelect.value=state.money.currency||"AUD";
@@ -723,7 +769,114 @@ if(fxStatus){
   fxStatus.textContent=fx?.updatedAt ? "Rates cached • updated "+new Date(fx.updatedAt).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}) : "Rates refresh every 24 hours.";
 }renderToday();renderHistory();renderMoney();renderWorkout()}};
 
-if(!state.workouts)state.workouts={sessions:[],drafts:{}};const plans={push:{title:'PUSH DAY 💪',sub:'Strength + Muscle • Lean & Strong',ex:[['Chest Press','Machine','Chest',[[47,'6–8'],[54,'5–8'],[54,'5–8']]],['Incline Machine Press','','Upper Chest',[[25,'8–10'],[27.5,'8–10'],[30,'5–8']]],['Shoulder Press','Machine','Shoulders',[[33,'6–10'],[39,'5–8']]],['Pec Fly','Machine','Chest',[[40,'12–15'],[47,'10–12'],[54,'8–12']]],['Lateral Raise','Dumbbells','Side Delts',[[6,'12–20'],[7,'12–20'],[8,'12–20']]],['Triceps Pushdown','Cable','Triceps',[[12.5,'8–15'],[15,'8–15'],[17.5,'8–15']]],['Triceps Pushdown','Unilateral • Optional','Triceps',[[5,'10–15'],[5,'10–15']]]]},pull:{title:'PULL DAY 💪',sub:'Strong Back • Bigger Arms • Better Posture',ex:[['Lat Pulldown','Wide Grip','Lats',[[40,'8–10'],[47,'6–10'],[54,'3–8']]],['Chest Supported Row','Machine','Mid Back',[[33,'8–10'],[40,'6–10'],[47,'6–10']]],['Close Grip Pulldown','Neutral / Close','Lats',[[40,'8–10'],[47,'6–10'],[54,'3–8']]],['Rear Delt Fly','Machine','Rear Delts',[[12,'15–20'],[19,'12–15'],[25,'10–15']]],['DB Biceps Curl','','Biceps',[[8,'10–12'],[9,'8–12'],[9,'6–10']]],['Hammer Curl','Dumbbells','Biceps',[[8,'10–12'],[9,'8–12'],[9,'6–10']]],['Abs Work','Choose 2','Abs',[[null,'10–20'],[null,'10–20']]],['DB Shrugs','','Traps',[[null,'10–15'],[null,'10–15'],[null,'10–15']]]]},legs:{title:'LEG DAY 🦵',sub:'Strong Legs • Power • Balance',ex:[['Leg Extension','Machine','Quadriceps',[[33,'10–15'],[40,'8–12'],[47,'8–12'],[54,'8–12']]],['Hamstring Curl','Machine','Hamstrings',[[25,'10–12'],[33,'8–10'],[40,'3–6']]],['Leg Press','Plate Loaded','Quads / Glutes',[[50,'10–15'],[80,'8–12'],[120,'6–10']]],['Seated Calf Raise','Machine','Calves',[[55,'10–15'],[75,'10–15'],[95,'10–15']]],['Abs Workout','Choose 2','Abs',[[null,'10–20'],[null,'10–20']]]]}};let wday='push',effTarget=null;const wkey=()=>wday+'_'+todayKey();function latest(d){return state.workouts.sessions.filter(x=>x.day===d).sort((a,b)=>b.date.localeCompare(a.date))[0]||null}function draft(){if(!state.workouts.drafts[wkey()])state.workouts.drafts[wkey()]=plans[wday].ex.map(e=>({sets:e[3].map(()=>({kg:'',reps:'',effort:''}))}));return state.workouts.drafts[wkey()]}function prev(ei,si){return latest(wday)?.exercises?.[ei]?.sets?.[si]||null}function renderWorkout(){const p=plans[wday],d=draft();wtitle.textContent=p.title;wsub.textContent=p.sub;wlist.innerHTML='';p.ex.forEach((e,ei)=>{const box=document.createElement('div');box.className='exercise'+(ei===0?' open':'');const pv=prev(ei,0),pl=e[3][0];box.innerHTML=`<button class="exercise-head"><span class="exnum">${ei+1}</span><span class="exname"><b>${e[0]} ${e[1]?'<span style="color:var(--muted);font-weight:500">('+e[1]+')</span>':''}</b><small>${e[2]}</small></span><span class="exsum">${pv?(pv.kg||'–')+' × '+(pv.reps||'–'):(pl[0]??'–')+' × '+pl[1]}</span></button><div class="exbody"><div class="sethead"><span>SET</span><span>PREVIOUS</span><span>KG</span><span>REPS</span><span>EFFORT</span></div><div class="rows"></div><button class="addset">＋ Add Set</button></div>`;box.querySelector('.exercise-head').onclick=()=>box.classList.toggle('open');const rows=box.querySelector('.rows');d[ei].sets.forEach((x,si)=>{const old=prev(ei,si),pln=e[3][si]||[null,''];const row=document.createElement('div');row.className='setrow';row.innerHTML=`<b style="text-align:center">${si+1}</b><div class="prevval">${old?(old.kg||'–')+' × '+(old.reps||'–'):(pln[0]??'–')+' × '+pln[1]}<br><span style="opacity:.5">${old?'previous':'plan'}</span></div><input class="loginput kg" type="number" step=".5" value="${x.kg}" placeholder="${old?.kg??pln[0]??'KG'}"><input class="loginput reps" type="number" value="${x.reps}" placeholder="${old?.reps??'Reps'}"><button class="effort ${x.effort}"></button>`;row.querySelector('.kg').oninput=z=>{x.kg=z.target.value;save()};row.querySelector('.reps').oninput=z=>{x.reps=z.target.value;save()};row.querySelector('.effort').onclick=()=>{effTarget={ei,si};effortModal.classList.add('show')};rows.appendChild(row)});box.querySelector('.addset').onclick=()=>{d[ei].sets.push({kg:'',reps:'',effort:''});save();renderWorkout()};wlist.appendChild(box)})}document.querySelectorAll('[data-wday]').forEach(b=>b.onclick=()=>{wday=b.dataset.wday;document.querySelectorAll('[data-wday]').forEach(x=>x.classList.remove('active'));b.classList.add('active');renderWorkout()});document.querySelectorAll('[data-eff]').forEach(b=>b.onclick=()=>{if(effTarget){draft()[effTarget.ei].sets[effTarget.si].effort=b.dataset.eff;save();effortModal.classList.remove('show');renderWorkout()}});closeEffort.onclick=()=>effortModal.classList.remove('show');saveWorkout.onclick=()=>{const d=JSON.parse(JSON.stringify(draft()));if(!d.some(e=>e.sets.some(x=>x.kg||x.reps||x.effort))){alert('Enter at least one set first.');return}state.workouts.sessions.push({day:wday,date:new Date().toISOString(),exercises:d});delete state.workouts.drafts[wkey()];save();alert('Workout saved ✓');renderWorkout()};
+if(!state.workouts)state.workouts={sessions:[],drafts:{}};
+if(!state.workouts.custom)state.workouts.custom={push:[],pull:[],legs:[]};
+if(!state.workouts.removed)state.workouts.removed={push:[],pull:[],legs:[]};const plans={push:{title:'PUSH DAY 💪',sub:'Strength + Muscle • Lean & Strong',ex:[['Chest Press','Machine','Chest',[[47,'6–8'],[54,'5–8'],[54,'5–8']]],['Incline Machine Press','','Upper Chest',[[25,'8–10'],[27.5,'8–10'],[30,'5–8']]],['Shoulder Press','Machine','Shoulders',[[33,'6–10'],[39,'5–8']]],['Pec Fly','Machine','Chest',[[40,'12–15'],[47,'10–12'],[54,'8–12']]],['Lateral Raise','Dumbbells','Side Delts',[[6,'12–20'],[7,'12–20'],[8,'12–20']]],['Triceps Pushdown','Cable','Triceps',[[12.5,'8–15'],[15,'8–15'],[17.5,'8–15']]],['Triceps Pushdown','Unilateral • Optional','Triceps',[[5,'10–15'],[5,'10–15']]]]},pull:{title:'PULL DAY 💪',sub:'Strong Back • Bigger Arms • Better Posture',ex:[['Lat Pulldown','Wide Grip','Lats',[[40,'8–10'],[47,'6–10'],[54,'3–8']]],['Chest Supported Row','Machine','Mid Back',[[33,'8–10'],[40,'6–10'],[47,'6–10']]],['Close Grip Pulldown','Neutral / Close','Lats',[[40,'8–10'],[47,'6–10'],[54,'3–8']]],['Rear Delt Fly','Machine','Rear Delts',[[12,'15–20'],[19,'12–15'],[25,'10–15']]],['DB Biceps Curl','','Biceps',[[8,'10–12'],[9,'8–12'],[9,'6–10']]],['Hammer Curl','Dumbbells','Biceps',[[8,'10–12'],[9,'8–12'],[9,'6–10']]],['Abs Work','Choose 2','Abs',[[null,'10–20'],[null,'10–20']]],['DB Shrugs','','Traps',[[null,'10–15'],[null,'10–15'],[null,'10–15']]]]},legs:{title:'LEG DAY 🦵',sub:'Strong Legs • Power • Balance',ex:[['Leg Extension','Machine','Quadriceps',[[33,'10–15'],[40,'8–12'],[47,'8–12'],[54,'8–12']]],['Hamstring Curl','Machine','Hamstrings',[[25,'10–12'],[33,'8–10'],[40,'3–6']]],['Leg Press','Plate Loaded','Quads / Glutes',[[50,'10–15'],[80,'8–12'],[120,'6–10']]],['Seated Calf Raise','Machine','Calves',[[55,'10–15'],[75,'10–15'],[95,'10–15']]],['Abs Workout','Choose 2','Abs',[[null,'10–20'],[null,'10–20']]]]}};
+let wday='push',effTarget=null;
+const wkey=()=>wday+'_'+todayKey();
+function exerciseKey(e){return (e[0]||"")+"|"+(e[1]||"")}
+function effectiveExercises(day){
+  const removed=state.workouts.removed?.[day]||[];
+  const base=plans[day].ex.filter(e=>!removed.includes(exerciseKey(e)));
+  const custom=(state.workouts.custom?.[day]||[]).map(x=>[
+    x.name,x.type||"",x.muscle||"Custom",
+    Array.from({length:x.sets||3},()=>[null,""])
+  ]);
+  return [...base,...custom];
+}
+function latest(d){return state.workouts.sessions.filter(x=>x.day===d).sort((a,b)=>b.date.localeCompare(a.date))[0]||null}
+function draft(){
+  const ex=effectiveExercises(wday);
+  const key=wkey();
+  if(!state.workouts.drafts[key] || state.workouts.drafts[key].length!==ex.length){
+    const existing=state.workouts.drafts[key]||[];
+    state.workouts.drafts[key]=ex.map((e,i)=>existing[i]||({sets:e[3].map(()=>({kg:'',reps:'',effort:''}))}));
+  }
+  return state.workouts.drafts[key];
+}
+function prev(ei,si){return latest(wday)?.exercises?.[ei]?.sets?.[si]||null}
+function removeExercise(e,ei){
+  if(!confirm(`Remove "${e[0]}" from ${wday.toUpperCase()} Day?`))return;
+  const baseExists=plans[wday].ex.some(x=>exerciseKey(x)===exerciseKey(e));
+  if(baseExists){
+    if(!state.workouts.removed[wday].includes(exerciseKey(e)))state.workouts.removed[wday].push(exerciseKey(e));
+  }else{
+    const idx=(state.workouts.custom[wday]||[]).findIndex(x=>x.name===e[0]&&(x.type||"")===(e[1]||""));
+    if(idx>=0)state.workouts.custom[wday].splice(idx,1);
+  }
+  delete state.workouts.drafts[wkey()];
+  save();renderWorkout();
+}
+function renderWorkout(){
+  const p=plans[wday],exercises=effectiveExercises(wday),d=draft();
+  wtitle.textContent=p.title;wsub.textContent=p.sub;wlist.innerHTML='';
+  exercises.forEach((e,ei)=>{
+    const box=document.createElement('div');box.className='exercise'+(ei===0?' open':'');
+    const pv=prev(ei,0),pl=e[3][0]||[null,''];
+    box.innerHTML=`<div class="exercise-head">
+      <span class="exnum">${ei+1}</span>
+      <button class="exname" style="border:0;background:transparent;color:inherit;text-align:left;padding:0">
+        <b>${e[0]} ${e[1]?'<span style="color:var(--muted);font-weight:500">('+e[1]+')</span>':''}</b>
+        <small>${e[2]}</small>
+      </button>
+      <span class="exsum">${pv?(pv.kg||'–')+' × '+(pv.reps||'–'):(pl[0]??'–')+' × '+(pl[1]||'')}</span>
+      <button class="exercise-remove" title="Remove exercise">✕</button>
+    </div>
+    <div class="exbody"><div class="sethead"><span>SET</span><span>PREVIOUS</span><span>KG</span><span>REPS</span><span>EFFORT</span></div><div class="rows"></div><button class="addset">＋ Add Set</button></div>`;
+    box.querySelector('.exname').onclick=()=>box.classList.toggle('open');
+    box.querySelector('.exsum').onclick=()=>box.classList.toggle('open');
+    box.querySelector('.exercise-remove').onclick=()=>removeExercise(e,ei);
+    const rows=box.querySelector('.rows');
+    d[ei].sets.forEach((x,si)=>{
+      const old=prev(ei,si),pln=e[3][si]||[null,''];
+      const row=document.createElement('div');row.className='setrow';
+      row.innerHTML=`<b style="text-align:center">${si+1}</b>
+        <div class="prevval">${old?(old.kg||'–')+' × '+(old.reps||'–'):(pln[0]??'–')+' × '+(pln[1]||'')}<br><span style="opacity:.5">${old?'previous':'plan'}</span></div>
+        <input class="loginput kg" type="number" step=".5" value="${x.kg}" placeholder="${old?.kg??pln[0]??'KG'}">
+        <input class="loginput reps" type="number" value="${x.reps}" placeholder="${old?.reps??'Reps'}">
+        <button class="effort ${x.effort}"></button>`;
+      row.querySelector('.kg').oninput=z=>{x.kg=z.target.value;save()};
+      row.querySelector('.reps').oninput=z=>{x.reps=z.target.value;save()};
+      row.querySelector('.effort').onclick=()=>{effTarget={ei,si};effortModal.classList.add('show')};
+      rows.appendChild(row);
+    });
+    box.querySelector('.addset').onclick=()=>{d[ei].sets.push({kg:'',reps:'',effort:''});save();renderWorkout()};
+    wlist.appendChild(box);
+  });
+}
+document.querySelectorAll('[data-wday]').forEach(b=>b.onclick=()=>{
+  wday=b.dataset.wday;
+  document.querySelectorAll('[data-wday]').forEach(x=>x.classList.remove('active'));b.classList.add('active');
+  renderWorkout();
+});
+document.querySelectorAll('[data-eff]').forEach(b=>b.onclick=()=>{
+  if(effTarget){draft()[effTarget.ei].sets[effTarget.si].effort=b.dataset.eff;save();effortModal.classList.remove('show');renderWorkout()}
+});
+closeEffort.onclick=()=>effortModal.classList.remove('show');
+saveWorkout.onclick=()=>{
+  const d=JSON.parse(JSON.stringify(draft()));
+  if(!d.some(e=>e.sets.some(x=>x.kg||x.reps||x.effort))){alert('Enter at least one set first.');return}
+  state.workouts.sessions.push({day:wday,date:new Date().toISOString(),exercises:d});
+  delete state.workouts.drafts[wkey()];save();alert('Workout saved ✓');renderWorkout()
+};
+const addExerciseBtn=document.getElementById("addExerciseBtn");
+const exerciseModal=document.getElementById("exerciseModal");
+if(addExerciseBtn)addExerciseBtn.onclick=()=>exerciseModal.classList.add("show");
+document.getElementById("closeExerciseModal").onclick=()=>exerciseModal.classList.remove("show");
+document.getElementById("cancelExercise").onclick=()=>exerciseModal.classList.remove("show");
+document.getElementById("saveExercise").onclick=()=>{
+  const name=document.getElementById("customExName").value.trim();
+  const type=document.getElementById("customExType").value.trim();
+  const muscle=document.getElementById("customExMuscle").value.trim();
+  const sets=Math.max(1,Math.min(8,parseInt(document.getElementById("customExSets").value)||3));
+  if(!name){alert("Enter an exercise name.");return}
+  state.workouts.custom[wday].push({name,type,muscle,sets});
+  delete state.workouts.drafts[wkey()];
+  save();
+  ["customExName","customExType","customExMuscle"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("customExSets").value="3";
+  exerciseModal.classList.remove("show");renderWorkout();
+};
 async function refreshFxRates(force=false){
   const now=Date.now(), day=24*60*60*1000;
   const fx=state.money.fx||{rates:{AUD:1},updatedAt:0};
@@ -794,6 +947,10 @@ function renderTodayDashboardExtras(){
 }
 
 
+
+function healthPlugin(){
+  return window.Capacitor?.Plugins?.HealthConnectNative || null;
+}
 function renderHealth(){
   const h=state.health||{};
   const sleepEl=document.getElementById("healthSleep");
@@ -801,57 +958,81 @@ function renderHealth(){
   const whrEl=document.getElementById("healthWhr");
   const calEl=document.getElementById("healthCalories");
   if(sleepEl){
-    if(h.connected && h.sleepMinutes!=null){
-      const hrs=Math.floor(h.sleepMinutes/60),mins=h.sleepMinutes%60;
-      sleepEl.textContent=`${hrs}h ${mins}m`;
-      rhrEl.textContent=h.restingHR?`${h.restingHR} bpm`:"—";
-      whrEl.textContent=h.workoutHR?`${h.workoutHR} bpm`:"—";
-      calEl.textContent=h.activeCalories?`${h.activeCalories} kcal`:"—";
+    if(h.connected){
+      if(h.sleepMinutes!=null){
+        const hrs=Math.floor(h.sleepMinutes/60),mins=Math.round(h.sleepMinutes%60);
+        sleepEl.textContent=`${hrs}h ${mins}m`;
+      }else sleepEl.textContent="—";
+      rhrEl.textContent=h.restingHR!=null?`${Math.round(h.restingHR)} bpm`:"—";
+      whrEl.textContent=h.workoutHR!=null?`${Math.round(h.workoutHR)} bpm`:"—";
+      calEl.textContent=h.activeCalories!=null?`${Math.round(h.activeCalories)} kcal`:"—";
     }else{
       sleepEl.textContent="—";rhrEl.textContent="—";whrEl.textContent="—";calEl.textContent="—";
     }
   }
-  const ws=document.getElementById("watchStatus"),wp=document.getElementById("watchProvider"),ls=document.getElementById("lastHealthSync"),btn=document.getElementById("connectTestWatch");
+  const ws=document.getElementById("watchStatus");
+  const wp=document.getElementById("watchProvider");
+  const ls=document.getElementById("lastHealthSync");
+  const btn=document.getElementById("connectTestWatch");
   if(ws){
     ws.textContent=h.connected?"Connected":"Disconnected";
     ws.classList.toggle("off",!h.connected);
   }
-  if(wp) wp.textContent=h.connected?`${h.provider||"Test Watch"} • simulated data`:"Test mode • no real watch connected";
+  if(wp) wp.textContent=h.connected?"Android Health Connect":"Health Connect • not connected";
   if(ls) ls.textContent=h.lastSync?`Last synced ${new Date(h.lastSync).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})}`:"No sync yet";
-  if(btn) btn.textContent=h.connected?"Connected":"Connect";
+  if(btn) btn.textContent=h.connected?"Manage access":"Connect";
 }
-function generateMockHealth(){
-  const now=new Date();
-  const seed=now.getDate()+now.getMonth()*31;
-  return {
-    sleepMinutes: 410 + (seed%55),
-    restingHR: 58 + (seed%8),
-    workoutHR: 118 + (seed%18),
-    activeCalories: 430 + (seed%230)
-  };
-}
-function syncMockHealth(){
-  if(!state.health.connected){
-    alert("Connect the Test Watch first.");
+async function openHealthPermissions(){
+  const plugin=healthPlugin();
+  if(!plugin){
+    alert("Health Connect is only available in the Android app build.");
     return;
   }
-  const d=generateMockHealth();
-  Object.assign(state.health,d,{lastSync:Date.now()});
-  save();renderHealth();renderTodayDashboardExtras();
+  try{
+    const a=await plugin.isAvailable();
+    if(!a.available){
+      alert("Health Connect requires Android 14 or newer on this build.");
+      return;
+    }
+    await plugin.openPermissions();
+  }catch(e){
+    alert("Unable to open Health Connect permissions: "+(e?.message||e));
+  }
+}
+async function syncRealHealth(){
+  const plugin=healthPlugin();
+  if(!plugin){
+    alert("Health Connect is only available in the Android app build.");
+    return;
+  }
+  try{
+    const result=await plugin.readSummary();
+    if(result.needsPermission){
+      alert("Health permissions are not granted yet. Tap Connect and allow the health data you want to share.");
+      await plugin.openPermissions();
+      return;
+    }
+    state.health.connected=true;
+    state.health.provider="Android Health Connect";
+    state.health.lastSync=Date.now();
+    state.health.sleepMinutes=result.sleepMinutes ?? null;
+    state.health.restingHR=result.restingHR ?? null;
+    state.health.workoutHR=result.workoutHR ?? null;
+    state.health.activeCalories=result.activeCalories ?? null;
+    save();
+    renderHealth();
+    renderTodayDashboardExtras();
+  }catch(e){
+    alert("Health sync failed: "+(e?.message||e));
+  }
 }
 const connectBtn=document.getElementById("connectTestWatch");
-if(connectBtn) connectBtn.onclick=()=>{
-  state.health.connected=true;
-  state.health.provider="Test Watch";
-  const d=generateMockHealth();
-  Object.assign(state.health,d,{lastSync:Date.now()});
-  save();renderHealth();
-};
+if(connectBtn) connectBtn.onclick=openHealthPermissions;
 const syncBtn=document.getElementById("syncHealthNow");
-if(syncBtn) syncBtn.onclick=syncMockHealth;
+if(syncBtn) syncBtn.onclick=syncRealHealth;
 const disconnectBtn=document.getElementById("disconnectWatch");
 if(disconnectBtn) disconnectBtn.onclick=()=>{
-  state.health={connected:false,provider:"Test Watch",lastSync:0,sleepMinutes:null,restingHR:null,workoutHR:null,activeCalories:null};
+  state.health={connected:false,provider:"Android Health Connect",lastSync:0,sleepMinutes:null,restingHR:null,workoutHR:null,activeCalories:null};
   save();renderHealth();
 };
 
