@@ -331,8 +331,8 @@ nav button.active{color:var(--green);background:#10231a}
       <div class="topbar"><div><div class="label">WATCH / HEALTH</div><h2 style="margin-top:4px;font-size:19px">Health snapshot</h2></div><div>⌚</div></div>
       <div class="health-row">
         <div class="health-metric"><span class="label">🌙 Sleep</span><b id="healthSleep">—</b></div>
-        <div class="health-metric"><span class="label">❤️ Resting HR</span><b id="healthRhr">—</b></div>
-        <div class="health-metric"><span class="label">💓 Workout HR</span><b id="healthWhr">—</b></div>
+        <div class="health-metric"><span class="label">🔥 Active Calories</span><b id="healthCalories">—</b></div>
+        <div class="health-metric"><span class="label">❤️ Heart Rate</span><b id="healthWhr">—</b></div>
         <div class="health-metric"><span class="label">👣 Steps</span><b id="healthSteps">—</b></div>
       </div>
       <div class="health-status"><span>Health Connect</span><span>Not connected</span></div>
@@ -356,7 +356,7 @@ nav button.active{color:var(--green);background:#10231a}
     <h2 style="font-size:18px">At a glance</h2>
     <div class="glance-grid">
       <div class="glance-item">✅<b id="glanceTasks">0/0</b><small>Tasks</small></div>
-      <div class="glance-item">🏋️<b id="glanceWorkout">—</b><small>Latest workout</small></div>
+      <div class="glance-item">❤️<b id="glanceHeartRate">—</b><small>Heart Rate</small></div>
       <div class="glance-item">💳<b id="glanceSpent">$0</b><small>Spent today</small></div>
       <div class="glance-item">🏦<b id="glanceSavings">$0</b><small>Savings</small></div>
     </div>
@@ -512,7 +512,6 @@ nav button.active{color:var(--green);background:#10231a}
             <div>Resting HR: —</div>
             <div>Heart rate: —</div>
             <div>Active calories: —</div>
-            <div>Source: —</div>
           </div>
         </div>
         <button class="health-btn blue" id="diagnoseHealth">Check</button>
@@ -835,45 +834,51 @@ document.getElementById("saveAction").onclick=()=>{
   save();renderMoney();document.getElementById("modal").classList.remove("show");
 };
 
-let viewSwitching=false;
+let viewTransitionToken=0;
 function switchView(viewName){
   const target=document.querySelector("section#"+CSS.escape(viewName)+".view");
-  if(!target || target.classList.contains("active") || viewSwitching) return;
-  const current=document.querySelector(".view.active");
-  viewSwitching=true;
+  if(!target || target.classList.contains("active")) return;
 
-  document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("active",x.dataset.view===viewName));
+  const token=++viewTransitionToken;
+  const current=document.querySelector(".view.active");
+
+  document.querySelectorAll("nav button").forEach(x=>{
+    x.classList.toggle("active",x.dataset.view===viewName);
+  });
 
   const activate=()=>{
-    if(current) current.classList.remove("active");
+    if(token!==viewTransitionToken) return;
+    document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));
     target.classList.add("active");
     window.scrollTo({top:0,behavior:"instant"});
 
     if(viewName==="history") renderHistory();
     if(viewName==="workout") renderWorkout();
     if(viewName==="money") renderMoney();
-    if(viewName==="today"){renderToday();renderHealth();renderTodayDashboardExtras();}
+    if(viewName==="today"){
+      renderToday();
+      renderHealth();
+      renderTodayDashboardExtras();
+    }
 
     target.animate(
-      [
-        {opacity:0.04,transform:"translateY(7px)"},
-        {opacity:0.62,transform:"translateY(2px)",offset:.48},
-        {opacity:1,transform:"translateY(0)"}
-      ],
-      {duration:320,easing:"cubic-bezier(.22,.8,.25,1)"}
-    ).finished.finally(()=>{viewSwitching=false;});
+      [{opacity:.08,transform:"translateY(5px)"},{opacity:1,transform:"translateY(0)"}],
+      {duration:260,easing:"cubic-bezier(.22,.8,.25,1)"}
+    );
   };
 
   if(current){
-    current.animate(
-      [
-        {opacity:1,transform:"translateY(0)"},
-        {opacity:.45,transform:"translateY(-2px)",offset:.62},
-        {opacity:.06,transform:"translateY(-4px)"}
-      ],
-      {duration:175,easing:"cubic-bezier(.4,0,.8,.2)"}
-    ).finished.then(activate).catch(activate);
-  }else activate();
+    const anim=current.animate(
+      [{opacity:1},{opacity:.12}],
+      {duration:110,easing:"ease-out"}
+    );
+    let fired=false;
+    const go=()=>{if(fired)return;fired=true;activate();};
+    anim.finished.then(go).catch(go);
+    setTimeout(go,150);
+  }else{
+    activate();
+  }
 }
 document.querySelectorAll("nav button").forEach(b=>{
   b.addEventListener("click",()=>switchView(b.dataset.view));
@@ -1195,7 +1200,7 @@ function renderTodayDashboardExtras(){
   document.getElementById("weekGradeNote").textContent=note;
   document.getElementById("glanceTasks").textContent=(r.done||0)+"/"+(r.total||0);
   const latest=(state.workouts?.sessions||[]).slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
-  document.getElementById("glanceWorkout").textContent=latest?latest.day.charAt(0).toUpperCase()+latest.day.slice(1):"—";
+  document.getElementById("glanceHeartRate").textContent=state.health?.workoutHR!=null?Math.round(state.health.workoutHR)+" bpm":"—";
   document.getElementById("glanceSpent").textContent=fmt(todayExpense());
   document.getElementById("glanceSavings").textContent=fmt(state.money.savings);
 }
@@ -1208,7 +1213,7 @@ function healthPlugin(){
 function renderHealth(){
   const h=state.health||{};
   const sleepEl=document.getElementById("healthSleep");
-  const rhrEl=document.getElementById("healthRhr");
+  const calEl=document.getElementById("healthCalories");
   const whrEl=document.getElementById("healthWhr");
   const stepsEl=document.getElementById("healthSteps");
   if(sleepEl){
@@ -1372,7 +1377,7 @@ async function diagnoseHealthData(){
         <div>Resting HR: <b>${r.restingHrRecords||0}</b> records</div>
         <div>Heart rate: <b>${r.heartRateRecords||0}</b> records / <b>${r.heartRateSamples||0}</b> samples</div>
         <div>Active calories: <b>${r.activeCalorieRecords||0}</b> records • <b>${r.activeCaloriesTotal||0}</b> kcal</div>
-        <div>Source: <b>${r.sources||"No source found"}</b></div>
+        
         <div style="opacity:.7">Window: last ${r.windowDays||7} days</div>`;
     }
   }catch(e){
