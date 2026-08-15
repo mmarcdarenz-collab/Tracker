@@ -1200,7 +1200,7 @@ function renderTodayDashboardExtras(){
   document.getElementById("weekGradeNote").textContent=note;
   document.getElementById("glanceTasks").textContent=(r.done||0)+"/"+(r.total||0);
   const latest=(state.workouts?.sessions||[]).slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
-  document.getElementById("glanceHeartRate").textContent=state.health?.workoutHR!=null?Math.round(state.health.workoutHR)+" bpm":"—";
+  const gh=document.getElementById("glanceHeartRate"); if(gh) gh.textContent=state.health?.workoutHR!=null?Math.round(state.health.workoutHR)+" bpm":"—";
   document.getElementById("glanceSpent").textContent=fmt(todayExpense());
   document.getElementById("glanceSavings").textContent=fmt(state.money.savings);
 }
@@ -1218,16 +1218,16 @@ function renderHealth(){
   const stepsEl=document.getElementById("healthSteps");
   if(sleepEl){
     if(h.connected){
-      if(h.sleepMinutes!=null){
-        const hrs=Math.floor(h.sleepMinutes/60),mins=Math.round(h.sleepMinutes%60);
-        sleepEl.textContent=`${hrs}h ${mins}m`;
-      }else sleepEl.textContent="—";
-      rhrEl.textContent=h.restingHR!=null?`${Math.round(h.restingHR)} bpm`:"—";
-      whrEl.textContent=h.workoutHR!=null?`${Math.round(h.workoutHR)} bpm`:"—";
-      calEl.textContent=h.activeCalories!=null?`${Math.round(h.activeCalories)} kcal`:"—";
-    }else{
-      sleepEl.textContent="—";rhrEl.textContent="—";whrEl.textContent="—";stepsEl.textContent="—";
-    }
+    sleepEl.textContent=h.sleepMinutes!=null?`${Math.floor(h.sleepMinutes/60)}h ${Math.round(h.sleepMinutes%60)}m`:"—";
+    whrEl.textContent=h.workoutHR!=null?`${Math.round(h.workoutHR)} bpm`:"—";
+    calEl.textContent=h.activeCalories!=null?`${Math.round(h.activeCalories)} kcal`:"—";
+    stepsEl.textContent=h.steps!=null?Number(h.steps).toLocaleString("en-AU"):"—";
+  }else{
+    sleepEl.textContent="—";
+    whrEl.textContent="—";
+    calEl.textContent="—";
+    stepsEl.textContent="—";
+  }
   }
   const ws=document.getElementById("watchStatus");
   const wp=document.getElementById("watchProvider");
@@ -1286,6 +1286,8 @@ async function syncRealHealth(){
       state.health.sleepMinutes=result.sleepMinutes ?? null;
       state.health.restingHR=result.restingHR ?? null;
       state.health.workoutHR=result.workoutHR ?? null;
+      state.health.activeCalories=result.activeCalories ?? null;
+      state.health.steps=result.steps ?? null;
       state.health.steps=result.steps ?? null;
       save();renderHealth();renderTodayDashboardExtras();
       return {ok:true};
