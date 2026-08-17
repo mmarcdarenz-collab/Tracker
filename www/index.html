@@ -1061,7 +1061,228 @@ const fmt=n=>{
   return new Intl.NumberFormat(locale,{style:"currency",currency,maximumFractionDigits:currency==="PHP"?0:2}).format(convertMoney(n));
 };
 
-function save(){localStorage.setItem(KEY,JSON.stringify(state))}
+
+/* ================================================================
+   PHASE 1.2 — CORE DATA FOUNDATION
+   Versioned internal schema added underneath the current UI.
+   The current Health Connect/native integration is intentionally untouched.
+   ================================================================ */
+
+const DT_SCHEMA_VERSION = 2;
+const DT_PHASE12_BACKUP_KEY = KEY + "_backup_before_schema_v2";
+
+function dtStableId(prefix, value){
+  const text=String(value??"");
+  let h=2166136261;
+  for(let i=0;i<text.length;i++){
+    h^=text.charCodeAt(i);
+    h=Math.imul(h,16777619);
+  }
+  return `${prefix}_${(h>>>0).toString(36)}`;
+}
+function dtNowIso(){ return new Date().toISOString(); }
+
+function dtEnsurePhase12Backup(){
+  try{
+    if(!localStorage.getItem(DT_PHASE12_BACKUP_KEY)){
+      const existing=localStorage.getItem(KEY);
+      if(existing) localStorage.setItem(DT_PHASE12_BACKUP_KEY,existing);
+    }
+  }catch(e){
+    console.warn("Phase 1.2 backup could not be created",e);
+  }
+}
+
+function dtEnsureFoundation(){
+  dtEnsurePhase12Backup();
+
+  if(!state.appMeta || typeof state.appMeta!=="object") state.appMeta={};
+  if(!state.appMeta.installId){
+    state.appMeta.installId="install_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,8);
+  }
+  state.appMeta.schemaVersion=DT_SCHEMA_VERSION;
+  if(!state.appMeta.createdAt) state.appMeta.createdAt=dtNowIso();
+  state.appMeta.updatedAt=dtNowIso();
+  if(!state.appMeta.migrations) state.appMeta.migrations={};
+  if(!state.appMeta.migrations.phase12CoreFoundation){
+    state.appMeta.migrations.phase12CoreFoundation={
+      completedAt:dtNowIso(),
+      from:"legacy-localStorage",
+      toSchema:DT_SCHEMA_VERSION
+    };
+  }
+
+  if(!state.user || typeof state.user!=="object") state.user={};
+  if(!state.user.id) state.user.id="local_user";
+  if(!state.user.createdAt) state.user.createdAt=dtNowIso();
+  if(!state.user.profile || typeof state.user.profile!=="object"){
+    state.user.profile={
+      displayName:"",
+      birthDate:null,
+      sex:null,
+      heightCm:null,
+      bodyWeightKg:null,
+      experienceLevel:null,
+      trainingDaysPerWeek:null,
+      primaryGoal:null
+    };
+  }
+
+  if(!state.preferences || typeof state.preferences!=="object") state.preferences={};
+  if(!state.preferences.units) state.preferences.units={weight:"kg",bodyWeight:"kg"};
+  if(!state.preferences.locale) state.preferences.locale="en-AU";
+  if(!state.preferences.theme) state.preferences.theme="dark";
+  if(!state.preferences.currency) state.preferences.currency=state.money?.currency||"AUD";
+
+  if(!state.core || typeof state.core!=="object") state.core={};
+  state.core.schemaVersion=DT_SCHEMA_VERSION;
+  if(!state.core.programs) state.core.programs={activeProgramId:"legacy_ppl",items:[]};
+  if(!state.core.exercises) state.core.exercises={items:[]};
+  if(!state.core.workouts) state.core.workouts={sessions:[],exerciseCompletions:[],setLogs:[]};
+  if(!state.core.body) state.core.body={measurements:[]};
+  if(!state.core.health) state.core.health={snapshots:[]};
+  if(!state.core.finance) state.core.finance={transactions:[]};
+  if(!state.core.daily) state.core.daily={records:[]};
+
+  if(!state.core.programs.items.some(p=>p.id==="legacy_ppl")){
+    state.core.programs.items.push({
+      id:"legacy_ppl",
+      name:"Push / Pull / Legs",
+      type:"template",
+      source:"legacy",
+      splitKeys:["push","pull","legs"],
+      createdAt:dtNowIso(),
+      active:true
+    });
+  }
+}
+
+function dtSyncFoundationShadow(){
+  dtEnsureFoundation();
+
+  state.core.daily.records=Object.entries(state.days||{}).map(([date,r])=>({
+    id:dtStableId("day",date),
+    userId:state.user.id,
+    date,
+    work:!!r.work,
+    workout:!!r.workout,
+    water:!!r.water,
+    protein:!!r.protein,
+    sleep:!!r.sleep,
+    restDay:!!r.restDay,
+    completionPercent:Number.isFinite(Number(r.percent))?Number(r.percent):null
+  }));
+
+  state.core.finance.transactions=(state.money?.transactions||[]).map((t,i)=>({
+    id:t.id||dtStableId("txn",`${t.date||""}|${t.type||""}|${t.amount||""}|${i}`),
+    userId:state.user.id,
+    type:t.type||"unknown",
+    amount:Number(t.amount)||0,
+    note:t.note||"",
+    date:t.date||null,
+    currency:state.money?.baseCurrency||"AUD",
+    source:"legacy"
+  }));
+
+  state.core.workouts.sessions=(state.workouts?.sessions||[]).map((s,i)=>({
+    id:s.id||dtStableId("session",`${s.date||""}|${s.day||""}|${i}`),
+    userId:state.user.id,
+    date:s.date||null,
+    workoutDay:s.day||null,
+    programId:"legacy_ppl",
+    snapshot:Array.isArray(s.snapshot)?s.snapshot:[],
+    source:"legacy"
+  }));
+
+  state.core.workouts.exerciseCompletions=(state.workouts?.completedExercises||[]).map((x,i)=>({
+    id:x.id||dtStableId("completion",`${x.dayKey||""}|${x.exerciseKey||""}|${i}`),
+    userId:state.user.id,
+    sessionDate:x.dayKey||null,
+    workoutDay:x.day||null,
+    exerciseKey:x.exerciseKey||null,
+    name:x.name||"",
+    equipment:x.type||"",
+    targetMuscle:x.muscle||"",
+    sets:Array.isArray(x.sets)?x.sets:[],
+    startedAt:x.startedAt||null,
+    finalizedAt:x.finalizedAt||null,
+    source:"legacy"
+  }));
+
+  const setLogs=[];
+  for(const exercise of state.core.workouts.exerciseCompletions){
+    (exercise.sets||[]).forEach((set,setIndex)=>{
+      setLogs.push({
+        id:dtStableId("set",`${exercise.id}|${setIndex}`),
+        userId:state.user.id,
+        exerciseCompletionId:exercise.id,
+        exerciseKey:exercise.exerciseKey,
+        sessionDate:exercise.sessionDate,
+        setNumber:setIndex+1,
+        weightKg:set?.kg===""||set?.kg==null?null:Number(set.kg),
+        reps:set?.reps===""||set?.reps==null?null:Number(set.reps),
+        effort:set?.effort||null
+      });
+    });
+  }
+  state.core.workouts.setLogs=setLogs;
+
+  if(state.health){
+    const snapshot={
+      id:dtStableId("health",String(state.health.lastSync||"current")),
+      userId:state.user.id,
+      capturedAt:state.health.lastSync?new Date(state.health.lastSync).toISOString():null,
+      provider:state.health.provider||null,
+      sleepMinutes:state.health.sleepMinutes??null,
+      restingHR:state.health.restingHR??null,
+      latestHR:state.health.workoutHR??null,
+      activeCalories:state.health.activeCalories??null,
+      steps:state.health.steps??null
+    };
+    const arr=state.core.health.snapshots;
+    if(snapshot.capturedAt && !arr.some(x=>x.id===snapshot.id)){
+      arr.push(snapshot);
+      if(arr.length>90) arr.splice(0,arr.length-90);
+    }
+  }
+
+  state.appMeta.updatedAt=dtNowIso();
+}
+
+function dtValidateFoundation(){
+  const issues=[];
+  if(state.appMeta?.schemaVersion!==DT_SCHEMA_VERSION) issues.push("schemaVersion");
+  if(!state.user?.id) issues.push("user.id");
+  if(!state.preferences?.units?.weight) issues.push("preferences.units.weight");
+  if(!Array.isArray(state.core?.workouts?.sessions)) issues.push("core.workouts.sessions");
+  if(!Array.isArray(state.core?.workouts?.setLogs)) issues.push("core.workouts.setLogs");
+  if(!Array.isArray(state.core?.finance?.transactions)) issues.push("core.finance.transactions");
+  if(!Array.isArray(state.core?.health?.snapshots)) issues.push("core.health.snapshots");
+  return {ok:issues.length===0,issues,schemaVersion:state.appMeta?.schemaVersion||null};
+}
+
+function save(){
+  dtSyncFoundationShadow();
+  localStorage.setItem(KEY,JSON.stringify(state));
+}
+
+dtEnsureFoundation();
+dtSyncFoundationShadow();
+localStorage.setItem(KEY,JSON.stringify(state));
+
+window.DTDataFoundation={
+  schemaVersion:DT_SCHEMA_VERSION,
+  validate:()=>dtValidateFoundation(),
+  snapshot:()=>JSON.parse(JSON.stringify({
+    appMeta:state.appMeta,
+    user:state.user,
+    preferences:state.preferences,
+    core:state.core
+  }))
+};
+
+console.info("Phase 1.2 core data foundation active",dtValidateFoundation());
+
 function ensureToday(){
   const k=todayKey();
   if(!state.days[k])state.days[k]={work:false,workout:false,water:false,protein:false,sleep:false,restDay:false};
