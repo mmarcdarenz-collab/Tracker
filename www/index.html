@@ -476,12 +476,17 @@ nav button.active{color:var(--green);background:#10231a}
 
 
 /* Exercise muscle-target detail */
-.muscle-detail-modal{align-items:flex-end;padding:0}
+.muscle-detail-modal{
+  align-items:flex-start;
+  padding:calc(72px + env(safe-area-inset-top)) 0 0;
+}
 .muscle-detail-sheet{
   width:100%;max-width:620px;margin:0 auto;background:#08131b;
   border:1px solid #223744;border-radius:24px 24px 0 0;
   padding:18px 14px calc(18px + env(safe-area-inset-bottom));
-  max-height:94vh;overflow:auto
+  height:calc(100vh - 72px - env(safe-area-inset-top));
+  max-height:calc(100vh - 72px - env(safe-area-inset-top));
+  overflow:auto;
 }
 .muscle-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
 .muscle-detail-head small{font-size:9px;letter-spacing:.12em;color:#6f8fa6}
@@ -492,6 +497,18 @@ nav button.active{color:var(--green);background:#10231a}
 }
 .exname.has-muscle-detail b:after{
   content:"  ◉";color:#55d977;font-size:10px;font-weight:800
+}
+
+
+@media (max-width:700px){
+  .muscle-detail-modal{
+    align-items:flex-start !important;
+    justify-content:flex-start !important;
+  }
+  .muscle-detail-sheet{
+    margin-top:0 !important;
+    margin-bottom:0 !important;
+  }
 }
 
 </style>
@@ -1852,7 +1869,11 @@ function renderTodayDashboardExtras(){
   document.getElementById("weekGradeNote").textContent=note;
   document.getElementById("glanceTasks").textContent=(r.done||0)+"/"+(r.total||0);
   const latest=(state.workouts?.sessions||[]).slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
-  const gh=document.getElementById("glanceHeartRate"); if(gh) gh.textContent=state.health?.workoutHR!=null?Math.round(state.health.workoutHR)+" bpm":"—";
+  const gh=document.getElementById("glanceHeartRate");
+  if(gh){
+    const displayHr=state.health?.workoutHR ?? state.health?.restingHR ?? null;
+    gh.textContent=displayHr!=null?Math.round(displayHr)+" bpm":"—";
+  }
   document.getElementById("glanceSpent").textContent=fmt(todayExpense());
   document.getElementById("glanceSavings").textContent=fmt(state.money.savings);
 }
@@ -1871,7 +1892,10 @@ function renderHealth(){
   if(sleepEl){
     if(h.connected){
     sleepEl.textContent=h.sleepMinutes!=null?`${Math.floor(h.sleepMinutes/60)}h ${Math.round(h.sleepMinutes%60)}m`:"—";
-    whrEl.textContent=h.workoutHR!=null?`${Math.round(h.workoutHR)} bpm`:"—";
+    {
+      const displayHr = h.workoutHR ?? h.restingHR ?? null;
+      whrEl.textContent=displayHr!=null?`${Math.round(displayHr)} bpm`:"—";
+    }
     calEl.textContent=h.activeCalories!=null?`${Math.round(h.activeCalories)} kcal`:"—";
     stepsEl.textContent=h.steps!=null?Number(h.steps).toLocaleString("en-AU"):"—";
   }else{
@@ -1929,6 +1953,62 @@ async function openHealthPermissions(){
     alert("Unable to open Health Connect permissions: "+(e?.message||e));
   }
 }
+
+function firstHealthNumber(...values){
+  for(const value of values){
+    if(value===null || value===undefined || value==="") continue;
+    const n=Number(value);
+    if(Number.isFinite(n)) return n;
+  }
+  return null;
+}
+function normalizeHealthSummary(result){
+  result=result||{};
+  const sleepMinutes=firstHealthNumber(
+    result.sleepMinutes,
+    result.sleepDurationMinutes,
+    result.sleepMins,
+    result.sleepMillis!=null ? Number(result.sleepMillis)/60000 : null
+  );
+  return {
+    needsPermission:!!result.needsPermission,
+    sleepMinutes,
+    restingHR:firstHealthNumber(result.restingHR,result.restingHeartRate),
+    workoutHR:firstHealthNumber(
+      result.workoutHR,
+      result.latestHeartRate,
+      result.heartRate,
+      result.restingHR,
+      result.restingHeartRate
+    ),
+    activeCalories:firstHealthNumber(result.activeCalories,result.activeKcal,result.caloriesBurned),
+    steps:firstHealthNumber(result.steps,result.stepCount),
+    heartRateTime:firstHealthNumber(result.heartRateTime,result.latestHeartRateTime),
+    stepsTime:firstHealthNumber(result.stepsTime),
+    activeCaloriesTime:firstHealthNumber(result.activeCaloriesTime),
+    sleepEndTime:firstHealthNumber(result.sleepEndTime)
+  };
+}
+function mergeHealthSummary(summary,provider){
+  state.health=state.health||{};
+  state.health.connected=true;
+  state.health.provider=provider;
+  state.health.lastSync=Date.now();
+
+  // Do not erase a valid previous health value just because a new Health Connect
+  // response has no newer record for that metric. This is important for sleep and HR:
+  // steps may update throughout the day while the latest completed sleep/HR record
+  // remains the most recent usable value.
+  for(const key of [
+    "sleepMinutes","restingHR","workoutHR","activeCalories","steps",
+    "heartRateTime","stepsTime","activeCaloriesTime","sleepEndTime"
+  ]){
+    if(summary[key]!==null && summary[key]!==undefined){
+      state.health[key]=summary[key];
+    }
+  }
+}
+
 async function syncRealHealth(){
   const mode=state.health.sourceMode||"auto";
 
@@ -1936,26 +2016,15 @@ async function syncRealHealth(){
     const plugin=healthPlugin();
     if(!plugin) return {ok:false,reason:"Health Connect bridge unavailable"};
     try{
-      const result=await plugin.readSummary();
+      const raw=await plugin.readSummary();
+      const result=normalizeHealthSummary(raw);
       if(result.needsPermission){
         await plugin.openPermissions();
         return {ok:false,reason:"Health Connect permission required"};
       }
-      const hasData=(result.steps||0)>0 || result.sleepMinutes!=null || result.restingHR!=null || result.workoutHR!=null;
+      const hasData=(result.steps||0)>0 || result.sleepMinutes!=null || result.restingHR!=null || result.workoutHR!=null || result.activeCalories!=null;
       if(!hasData) return {ok:false,reason:"Health Connect has no usable records"};
-      state.health.connected=true;
-      state.health.provider="Android Health Connect";
-      state.health.lastSync=Date.now();
-      state.health.sleepMinutes=result.sleepMinutes ?? null;
-      state.health.restingHR=result.restingHR ?? null;
-      state.health.workoutHR=result.workoutHR ?? null;
-      state.health.activeCalories=result.activeCalories ?? null;
-      state.health.steps=result.steps ?? null;
-      state.health.heartRateTime=result.heartRateTime ?? null;
-      state.health.stepsTime=result.stepsTime ?? null;
-      state.health.activeCaloriesTime=result.activeCaloriesTime ?? null;
-      state.health.sleepEndTime=result.sleepEndTime ?? null;
-      state.health.steps=result.steps ?? null;
+      mergeHealthSummary(result,"Android Health Connect");
       save();renderHealth();renderTodayDashboardExtras();
       return {ok:true};
     }catch(e){
@@ -1967,16 +2036,11 @@ async function syncRealHealth(){
     const hp=window.Capacitor?.Plugins?.HuaweiHealthNative;
     if(!hp) return {ok:false,reason:"Huawei Direct is not configured yet"};
     try{
-      const result=await hp.readSummary();
-      const hasData=(result.steps||0)>0 || result.sleepMinutes!=null || result.restingHR!=null || result.heartRate!=null;
+      const raw=await hp.readSummary();
+      const result=normalizeHealthSummary(raw);
+      const hasData=(result.steps||0)>0 || result.sleepMinutes!=null || result.restingHR!=null || result.workoutHR!=null || result.activeCalories!=null;
       if(!hasData) return {ok:false,reason:"Huawei Direct returned no usable records"};
-      state.health.connected=true;
-      state.health.provider="Huawei Direct";
-      state.health.lastSync=Date.now();
-      state.health.sleepMinutes=result.sleepMinutes ?? null;
-      state.health.restingHR=result.restingHR ?? result.heartRate ?? null;
-      state.health.workoutHR=result.heartRate ?? null;
-      state.health.steps=result.steps ?? null;
+      mergeHealthSummary(result,"Huawei Direct");
       save();renderHealth();renderTodayDashboardExtras();
       return {ok:true};
     }catch(e){
