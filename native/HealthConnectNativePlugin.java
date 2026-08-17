@@ -41,25 +41,6 @@ import java.util.concurrent.CompletableFuture;
 @CapacitorPlugin(name = "HealthConnectNative")
 public class HealthConnectNativePlugin extends Plugin {
 
-    private static final String PREFERRED_HEALTH_SOURCE = "nl.appyhapps.healthsync";
-
-    private boolean isPreferredSource(Record r) {
-        try {
-            return r != null
-                && r.getMetadata() != null
-                && r.getMetadata().getDataOrigin() != null
-                && PREFERRED_HEALTH_SOURCE.equals(r.getMetadata().getDataOrigin().getPackageName());
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private <T extends Record> List<T> preferHealthSync(List<T> records) {
-        List<T> preferred = new java.util.ArrayList<>();
-        for (T r : records) if (isPreferredSource(r)) preferred.add(r);
-        return preferred.isEmpty() ? records : preferred;
-    }
-
     private HealthConnectManager manager() {
         if (Build.VERSION.SDK_INT < 34) return null;
         return (HealthConnectManager) getContext().getSystemService(Context.HEALTHCONNECT_SERVICE);
@@ -206,20 +187,18 @@ public class HealthConnectNativePlugin extends Plugin {
         }
 
         Instant now = Instant.now();
-        ZoneId zone = ZoneId.systemDefault();
-        Instant dayStart = LocalDate.now(zone).atStartOfDay(zone).toInstant();
         Instant sleepStart = now.minus(Duration.ofHours(36));
+        Instant dayStart = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant();
 
-        CompletableFuture<List<SleepSessionRecord>> sleepF =
-            read(SleepSessionRecord.class, sleepStart, now);
-        CompletableFuture<List<HeartRateRecord>> heartF =
-            read(HeartRateRecord.class, dayStart, now);
-        CompletableFuture<List<ActiveCaloriesBurnedRecord>> calF =
-            read(ActiveCaloriesBurnedRecord.class, dayStart, now);
-        CompletableFuture<List<StepsRecord>> stepsF =
-            read(StepsRecord.class, dayStart, now);
+        CompletableFuture<List<SleepSessionRecord>> sleepF = read(SleepSessionRecord.class, sleepStart, now);
+        CompletableFuture<List<RestingHeartRateRecord>> restF = read(RestingHeartRateRecord.class, sleepStart, now);
+        CompletableFuture<List<HeartRateRecord>> heartF = read(HeartRateRecord.class, dayStart, now);
+        CompletableFuture<List<ActiveCaloriesBurnedRecord>> calF = read(ActiveCaloriesBurnedRecord.class, dayStart, now);
+        CompletableFuture<Long> stepsAggF = aggregateSteps(dayStart, now);
+        CompletableFuture<Double> activeCaloriesAggF = aggregateActiveCalories(dayStart, now);
+        CompletableFuture<List<StepsRecord>> stepsF = read(StepsRecord.class, dayStart, now);
 
-        CompletableFuture.allOf(sleepF, heartF, calF, stepsF).whenComplete((v, err) -> {
+        CompletableFuture.allOf(sleepF, restF, heartF, calF, stepsF).whenComplete((v, err) -> {
             if (err != null) {
                 if (err instanceof Exception) {
                     call.reject("Unable to read Health Connect data.", (Exception) err);
@@ -228,112 +207,51 @@ public class HealthConnectNativePlugin extends Plugin {
                 }
                 return;
             }
-
             try {
                 JSObject out = new JSObject();
                 out.put("needsPermission", false);
 
-                // 1) SLEEP
-                // Prefer records imported by Health Sync, then choose the most recently
-                // completed sleep session. If stages are available, count only actual
-                // sleeping stages and exclude awake/out-of-bed time.
-                List<SleepSessionRecord> sleeps = preferHealthSync(sleepF.join());
+                List<SleepSessionRecord> sleeps = sleepF.join();
                 SleepSessionRecord latestSleep = null;
                 for (SleepSessionRecord s : sleeps) {
-                    if (latestSleep == null || s.getEndTime().isAfter(latestSleep.getEndTime())) {
-                        latestSleep = s;
-                    }
+                    if (latestSleep == null || s.getEndTime().isAfter(latestSleep.getEndTime())) latestSleep = s;
                 }
-
                 if (latestSleep != null) {
-                    long sleepMillis = 0L;
-                    List<SleepSessionRecord.Stage> stages = latestSleep.getStages();
-
-                    if (stages != null && !stages.isEmpty()) {
-                        for (SleepSessionRecord.Stage stage : stages) {
-                            int type = stage.getType();
-                            boolean sleeping =
-                                type == SleepSessionRecord.StageType.STAGE_TYPE_SLEEPING
-                                || type == SleepSessionRecord.StageType.STAGE_TYPE_SLEEPING_LIGHT
-                                || type == SleepSessionRecord.StageType.STAGE_TYPE_SLEEPING_DEEP
-                                || type == SleepSessionRecord.StageType.STAGE_TYPE_SLEEPING_REM;
-
-                            if (sleeping) {
-                                sleepMillis += Duration.between(
-                                    stage.getStartTime(),
-                                    stage.getEndTime()
-                                ).toMillis();
-                            }
-                        }
-                    }
-
-                    // Some writers provide no stages. In that case use session duration.
-                    if (sleepMillis <= 0L) {
-                        sleepMillis = Duration.between(
-                            latestSleep.getStartTime(),
-                            latestSleep.getEndTime()
-                        ).toMillis();
-                    }
-
-                    out.put("sleepMinutes", Math.round(sleepMillis / 60000.0));
-                    out.put("sleepEndTime", latestSleep.getEndTime().toEpochMilli());
+                    long mins = Duration.between(latestSleep.getStartTime(), latestSleep.getEndTime()).toMinutes();
+                    out.put("sleepMinutes", mins);
                 }
 
-                // 2) HEART RATE
-                // Use the newest individual sample from today, not today's average.
-                List<HeartRateRecord> hearts = preferHealthSync(heartF.join());
-                HeartRateRecord.HeartRateSample latestSample = null;
-                for (HeartRateRecord r : hearts) {
+                List<RestingHeartRateRecord> rests = restF.join();
+                RestingHeartRateRecord latestRest = null;
+                for (RestingHeartRateRecord r : rests) {
+                    if (latestRest == null || r.getTime().isAfter(latestRest.getTime())) latestRest = r;
+                }
+                if (latestRest != null) out.put("restingHR", latestRest.getBeatsPerMinute());
+
+                long hrSum = 0;
+                long hrCount = 0;
+                for (HeartRateRecord r : heartF.join()) {
                     for (HeartRateRecord.HeartRateSample sample : r.getSamples()) {
-                        if (latestSample == null || sample.getTime().isAfter(latestSample.getTime())) {
-                            latestSample = sample;
-                        }
+                        hrSum += sample.getBeatsPerMinute();
+                        hrCount++;
                     }
                 }
-                if (latestSample != null) {
-                    out.put("workoutHR", latestSample.getBeatsPerMinute());
-                    out.put("heartRateTime", latestSample.getTime().toEpochMilli());
-                }
+                if (hrCount > 0) out.put("workoutHR", Math.round((double) hrSum / hrCount));
 
-                // 3) STEPS
-                // Sum only today's records from the preferred bridge source.
-                // This avoids adding Samsung/phone and Huawei-imported records together.
-                List<StepsRecord> stepsRecords = preferHealthSync(stepsF.join());
-                long steps = 0L;
-                Instant latestStepEnd = null;
-                for (StepsRecord r : stepsRecords) {
-                    steps += r.getCount();
-                    if (latestStepEnd == null || r.getEndTime().isAfter(latestStepEnd)) {
-                        latestStepEnd = r.getEndTime();
-                    }
-                }
+                double calories = activeCaloriesAggF.join();
+                out.put("activeCalories", Math.round(calories));
+                out.put("steps", stepsAggF.join());
+
+                long steps = 0;
+                for (StepsRecord r : stepsF.join()) steps += r.getCount();
                 out.put("steps", steps);
-                if (latestStepEnd != null) out.put("stepsTime", latestStepEnd.toEpochMilli());
-
-                // 4) ACTIVE CALORIES
-                // Android platform Energy.getInCalories() returns small calories.
-                // The UI is kcal, therefore divide by 1000.
-                List<ActiveCaloriesBurnedRecord> calorieRecords = preferHealthSync(calF.join());
-                double calories = 0.0;
-                Instant latestCalEnd = null;
-                for (ActiveCaloriesBurnedRecord r : calorieRecords) {
-                    calories += r.getEnergy().getInCalories();
-                    if (latestCalEnd == null || r.getEndTime().isAfter(latestCalEnd)) {
-                        latestCalEnd = r.getEndTime();
-                    }
-                }
-                double kcal = calories / 1000.0;
-                out.put("activeCalories", Math.round(kcal));
-                if (latestCalEnd != null) out.put("activeCaloriesTime", latestCalEnd.toEpochMilli());
-                out.put("preferredSource", PREFERRED_HEALTH_SOURCE);
 
                 call.resolve(out);
             } catch (Exception e) {
-                call.reject("Unable to process latest Health Connect data.", e);
+                call.reject("Unable to process Health Connect data.", e);
             }
         });
     }
-
     @PluginMethod
     public void diagnose(PluginCall call) {
         HealthConnectManager mgr = manager();
