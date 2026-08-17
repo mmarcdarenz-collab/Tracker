@@ -31,6 +31,39 @@ jobs:
       - name: Create Android project
         run: npx cap add android
 
+      - name: Set Android minSdk for Health Connect
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          # Health Connect client 1.1.0 requires Android API 26+.
+          # Capacitor creates this file during `npx cap add android`.
+          variables = Path("android/variables.gradle")
+          if variables.exists():
+              s = variables.read_text()
+              s2, n = re.subn(
+                  r'(minSdkVersion\s*=\s*)\d+',
+                  r'\g<1>26',
+                  s
+              )
+              if n == 0:
+                  raise SystemExit("minSdkVersion not found in android/variables.gradle")
+              variables.write_text(s2)
+              print("Updated android/variables.gradle:")
+              print(s2)
+          else:
+              raise SystemExit("android/variables.gradle not found")
+
+          # Defensive fallback in case a generated app/build.gradle contains
+          # a literal minSdk/minSdkVersion value.
+          app_gradle = Path("android/app/build.gradle")
+          if app_gradle.exists():
+              s = app_gradle.read_text()
+              s = re.sub(r'(?m)^(\s*minSdk(?:Version)?\s+)\d+\s*$', r'\g<1>26', s)
+              app_gradle.write_text(s)
+          PY
+
       - name: Add Health Connect SDK dependency
         run: |
           python3 - <<'PY'
@@ -63,6 +96,8 @@ jobs:
 
       - name: Verify Health Connect setup
         run: |
+          echo "Checking minSdk..."
+          grep -n 'minSdkVersion' android/variables.gradle
           echo "Checking dependency..."
           grep -n 'androidx.health.connect:connect-client:1.1.0' android/app/build.gradle
           echo "Checking plugin registration..."
