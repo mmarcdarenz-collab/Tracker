@@ -41,6 +41,25 @@ import java.util.concurrent.CompletableFuture;
 @CapacitorPlugin(name = "HealthConnectNative")
 public class HealthConnectNativePlugin extends Plugin {
 
+    private static final String PREFERRED_HEALTH_SOURCE = "nl.appyhapps.healthsync";
+
+    private boolean isPreferredSource(Record r) {
+        try {
+            return r != null
+                && r.getMetadata() != null
+                && r.getMetadata().getDataOrigin() != null
+                && PREFERRED_HEALTH_SOURCE.equals(r.getMetadata().getDataOrigin().getPackageName());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private <T extends Record> List<T> preferHealthSync(List<T> records) {
+        List<T> preferred = new java.util.ArrayList<>();
+        for (T r : records) if (isPreferredSource(r)) preferred.add(r);
+        return preferred.isEmpty() ? records : preferred;
+    }
+
     private HealthConnectManager manager() {
         if (Build.VERSION.SDK_INT < 34) return null;
         return (HealthConnectManager) getContext().getSystemService(Context.HEALTHCONNECT_SERVICE);
@@ -187,16 +206,24 @@ public class HealthConnectNativePlugin extends Plugin {
         }
 
         Instant now = Instant.now();
-        Instant sleepStart = now.minus(Duration.ofHours(36));
-        Instant dayStart = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant();
+        ZoneId zone = ZoneId.systemDefault();
+        Instant sevenDaysAgo = now.minus(Duration.ofDays(7));
+        Instant dayStart = LocalDate.now(zone).atStartOfDay(zone).toInstant();
 
-        CompletableFuture<List<SleepSessionRecord>> sleepF = read(SleepSessionRecord.class, sleepStart, now);
-        CompletableFuture<List<RestingHeartRateRecord>> restF = read(RestingHeartRateRecord.class, sleepStart, now);
-        CompletableFuture<List<HeartRateRecord>> heartF = read(HeartRateRecord.class, dayStart, now);
-        CompletableFuture<List<ActiveCaloriesBurnedRecord>> calF = read(ActiveCaloriesBurnedRecord.class, dayStart, now);
-        CompletableFuture<Long> stepsAggF = aggregateSteps(dayStart, now);
-        CompletableFuture<Double> activeCaloriesAggF = aggregateActiveCalories(dayStart, now);
-        CompletableFuture<List<StepsRecord>> stepsF = read(StepsRecord.class, dayStart, now);
+        // Important:
+        // Steps are a "today" metric.
+        // Sleep / heart rate / resting HR / calories use a 7-day search window so the
+        // app can return the latest actually available Huawei/Health Sync record.
+        CompletableFuture<List<SleepSessionRecord>> sleepF =
+            read(SleepSessionRecord.class, sevenDaysAgo, now);
+        CompletableFuture<List<RestingHeartRateRecord>> restF =
+            read(RestingHeartRateRecord.class, sevenDaysAgo, now);
+        CompletableFuture<List<HeartRateRecord>> heartF =
+            read(HeartRateRecord.class, sevenDaysAgo, now);
+        CompletableFuture<List<ActiveCaloriesBurnedRecord>> calF =
+            read(ActiveCaloriesBurnedRecord.class, sevenDaysAgo, now);
+        CompletableFuture<List<StepsRecord>> stepsF =
+            read(StepsRecord.class, dayStart, now);
 
         CompletableFuture.allOf(sleepF, restF, heartF, calF, stepsF).whenComplete((v, err) -> {
             if (err != null) {
@@ -207,51 +234,125 @@ public class HealthConnectNativePlugin extends Plugin {
                 }
                 return;
             }
+
             try {
                 JSObject out = new JSObject();
                 out.put("needsPermission", false);
 
-                List<SleepSessionRecord> sleeps = sleepF.join();
+                // SLEEP: most recently completed session, preferring Health Sync.
+                // Count actual sleep stages where available so awake time isn't added.
+                List<SleepSessionRecord> sleeps = preferHealthSync(sleepF.join());
                 SleepSessionRecord latestSleep = null;
                 for (SleepSessionRecord s : sleeps) {
-                    if (latestSleep == null || s.getEndTime().isAfter(latestSleep.getEndTime())) latestSleep = s;
-                }
-                if (latestSleep != null) {
-                    long mins = Duration.between(latestSleep.getStartTime(), latestSleep.getEndTime()).toMinutes();
-                    out.put("sleepMinutes", mins);
-                }
-
-                List<RestingHeartRateRecord> rests = restF.join();
-                RestingHeartRateRecord latestRest = null;
-                for (RestingHeartRateRecord r : rests) {
-                    if (latestRest == null || r.getTime().isAfter(latestRest.getTime())) latestRest = r;
-                }
-                if (latestRest != null) out.put("restingHR", latestRest.getBeatsPerMinute());
-
-                long hrSum = 0;
-                long hrCount = 0;
-                for (HeartRateRecord r : heartF.join()) {
-                    for (HeartRateRecord.HeartRateSample sample : r.getSamples()) {
-                        hrSum += sample.getBeatsPerMinute();
-                        hrCount++;
+                    if (latestSleep == null || s.getEndTime().isAfter(latestSleep.getEndTime())) {
+                        latestSleep = s;
                     }
                 }
-                if (hrCount > 0) out.put("workoutHR", Math.round((double) hrSum / hrCount));
+                if (latestSleep != null) {
+                    long sleepMillis = 0L;
+                    List<SleepSessionRecord.Stage> stages = latestSleep.getStages();
+                    if (stages != null && !stages.isEmpty()) {
+                        for (SleepSessionRecord.Stage stage : stages) {
+                            int type = stage.getType();
+                            boolean sleeping =
+                                type == SleepSessionRecord.StageType.STAGE_TYPE_SLEEPING
+                                || type == SleepSessionRecord.StageType.STAGE_TYPE_SLEEPING_LIGHT
+                                || type == SleepSessionRecord.StageType.STAGE_TYPE_SLEEPING_DEEP
+                                || type == SleepSessionRecord.StageType.STAGE_TYPE_SLEEPING_REM;
+                            if (sleeping) {
+                                sleepMillis += Duration.between(
+                                    stage.getStartTime(), stage.getEndTime()
+                                ).toMillis();
+                            }
+                        }
+                    }
+                    if (sleepMillis <= 0L) {
+                        sleepMillis = Duration.between(
+                            latestSleep.getStartTime(), latestSleep.getEndTime()
+                        ).toMillis();
+                    }
+                    out.put("sleepMinutes", Math.round(sleepMillis / 60000.0));
+                    out.put("sleepEndTime", latestSleep.getEndTime().toEpochMilli());
+                }
 
-                double calories = activeCaloriesAggF.join();
-                out.put("activeCalories", Math.round(calories));
-                out.put("steps", stepsAggF.join());
+                // RESTING HR: latest available record in the last 7 days.
+                List<RestingHeartRateRecord> rests = preferHealthSync(restF.join());
+                RestingHeartRateRecord latestRest = null;
+                for (RestingHeartRateRecord r : rests) {
+                    if (latestRest == null || r.getTime().isAfter(latestRest.getTime())) {
+                        latestRest = r;
+                    }
+                }
+                if (latestRest != null) {
+                    out.put("restingHR", latestRest.getBeatsPerMinute());
+                }
 
-                long steps = 0;
-                for (StepsRecord r : stepsF.join()) steps += r.getCount();
+                // HEART RATE: newest individual sample, not an average.
+                List<HeartRateRecord> hearts = preferHealthSync(heartF.join());
+                HeartRateRecord.HeartRateSample latestSample = null;
+                for (HeartRateRecord r : hearts) {
+                    for (HeartRateRecord.HeartRateSample sample : r.getSamples()) {
+                        if (latestSample == null || sample.getTime().isAfter(latestSample.getTime())) {
+                            latestSample = sample;
+                        }
+                    }
+                }
+                if (latestSample != null) {
+                    out.put("workoutHR", latestSample.getBeatsPerMinute());
+                    out.put("heartRateTime", latestSample.getTime().toEpochMilli());
+                }
+
+                // STEPS: today only.
+                List<StepsRecord> stepsRecords = preferHealthSync(stepsF.join());
+                long steps = 0L;
+                Instant latestStepEnd = null;
+                for (StepsRecord r : stepsRecords) {
+                    steps += r.getCount();
+                    if (latestStepEnd == null || r.getEndTime().isAfter(latestStepEnd)) {
+                        latestStepEnd = r.getEndTime();
+                    }
+                }
                 out.put("steps", steps);
+                if (latestStepEnd != null) out.put("stepsTime", latestStepEnd.toEpochMilli());
 
+                // ACTIVE CALORIES:
+                // Find the newest calendar day that actually contains calorie records and
+                // total only that day. This avoids showing 0 just because today's writer
+                // has not yet produced an ActiveCalories record.
+                List<ActiveCaloriesBurnedRecord> calorieRecords = preferHealthSync(calF.join());
+                LocalDate latestCalDate = null;
+                for (ActiveCaloriesBurnedRecord r : calorieRecords) {
+                    LocalDate d = r.getEndTime().atZone(zone).toLocalDate();
+                    if (latestCalDate == null || d.isAfter(latestCalDate)) latestCalDate = d;
+                }
+
+                if (latestCalDate != null) {
+                    double smallCalories = 0.0;
+                    Instant latestCalEnd = null;
+                    for (ActiveCaloriesBurnedRecord r : calorieRecords) {
+                        LocalDate d = r.getEndTime().atZone(zone).toLocalDate();
+                        if (d.equals(latestCalDate)) {
+                            smallCalories += r.getEnergy().getInCalories();
+                            if (latestCalEnd == null || r.getEndTime().isAfter(latestCalEnd)) {
+                                latestCalEnd = r.getEndTime();
+                            }
+                        }
+                    }
+                    // Android's platform Energy value is small calories; UI displays kcal.
+                    out.put("activeCalories", Math.round(smallCalories / 1000.0));
+                    if (latestCalEnd != null) {
+                        out.put("activeCaloriesTime", latestCalEnd.toEpochMilli());
+                    }
+                }
+
+                out.put("preferredSource", PREFERRED_HEALTH_SOURCE);
                 call.resolve(out);
             } catch (Exception e) {
-                call.reject("Unable to process Health Connect data.", e);
+                call.reject("Unable to process Health Connect summary.", e);
             }
         });
     }
+
     @PluginMethod
     public void diagnose(PluginCall call) {
         HealthConnectManager mgr = manager();
