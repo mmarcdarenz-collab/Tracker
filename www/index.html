@@ -7323,5 +7323,451 @@ window.dtQuickLogWorkout=quickLog;
 window.DT_WORKOUT_FIRST_UI_VERSION=DT_V10;
 })();
 </script>
+
+<style id="dt-v11-reminders-detail-progress-css">
+/* =========================================================
+   V11 — subtle training reminders + detailed exercise trend
+   ========================================================= */
+
+/* Reminder settings/prompt */
+#dtReminderModal,#dtReminderPromptModal{
+  position:fixed;inset:0;z-index:10410;display:none;align-items:flex-end;justify-content:center;
+  background:rgba(1,7,12,.78);backdrop-filter:blur(8px)
+}
+#dtReminderModal.show,#dtReminderPromptModal.show{display:flex}
+.dt-rem-sheet{
+  width:min(620px,100%);background:#071720;border:1px solid #214154;border-radius:27px 27px 0 0;
+  padding:20px 17px calc(23px + env(safe-area-inset-bottom))
+}
+.dt-rem-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.dt-rem-kicker{color:#62dda1;font:800 9px system-ui;letter-spacing:.11em;text-transform:uppercase}
+.dt-rem-title{color:#f0f6f8;font:850 22px/1.15 system-ui;margin:5px 0}
+.dt-rem-copy{color:#78909d;font:550 10px/1.5 system-ui;max-width:480px}
+.dt-rem-close{width:38px;height:38px;border:1px solid #294553;border-radius:13px;background:#0c1c26;color:#eef6fa;font-size:21px;flex:none}
+.dt-rem-card{margin-top:13px;padding:13px;border:1px solid #1d3847;border-radius:16px;background:#091a24}
+.dt-rem-line{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.dt-rem-line + .dt-rem-line{margin-top:12px;padding-top:12px;border-top:1px solid #142e3a}
+.dt-rem-line b{display:block;color:#dfe9ed;font:800 11px system-ui}
+.dt-rem-line small{display:block;color:#6d8592;font:550 8px/1.4 system-ui;margin-top:3px}
+.dt-rem-toggle{
+  width:48px;height:28px;border-radius:999px;border:1px solid #294451;background:#10212b;position:relative;flex:none
+}
+.dt-rem-toggle i{
+  position:absolute;width:20px;height:20px;border-radius:50%;left:3px;top:3px;background:#758893;transition:.2s ease
+}
+.dt-rem-toggle.on{border-color:#37795e;background:#123729}
+.dt-rem-toggle.on i{left:23px;background:#58dda1}
+.dt-rem-time{
+  width:102px;border:1px solid #294451;border-radius:11px;background:#0c1c26;color:#eaf2f5;
+  padding:8px 9px;font:800 10px system-ui;text-align:center
+}
+.dt-rem-preview{
+  margin-top:11px;padding:11px 12px;border-left:2px solid #3f725f;background:#091820;border-radius:0 12px 12px 0
+}
+.dt-rem-preview b{display:block;color:#dde7eb;font:800 10px system-ui}
+.dt-rem-preview span{display:block;color:#718894;font:550 9px system-ui;margin-top:3px}
+.dt-rem-status{margin-top:9px;color:#6f8793;font:600 8px/1.45 system-ui}
+.dt-rem-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.dt-rem-actions button{padding:11px;border-radius:13px;font:850 10px system-ui}
+.dt-rem-cancel{border:1px solid #29414f;background:#0b1a24;color:#cddbe1}
+.dt-rem-save{border:1px solid #2f785a;background:#12382a;color:#72e0ab}
+.dt-rem-prompt-actions{display:grid;grid-template-columns:1fr 1.25fr;gap:8px;margin-top:14px}
+.dt-rem-prompt-actions button{padding:12px;border-radius:13px;font:850 10px system-ui}
+.dt-rem-notnow{border:1px solid #29414f;background:#0b1a24;color:#9cb0ba}
+.dt-rem-enable{border:1px solid #2f785a;background:#12382a;color:#72e0ab}
+.dt-rem-apk-note{margin-top:9px;color:#5f7784;font:500 8px/1.4 system-ui}
+
+#dtReminderSettingsBtn{}
+
+/* Detailed exercise progress: Combined / Detail */
+.dt-v11-mode{
+  display:flex;align-items:center;gap:3px;margin:-3px 0 10px;padding:3px;border:1px solid #183540;
+  border-radius:10px;background:#081821;width:max-content
+}
+.dt-v11-mode button{
+  border:0;background:transparent;color:#6f8693;padding:6px 9px;border-radius:8px;font:800 8px system-ui
+}
+.dt-v11-mode button.active{background:rgba(85,221,160,.09);color:#64dda4}
+
+.dt-v11-detail{display:grid;gap:11px}
+.dt-v11-chart-block{
+  padding:12px;border:1px solid #18343f;border-radius:14px;background:#081921
+}
+.dt-v11-chart-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-bottom:7px}
+.dt-v11-chart-title small{display:block;color:#718994;font:750 8px system-ui;text-transform:uppercase;letter-spacing:.06em}
+.dt-v11-chart-title strong{display:block;color:#e9f1f4;font:850 17px system-ui;margin-top:3px}
+.dt-v11-chart-title em{font-style:normal;color:#60dda2;font:800 8px system-ui;margin-left:5px}
+.dt-v11-chart-avg{text-align:right}
+.dt-v11-chart-avg small{display:block;color:#627a87;font:700 7px system-ui;text-transform:uppercase}
+.dt-v11-chart-avg b{display:block;color:#9aabb4;font:800 9px system-ui;margin-top:3px}
+.dt-v11-mini-chart{height:88px}
+.dt-v11-mini-chart svg{width:100%;height:100%;display:block}
+.dt-v11-mini-grid{stroke:#17313d;stroke-width:.7}
+.dt-v11-mini-line{fill:none;stroke-width:1.05;stroke-linejoin:miter;stroke-linecap:round}
+.dt-v11-mini-date{fill:#607985;font:650 6.5px system-ui}
+.dt-v11-detail-note{color:#5f7784;font:500 8px/1.45 system-ui;margin-top:2px}
+
+/* Settings row styling if base class is weak */
+#dtReminderSettingsBtn{
+  width:100%;background:transparent;color:inherit;border-left:0;border-right:0;
+}
+</style>
+
+<script id="dt-v11-reminders-detail-progress-js">
+(()=>{
+"use strict";
+const DT_V11="11.0-reminders-detailed-progress";
+const REM_CHANNEL="marc-training-reminders";
+const REM_ID_BASE=730000;
+const DAY_KEYS=["sun","mon","tue","wed","thu","fri","sat"];
+const CAP_WEEKDAY=[1,2,3,4,5,6,7];
+
+function reminderState(){
+  state.notifications=state.notifications||{};
+  const n=state.notifications;
+  if(typeof n.trainingEnabled!=="boolean")n.trainingEnabled=false;
+  if(!n.trainingTime)n.trainingTime="17:30";
+  if(!Array.isArray(n.scheduledIds))n.scheduledIds=[];
+  return n;
+}
+function localPlugin(){
+  return window.Capacitor?.Plugins?.LocalNotifications||null;
+}
+function isNativeApp(){
+  try{return !!window.Capacitor?.isNativePlatform?.() || !!window.Capacitor?.Plugins?.LocalNotifications}catch(_){return false}
+}
+function trainingAssignments(){
+  const days=state.trainingSchedule?.days||{};
+  return DAY_KEYS.map((k,i)=>({key:k,weekday:CAP_WEEKDAY[i],slot:days[k]||null})).filter(x=>x.slot);
+}
+function slotName(slot){
+  if(!slot)return "Workout";
+  try{return window.dtWorkoutDisplayName?.(slot)||plans?.[slot]?.title||String(slot).toUpperCase()}catch(_){return String(slot).toUpperCase()}
+}
+function reminderIdForDate(d){
+  const y=d.getFullYear(),m=d.getMonth()+1,day=d.getDate();
+  return REM_ID_BASE + ((y*372+m*31+day)%90000);
+}
+function dateKeyLocal(d){
+  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+function dayCompleted(dateKey){
+  if(state.days?.[dateKey]?.workout)return true;
+  return (state.workouts?.completedExercises||[]).some(x=>String(x.dayKey||"")===dateKey);
+}
+async function ensureReminderChannel(){
+  const p=localPlugin();if(!p?.createChannel)return false;
+  try{
+    await p.createChannel({
+      id:REM_CHANNEL,
+      name:"Training reminders",
+      description:"Quiet reminders on scheduled training days.",
+      importance:2,
+      vibration:false,
+      lights:false
+    });
+    return true;
+  }catch(e){console.warn("Reminder channel unavailable",e);return false}
+}
+async function notificationPermission(request=false){
+  const p=localPlugin();if(!p)return "unavailable";
+  try{
+    let s=await p.checkPermissions();
+    if(request && s.display!=="granted")s=await p.requestPermissions();
+    return s.display||"unknown";
+  }catch(e){console.warn("Notification permission check failed",e);return "error"}
+}
+async function cancelTrainingReminders(){
+  const p=localPlugin(),n=reminderState();
+  if(p?.cancel && n.scheduledIds.length){
+    try{await p.cancel({notifications:n.scheduledIds.map(id=>({id}))})}catch(e){console.warn("Reminder cancel failed",e)}
+  }
+  n.scheduledIds=[];
+  try{save()}catch(_){}
+}
+async function syncTrainingReminders({requestPermission=false}={}){
+  const n=reminderState(),p=localPlugin();
+  if(!p){
+    n.lastStatus="APK required";
+    try{save()}catch(_){}
+    renderReminderSettings();
+    return {ok:false,status:"unavailable"};
+  }
+  await cancelTrainingReminders();
+  if(!n.trainingEnabled){
+    n.lastStatus="Off";
+    try{save()}catch(_){}
+    renderReminderSettings();
+    return {ok:true,status:"off"};
+  }
+  const perm=await notificationPermission(requestPermission);
+  if(perm!=="granted"){
+    n.trainingEnabled=false;
+    n.lastStatus=perm==="denied"?"Permission denied":"Permission not granted";
+    try{save()}catch(_){}
+    renderReminderSettings();
+    return {ok:false,status:perm};
+  }
+  await ensureReminderChannel();
+
+  const assignments=trainingAssignments();
+  const [hh,mm]=String(n.trainingTime||"17:30").split(":").map(Number);
+  const now=new Date(),notifications=[];
+  for(let add=0;add<56;add++){
+    const d=new Date(now);
+    d.setHours(hh||0,mm||0,0,0);
+    d.setDate(now.getDate()+add);
+    const key=DAY_KEYS[d.getDay()];
+    const ass=assignments.find(x=>x.key===key);
+    if(!ass)continue;
+    if(d.getTime()<=now.getTime())continue;
+    const dk=dateKeyLocal(d);
+    if(dayCompleted(dk))continue;
+    const id=reminderIdForDate(d);
+    notifications.push({
+      id,
+      title:"M/ARC · Training day",
+      body:`${slotName(ass.slot)} is ready when you are.`,
+      channelId:REM_CHANNEL,
+      autoCancel:true,
+      ongoing:false,
+      schedule:{at:d,allowWhileIdle:false},
+      isExactNotification:false,
+      extra:{type:"training-day",slot:ass.slot,dateKey:dk}
+    });
+  }
+  try{
+    if(notifications.length)await p.schedule({notifications});
+    n.scheduledIds=notifications.map(x=>x.id);
+    n.lastStatus=notifications.length?`${notifications.length} quiet reminders scheduled`:"No upcoming training days";
+    n.lastSyncedAt=new Date().toISOString();
+    save();
+    renderReminderSettings();
+    return {ok:true,count:notifications.length};
+  }catch(e){
+    console.warn("Training reminder schedule failed",e);
+    n.lastStatus="Scheduling failed";
+    save();renderReminderSettings();
+    return {ok:false,status:"error"};
+  }
+}
+function timeHuman(v){
+  const [h,m]=String(v||"17:30").split(":").map(Number);
+  try{return new Date(2000,0,1,h,m).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}catch(_){return v}
+}
+function ensureReminderModals(){
+  if(!document.getElementById("dtReminderModal")){
+    const m=document.createElement("div");m.id="dtReminderModal";
+    m.innerHTML=`<section class="dt-rem-sheet"><div class="dt-rem-head"><div><div class="dt-rem-kicker">Training reminders</div><div class="dt-rem-title">Quiet by default</div><div class="dt-rem-copy">One subtle reminder on scheduled training days. No repeated alerts, no streak pressure, and no reminder after a completed workout is detected.</div></div><button class="dt-rem-close" type="button">×</button></div><div id="dtReminderBody"></div></section>`;
+    m.onclick=e=>{if(e.target===m)m.classList.remove("show")};
+    m.querySelector(".dt-rem-close").onclick=()=>m.classList.remove("show");
+    document.body.appendChild(m);
+  }
+  if(!document.getElementById("dtReminderPromptModal")){
+    const m=document.createElement("div");m.id="dtReminderPromptModal";
+    m.innerHTML=`<section class="dt-rem-sheet"><div class="dt-rem-kicker">OPTIONAL</div><div class="dt-rem-title">Remind you on training days?</div><div class="dt-rem-copy">M/ARC can send one quiet notification on the days in your Training Schedule. You can turn it off anytime.</div><div class="dt-rem-card"><div class="dt-rem-line"><div><b>Training days only</b><small>No daily spam. No repeated follow-ups.</small></div><input class="dt-rem-time" id="dtPromptReminderTime" type="time" value="17:30"></div><div class="dt-rem-preview"><b>M/ARC · Training day</b><span>Push Day is ready when you are.</span></div></div><div class="dt-rem-prompt-actions"><button class="dt-rem-notnow" type="button">Not now</button><button class="dt-rem-enable" type="button">Enable reminder</button></div><div class="dt-rem-apk-note">Notifications are available in the Android APK. The HTML/browser preview keeps the setting but cannot post native Android reminders.</div></section>`;
+    m.onclick=e=>{if(e.target===m)m.classList.remove("show")};
+    m.querySelector(".dt-rem-notnow").onclick=()=>{
+      const n=reminderState();n.promptSeen=true;n.trainingEnabled=false;save();m.classList.remove("show");
+    };
+    m.querySelector(".dt-rem-enable").onclick=async()=>{
+      const n=reminderState();n.promptSeen=true;n.trainingEnabled=true;n.trainingTime=document.getElementById("dtPromptReminderTime").value||"17:30";save();
+      const btn=m.querySelector(".dt-rem-enable");btn.textContent="Enabling…";btn.disabled=true;
+      const res=await syncTrainingReminders({requestPermission:true});
+      btn.textContent=res.ok?"Enabled ✓":"Open settings later";btn.disabled=false;
+      setTimeout(()=>m.classList.remove("show"),650);
+    };
+    document.body.appendChild(m);
+  }
+}
+function renderReminderSettings(){
+  const body=document.getElementById("dtReminderBody");if(!body)return;
+  const n=reminderState(),native=isNativeApp();
+  body.innerHTML=`<div class="dt-rem-card">
+    <div class="dt-rem-line"><div><b>Training-day reminder</b><small>One notification on scheduled workout days.</small></div><button id="dtReminderToggle" class="dt-rem-toggle ${n.trainingEnabled?"on":""}" type="button" aria-label="Toggle reminder"><i></i></button></div>
+    <div class="dt-rem-line"><div><b>Preferred time</b><small>Timing is intentionally approximate and non-urgent.</small></div><input id="dtReminderTime" class="dt-rem-time" type="time" value="${n.trainingTime||"17:30"}"></div>
+    <div class="dt-rem-preview"><b>M/ARC · Training day</b><span>${slotName(trainingAssignments()[0]?.slot||"push")} is ready when you are.</span></div>
+    <div class="dt-rem-status">${native?(n.lastStatus||"Ready to configure"):"APK only · browser preview cannot schedule native reminders"}</div>
+  </div>
+  <div class="dt-rem-actions"><button class="dt-rem-cancel" type="button">Cancel</button><button class="dt-rem-save" type="button">Save reminder</button></div>`;
+  body.querySelector("#dtReminderToggle").onclick=e=>e.currentTarget.classList.toggle("on");
+  body.querySelector(".dt-rem-cancel").onclick=()=>document.getElementById("dtReminderModal").classList.remove("show");
+  body.querySelector(".dt-rem-save").onclick=async()=>{
+    const n=reminderState();
+    n.trainingEnabled=body.querySelector("#dtReminderToggle").classList.contains("on");
+    n.trainingTime=body.querySelector("#dtReminderTime").value||"17:30";
+    n.promptSeen=true;save();
+    const btn=body.querySelector(".dt-rem-save");btn.textContent="Saving…";btn.disabled=true;
+    const res=await syncTrainingReminders({requestPermission:n.trainingEnabled});
+    btn.textContent=res.ok?"Saved ✓":"Saved locally";
+    setTimeout(()=>document.getElementById("dtReminderModal")?.classList.remove("show"),550);
+  };
+}
+function openReminderSettings(){
+  ensureReminderModals();renderReminderSettings();document.getElementById("dtReminderModal").classList.add("show");
+}
+function addReminderSettingsEntry(){
+  if(document.getElementById("dtReminderSettingsBtn"))return;
+  const schedule=document.getElementById("dtScheduleSettingsBtn");
+  const reset=document.getElementById("resetBtn");
+  const anchor=schedule||reset;if(!anchor)return;
+  const b=document.createElement("button");b.id="dtReminderSettingsBtn";b.className="setting-row dt-program-setting";b.type="button";
+  b.innerHTML='<span><b>Training reminders</b><small>Quiet notifications on scheduled training days.</small></span><span>›</span>';
+  b.onclick=openReminderSettings;
+  anchor.insertAdjacentElement(schedule?"afterend":"beforebegin",b);
+}
+function addReminderToMore(){
+  const grid=document.querySelector("#dtV10MoreModal .dt-more-grid");if(!grid||grid.querySelector('[data-more="reminders"]'))return;
+  const schedule=grid.querySelector('[data-more="schedule"]');
+  const b=document.createElement("button");b.className="dt-more-item";b.dataset.more="reminders";
+  b.innerHTML='<b>Training reminders</b><small>One quiet alert on scheduled training days.</small>';
+  if(schedule)schedule.insertAdjacentElement("afterend",b);else grid.prepend(b);
+  b.onclick=()=>{document.getElementById("dtV10MoreModal")?.classList.remove("show");openReminderSettings()};
+}
+function maybePromptReminder(){
+  const n=reminderState();
+  if(n.promptSeen)return;
+  const onboardDone=!!state.onboarding?.completed;
+  const hasSchedule=trainingAssignments().length>0;
+  if(!onboardDone||!hasSchedule)return;
+  ensureReminderModals();
+  setTimeout(()=>document.getElementById("dtReminderPromptModal")?.classList.add("show"),700);
+}
+
+/* Re-sync when user changes training schedule. */
+document.addEventListener("click",ev=>{
+  if(ev.target.closest?.("#dtSchedBody .dt-sched-save")){
+    setTimeout(()=>syncTrainingReminders(),650);
+  }
+  if(ev.target.closest?.("#saveWorkout")){
+    setTimeout(()=>syncTrainingReminders(),900);
+  }
+},true);
+
+/* Detect a newly completed today's workout and cancel/rebuild future reminders. */
+let lastWorkoutDone=null;
+setInterval(()=>{
+  const k=(()=>{
+    const d=new Date(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");
+    return `${d.getFullYear()}-${m}-${day}`;
+  })();
+  const done=!!state.days?.[k]?.workout;
+  if(lastWorkoutDone===null){lastWorkoutDone=done;return}
+  if(done!==lastWorkoutDone){lastWorkoutDone=done;syncTrainingReminders()}
+},30000);
+
+/* Tapping the notification opens the scheduled workout. */
+async function bindNotificationAction(){
+  const p=localPlugin();if(!p?.addListener)return;
+  try{
+    await p.addListener("localNotificationActionPerformed",event=>{
+      const slot=event?.notification?.extra?.slot;
+      try{switchView("workout")}catch(_){}
+      if(slot)setTimeout(()=>document.querySelector(`.workout-tab[data-wday="${slot}"]`)?.click(),180);
+    });
+  }catch(e){console.warn("Notification action listener unavailable",e)}
+}
+
+/* ---------- Detailed progress view ---------- */
+function v11Norm(v){return String(v||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}
+function v11Key(e){try{return String(exerciseKey(e))}catch(_){return String(e?.[4]||"")}}
+function v11Sessions(e){
+  const key=v11Key(e),name=v11Norm(e?.[0]),type=v11Norm(e?.[1]),by=new Map();
+  (state.workouts?.completedExercises||[]).forEach(x=>{
+    const exact=x.exerciseKey&&key&&String(x.exerciseKey)===key;
+    const named=v11Norm(x.name)===name&&(!type||!x.type||v11Norm(x.type)===type);
+    if(!exact&&!named)return;
+    const sets=(x.sets||[]).map(s=>({kg:+s.kg||0,reps:+s.reps||0})).filter(s=>s.kg>0&&s.reps>0);
+    if(!sets.length)return;
+    const dk=String(x.dayKey||x.finalizedAt||"").slice(0,10),rec=by.get(dk)||{date:dk,sets:[]};
+    rec.sets.push(...sets);by.set(dk,rec);
+  });
+  return [...by.values()].sort((a,b)=>a.date.localeCompare(b.date)).map(x=>({
+    date:x.date,
+    volume:x.sets.reduce((n,s)=>n+s.kg*s.reps,0),
+    reps:x.sets.reduce((n,s)=>n+s.reps,0),
+    sets:x.sets.length
+  }));
+}
+function v11Pct(a,b){return a?((b-a)/a*100):0}
+function v11Date(s){try{return new Intl.DateTimeFormat(undefined,{month:"short",day:"numeric"}).format(new Date(s+"T12:00:00"))}catch(_){return s}}
+function v11MiniChart(data,field,color){
+  if(data.length<2)return '<div class="dt-px-empty">Need at least two completed workouts.</div>';
+  const W=500,H=88,px=12,base=66,usable=W-px*2,max=Math.max(...data.map(x=>x[field]),1);
+  const pts=data.map((d,i)=>({x:px+i*usable/(data.length-1),y:base-(d[field]/max)*50,d}));
+  const line="M "+pts.map(p=>`${p.x} ${p.y}`).join(" L ");
+  const area=`M ${pts[0].x} ${base} L `+pts.map(p=>`${p.x} ${p.y}`).join(" L ")+` L ${pts.at(-1).x} ${base} Z`;
+  const labels=data.map((d,i)=>{
+    if(data.length>6&&i!==0&&i!==data.length-1)return "";
+    return `<text class="dt-v11-mini-date" x="${pts[i].x}" y="84" text-anchor="middle">${v11Date(d.date)}</text>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><defs><linearGradient id="g${field}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".27"/><stop offset="1" stop-color="${color}" stop-opacity=".015"/></linearGradient></defs><line class="dt-v11-mini-grid" x1="${px}" x2="${W-px}" y1="18" y2="18"/><line class="dt-v11-mini-grid" x1="${px}" x2="${W-px}" y1="42" y2="42"/><line class="dt-v11-mini-grid" x1="${px}" x2="${W-px}" y1="${base}" y2="${base}"/><path d="${area}" fill="url(#g${field})"/><path class="dt-v11-mini-line" d="${line}" stroke="${color}"/>${labels}</svg>`;
+}
+function v11DetailHtml(data){
+  const spec=[
+    ["volume","Volume","kg","#55dda0",v=>Math.round(v).toLocaleString()+" kg"],
+    ["reps","Reps","reps","#55aaff",v=>Math.round(v).toLocaleString()+" reps"],
+    ["sets","Sets","sets","#a45cf2",v=>Math.round(v).toLocaleString()+" sets"]
+  ];
+  return `<div class="dt-v11-detail">${spec.map(([f,label,unit,color,fmt])=>{
+    const vals=data.map(x=>x[f]),total=vals.reduce((a,b)=>a+b,0),avg=vals.length?total/vals.length:0;
+    const ch=data.length>1?v11Pct(vals[0],vals.at(-1)):0;
+    return `<div class="dt-v11-chart-block"><div class="dt-v11-chart-head"><div class="dt-v11-chart-title"><small>${label}</small><strong>${fmt(total)} ${data.length>1?`<em>${ch>=0?"↑":"↓"} ${Math.abs(ch).toFixed(1)}%</em>`:""}</strong></div><div class="dt-v11-chart-avg"><small>Avg / workout</small><b>${fmt(avg)}</b></div></div><div class="dt-v11-mini-chart">${v11MiniChart(data,f,color)}</div></div>`;
+  }).join("")}<div class="dt-v11-detail-note">Volume = load × reps across logged working sets. Reps and sets are workout totals. Trends are your training history, not direct measures of muscle growth.</div></div>`;
+}
+function addDetailMode(e,days=90){
+  const content=document.getElementById("dtPxContent");if(!content)return;
+  const card=[...content.querySelectorAll(".dt-px-card")].find(x=>x.querySelector("h4")?.textContent.trim().toLowerCase()==="performance trend");
+  if(!card||card.dataset.v11)return;
+  card.dataset.v11="1";
+  const original=card.innerHTML;
+  let all=v11Sessions(e);
+  const render=(mode,range=days)=>{
+    const cutoff=Date.now()-range*86400000,data=all.filter(x=>new Date(x.date+"T12:00:00").getTime()>=cutoff);
+    if(mode==="combined"){
+      card.innerHTML=original;
+      const h=card.querySelector("h4");
+      if(h)h.insertAdjacentHTML("afterend",`<div class="dt-v11-mode"><button class="active" data-mode="combined">Combined</button><button data-mode="detail">Detail</button></div>`);
+      card.querySelector('[data-mode="detail"]').onclick=()=>render("detail",range);
+    }else{
+      card.innerHTML=`<h4>Performance trend</h4><div class="dt-v11-mode"><button data-mode="combined">Combined</button><button class="active" data-mode="detail">Detail</button></div><div class="dt-v10-range">${[[30,"1M"],[90,"3M"],[180,"6M"],[365,"1Y"]].map(x=>`<button type="button" data-v11-days="${x[0]}" class="${x[0]===range?"active":""}">${x[1]}</button>`).join("")}</div>${v11DetailHtml(data)}`;
+      card.querySelector('[data-mode="combined"]').onclick=()=>render("combined",range);
+      card.querySelectorAll("[data-v11-days]").forEach(b=>b.onclick=()=>render("detail",+b.dataset.v11Days));
+    }
+  };
+  render("combined",days);
+}
+document.addEventListener("click",ev=>{
+  if(!ev.target.closest?.(".dt-progress-open"))return;
+  setTimeout(()=>{
+    const title=document.querySelector("#dtPxContent .dt-px-title")?.textContent.trim();
+    if(!title)return;
+    let e=null;try{e=(effectiveExercises(wday)||[]).find(x=>String(x[0])===title)}catch(_){}
+    if(e)addDetailMode(e,90);
+  },170);
+},true);
+
+const oldV11Progress=window.dtOpenExerciseProgress;
+if(typeof oldV11Progress==="function"){
+  window.dtOpenExerciseProgress=function(e){
+    oldV11Progress(e);
+    setTimeout(()=>addDetailMode(e,90),140);
+  };
+}
+
+function bootV11(){
+  reminderState();ensureReminderModals();addReminderSettingsEntry();addReminderToMore();bindNotificationAction();
+  maybePromptReminder();
+  if(reminderState().trainingEnabled)setTimeout(()=>syncTrainingReminders(),1000);
+}
+document.readyState==="loading"?document.addEventListener("DOMContentLoaded",bootV11):bootV11();
+setTimeout(()=>{addReminderSettingsEntry();addReminderToMore();maybePromptReminder()},900);
+
+window.dtOpenReminderSettings=openReminderSettings;
+window.dtSyncTrainingReminders=syncTrainingReminders;
+window.DT_REMINDERS_DETAIL_PROGRESS_VERSION=DT_V11;
+})();
+</script>
 </body>
 </html>
