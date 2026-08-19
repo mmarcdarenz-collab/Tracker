@@ -8153,6 +8153,7 @@ window.DT_MARC_PRODUCTION_V12=DT_V12;
 .dt-ex-generate:disabled{opacity:.55}
 .dt-ex-result{min-height:18px;margin-top:9px;color:#728a96;font:650 8px/1.45 system-ui}
 .dt-ex-result.good{color:#66dda5}.dt-ex-result.bad{color:#df837a}
+.dt-ex-preview{width:100%;display:block;border-radius:14px;border:1px solid #1c3745;margin-bottom:9px;background:#050e15}
 </style>
 
 <script id="dt-v14-export-final-js">
@@ -8317,22 +8318,26 @@ function exText(ctx,t,x,y,size,color="#eaf2f4",weight=700,align="left"){
 }
 async function exVisualCanvas(a,start,end){
   /*
-    M/ARC Export Renderer V17
-    Export-only scope.
-    Goals:
-    - keep report minimal
-    - make anatomy the visual centrepiece
-    - preserve SVG aspect ratio (no stretching/warping)
-    - emphasize only the most useful progress signals
+    M/ARC Export Renderer V22
+    Restores the fuller "premium" training report layout: progression,
+    muscle group performance, muscle emphasis map, top exercise
+    progress, highlights, period comparison and next steps.
+    Everything is computed from data already produced by exAnalyze()
+    and drawn with vector primitives -- no new binary image assets are
+    added to the build (no growth in packaged app size).
+    The report is drawn onto a tall scratch canvas, then cropped to
+    the real content height so short date ranges don't ship with a
+    block of empty space at the bottom.
   */
-  const c=document.createElement("canvas");c.width=1080;c.height=1920;
-  const ctx=c.getContext("2d");
+  const W=1080, MAXH=4300, margin=55, contentW=W-margin*2, rightEdge=W-margin;
+  const scratch=document.createElement("canvas");scratch.width=W;scratch.height=MAXH;
+  const ctx=scratch.getContext("2d");
   const C={
     bg:"#06131b",panel:"#091b24",line:"#17323e",text:"#eef5f7",muted:"#708793",
     green:"#55dda0",blue:"#55aaff",purple:"#9a72ef",orange:"#dca06e",
     base:"#283942",edge:"#3c5561"
   };
-  ctx.fillStyle=C.bg;ctx.fillRect(0,0,c.width,c.height);
+  ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,MAXH);
 
   const rr=(x,y,w,h,r,fill,stroke)=>{
     ctx.beginPath();ctx.roundRect(x,y,w,h,r);
@@ -8345,12 +8350,40 @@ async function exVisualCanvas(a,start,end){
   const ln=(x1,y1,x2,y2,col=C.line,w=1)=>{
     ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.strokeStyle=col;ctx.lineWidth=w;ctx.stroke();
   };
+  const dot=(x,y,r,col)=>{ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=col;ctx.fill()};
   const drawContain=(img,x,y,w,h)=>{
     const iw=img.naturalWidth||img.width||1, ih=img.naturalHeight||img.height||1;
     const scale=Math.min(w/iw,h/ih);
     const dw=iw*scale, dh=ih*scale;
     ctx.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);
   };
+  const wrapText=(text,maxWidth,size,weight=600)=>{
+    ctx.font=`${weight} ${size}px system-ui,Arial`;
+    const words=String(text).split(" ");const lines=[];let cur="";
+    words.forEach(word=>{
+      const test=cur?cur+" "+word:word;
+      if(ctx.measureText(test).width>maxWidth&&cur){lines.push(cur);cur=word}
+      else cur=test;
+    });
+    if(cur)lines.push(cur);
+    return lines;
+  };
+  const dumbbell=(cx,cy,col)=>{
+    ctx.strokeStyle=col;ctx.lineWidth=3;ctx.lineCap="round";
+    ctx.beginPath();ctx.moveTo(cx-9,cy);ctx.lineTo(cx+9,cy);ctx.stroke();
+    rr(cx-14,cy-7,6,14,2,col);rr(cx+8,cy-7,6,14,2,col);
+  };
+  const checkMark=(cx,cy,col)=>{
+    rr(cx-13,cy-13,26,26,10,"#0e2a20",col);
+    ctx.strokeStyle=col;ctx.lineWidth=2.4;ctx.lineCap="round";ctx.lineJoin="round";
+    ctx.beginPath();ctx.moveTo(cx-6,cy);ctx.lineTo(cx-1.5,cy+5.5);ctx.lineTo(cx+7,cy-6.5);ctx.stroke();
+  };
+  const monogram=(x,y,size,text,col)=>{
+    rr(x,y,size,size,12,col+"26",col);
+    tx(text,x+size/2,y+size/2+6,15,col,850,"center");
+  };
+  const fmtInt=n=>Math.round(+n||0).toLocaleString();
+  const fmt1=n=>(+n||0).toFixed(1);
 
   /* ---------- selected-period metrics ---------- */
   const rows=(a.setsRows||[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date)));
@@ -8359,8 +8392,10 @@ async function exVisualCanvas(a,start,end){
     const d=byDate.get(s.date)||{date:s.date,volume:0,load:0,reps:0,sets:0};
     d.volume+=+s.volume||0;d.load+=+s.kg||0;d.reps+=+s.reps||0;d.sets++;byDate.set(s.date,d);
   });
-  const trend=[...byDate.values()].map(d=>({...d,avgLoad:d.sets?d.load/d.sets:0,avgReps:d.sets?d.reps/d.sets:0}));
+  const trend=[...byDate.values()].sort((p,q)=>p.date.localeCompare(q.date))
+    .map(d=>({...d,avgLoad:d.sets?d.load/d.sets:0,avgReps:d.sets?d.reps/d.sets:0}));
   const avg=(arr,f)=>arr.length?arr.reduce((n,x)=>n+(+x[f]||0),0)/arr.length:0;
+  const sum=(arr,f)=>arr.reduce((n,x)=>n+(+x[f]||0),0);
   const pct=(oldv,newv)=>oldv?((newv-oldv)/oldv*100):(newv?100:0);
   const chunk=Math.max(1,Math.floor(trend.length/3));
   const first=trend.slice(0,chunk),last=trend.slice(-chunk);
@@ -8368,79 +8403,180 @@ async function exVisualCanvas(a,start,end){
   const loadChange=pct(avg(first,"avgLoad"),avg(last,"avgLoad"));
   const repsChange=pct(avg(first,"avgReps"),avg(last,"avgReps"));
 
-  /* ---------- header ---------- */
-  const brand=ctx.createLinearGradient(48,0,300,0);brand.addColorStop(0,C.green);brand.addColorStop(1,C.blue);
-  ctx.fillStyle=brand;ctx.fillRect(48,48,7,78);
-  tx("M/ARC",82,88,44,C.text,880);
-  tx("TRAINING PROGRESS",84,122,16,C.green,820);
-  tx(`${start}  →  ${end}`,1028,84,14,"#8da1aa",700,"right");
-  tx("A focused view of your training trend and muscle emphasis.",84,154,14,C.muted,560);
+  const dayMs=86400000;
+  const startD=new Date(start+"T00:00:00"),endD=new Date(end+"T00:00:00");
+  const totalDays=Math.max(1,Math.round((endD-startD)/dayMs)+1);
+  const weeksSpan=Math.max(1,totalDays/7);
+  const avgPerWeek=a.workouts/weeksSpan;
+  const avgSetsPerWorkout=a.workouts?a.sets/a.workouts:0;
+  const tons=a.volume/1000;
 
-  /* ---------- 3 essential KPIs ---------- */
+  /* per-muscle change: compare the early vs late third of the raw records */
+  const rawRecords=exRecords(start,end).slice()
+    .sort((p,q)=>String(p.dayKey||p.finalizedAt||"").localeCompare(String(q.dayKey||q.finalizedAt||"")));
+  const rchunk=Math.max(1,Math.floor(rawRecords.length/3));
+  const earlyMuscles=exAnalyze(rawRecords.slice(0,rchunk)).muscles;
+  const lateMuscles=exAnalyze(rawRecords.slice(-rchunk)).muscles;
+  const muscleChange=key=>{
+    const e=earlyMuscles.find(m=>m.key===key)?.score||0;
+    const l=lateMuscles.find(m=>m.key===key)?.score||0;
+    return pct(e,l);
+  };
+  const tierOf=share=>share>=15?["Excellent",C.green]:share>=8?["Good",C.blue]:share>=3?["Fair","#8da1aa"]:["Low",C.muted];
+
+  /* period comparison window (first N weeks vs last N weeks of the selected range) */
+  const halfWeeks=weeksSpan>=8?4:Math.max(1,Math.floor(weeksSpan/2)||1);
+  const winDays=halfWeeks*7;
+  const firstWinEnd=new Date(startD.getTime()+(winDays-1)*dayMs);
+  const lastWinStart=new Date(endD.getTime()-(winDays-1)*dayMs);
+  const firstWin=trend.filter(d=>new Date(d.date+"T00:00:00")<=firstWinEnd);
+  const lastWin=trend.filter(d=>new Date(d.date+"T00:00:00")>=lastWinStart);
+  const pcRows=[
+    ["Total Volume",sum(firstWin,"volume"),sum(lastWin,"volume"),"kg",C.green],
+    ["Avg Load",avg(firstWin,"avgLoad"),avg(lastWin,"avgLoad"),"kg",C.blue],
+    ["Avg Reps",avg(firstWin,"avgReps"),avg(lastWin,"avgReps"),"reps",C.purple],
+    ["Working Sets",sum(firstWin,"sets"),sum(lastWin,"sets"),"sets",C.orange]
+  ];
+
+  /* highlights */
+  const improved=(a.exercises||[]).filter(x=>x.sessions>=2&&x.lastLoad>0);
+  const strongest=improved.slice().sort((p,q)=>(q.lastLoad-q.firstLoad)-(p.lastLoad-p.firstLoad))[0];
+  const mostImproved=improved.slice().sort((p,q)=>q.loadChange-p.loadChange)[0];
+  const mostTrained=(a.muscles||[])[0];
+  const weekIndexOf=d=>Math.floor((new Date(d+"T00:00:00")-startD)/(7*dayMs));
+  const totalWeeks=Math.max(1,weekIndexOf(end)+1);
+  const weeksTrained=new Set([...byDate.keys()].map(weekIndexOf)).size;
+  const consistencyPct=Math.min(100,Math.round(weeksTrained/totalWeeks*100));
+
+  const highlights=[];
+  if(strongest)highlights.push({kicker:"STRONGEST PROGRESS",title:strongest.name,metric:`+${fmt1(strongest.lastLoad-strongest.firstLoad)} kg`,desc:"Biggest absolute strength gain this period.",color:C.green,mono:"SP"});
+  if(mostImproved)highlights.push({kicker:"MOST IMPROVED",title:mostImproved.name,metric:`+${mostImproved.loadChange.toFixed(0)}%`,desc:"Largest percentage increase in load.",color:C.blue,mono:"MI"});
+  if(mostTrained)highlights.push({kicker:"MOST TRAINED",title:mostTrained.label,metric:`${mostTrained.share.toFixed(0)}%`,desc:"Highest logged training emphasis.",color:C.purple,mono:"MT"});
+  highlights.push({kicker:"CONSISTENCY",title:`${consistencyPct}%`,metric:"",desc:consistencyPct>=70?"You stayed consistent this period.":"Aim for a steadier weekly rhythm.",color:C.orange,mono:"CN"});
+
+  /* next steps */
+  const activeMuscles=(a.muscles||[]).filter(m=>m.share>0);
+  const topTwo=activeMuscles.slice(0,2).map(m=>m.label).join(" & ");
+  const lagging=activeMuscles.length>2?activeMuscles[activeMuscles.length-1].label:null;
+  const tips=[
+    "Keep applying progressive overload on your top compound lifts.",
+    topTwo?`Maintain your training frequency for ${topTwo}.`:"Keep a consistent weekly training frequency.",
+    lagging?`Consider extra volume or focus for ${lagging}.`:"Keep exercise selection varied across muscle groups.",
+    "Recovery and nutrition will unlock your next level of progress."
+  ];
+
+  /* ---------- draw ---------- */
+  let y=48;
+  const sectionTitle=(label,sub)=>{
+    tx(label,margin,y,18,"#a7b8c0",830);
+    if(sub){tx(sub,margin,y+20,11,C.muted,560);y+=48}else{y+=34}
+  };
+
+  /* header */
+  const brand=ctx.createLinearGradient(margin,0,margin+260,0);brand.addColorStop(0,C.green);brand.addColorStop(1,C.blue);
+  ctx.fillStyle=brand;ctx.fillRect(margin,y,7,78);
+  tx("M/ARC",margin+34,y+40,44,C.text,880);
+  tx("TRAINING PROGRESS REPORT",margin+36,y+72,15,C.green,820);
+  tx(`${start}  →  ${end}`,rightEdge,y+36,14,"#8da1aa",700,"right");
+  tx("A focused view of your training trend, muscle emphasis and progress.",margin+36,y+102,13,C.muted,560);
+  y+=150;
+
+  /* kpi cards */
+  const cardGap=20,cardW=(contentW-cardGap*2)/3,cardH=132;
   const kpis=[
-    ["WORKOUTS",a.workouts],
-    ["WORKING SETS",a.sets],
-    ["VOLUME LOAD",Math.round(a.volume).toLocaleString()+" kg"]
+    ["WORKOUTS",a.workouts,"Consistency",`${fmt1(avgPerWeek)} workouts / week`],
+    ["WORKING SETS",a.sets,"Avg sets",`${fmt1(avgSetsPerWorkout)} sets per workout`],
+    ["VOLUME (KG)",fmtInt(a.volume),"Total lifted",`${fmt1(tons)} tons`]
   ];
   kpis.forEach((d,i)=>{
-    const x=55+i*330; rr(x,188,305,108,18,C.panel,C.line);
-    tx(d[0],x+20,220,10,C.muted,760);
-    tx(d[1],x+20,266,27,C.text,860);
+    const x=margin+i*(cardW+cardGap);
+    rr(x,y,cardW,cardH,18,C.panel,C.line);
+    tx(d[0],x+22,y+30,10,C.muted,760);
+    tx(d[1],x+22,y+76,26,C.text,860);
+    tx(d[2],x+22,y+100,9.5,"#5d7681",700);
+    tx(d[3],x+22,y+115,10.5,C.muted,600);
   });
+  y+=cardH+40;
 
-  /* ---------- one compact progression chart ---------- */
-  tx("PROGRESSION",55,350,18,"#a7b8c0",830);
-  rr(55,372,970,270,18,C.panel,C.line);
-  const chart={x:90,y:418,w:900,h:158};
+  /* overall progression */
+  sectionTitle("OVERALL PROGRESSION","Volume, average load and average reps across your selected period");
+  const chartPanelH=250;
+  rr(margin,y,contentW,chartPanelH,18,C.panel,C.line);
+  const chart={x:margin+35,y:y+40,w:contentW-70,h:150};
   [0,.5,1].forEach(r=>ln(chart.x,chart.y+chart.h*r,chart.x+chart.w,chart.y+chart.h*r,C.line,.7));
-
   const drawSeries=(field,color)=>{
     if(trend.length<2)return;
     const vals=trend.map(x=>+x[field]||0),mn=Math.min(...vals),mx=Math.max(...vals),span=Math.max(1,mx-mn);
     const pts=trend.map((d,i)=>[chart.x+i*chart.w/(trend.length-1),chart.y+chart.h-(d[field]-mn)/span*chart.h]);
     ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));
-    ctx.strokeStyle=color;ctx.lineWidth=1.35;ctx.stroke();
+    ctx.strokeStyle=color;ctx.lineWidth=2;ctx.stroke();
   };
   drawSeries("volume",C.green);drawSeries("avgLoad",C.blue);drawSeries("avgReps",C.purple);
-  tx("Volume",90,610,10,C.green,700);tx("Avg load",164,610,10,C.blue,700);tx("Avg reps",253,610,10,C.purple,700);
+  if(trend.length<2)tx("Log at least two sessions to see a trend line.",chart.x+chart.w/2,chart.y+chart.h/2,12,C.muted,600,"center");
+  const legendY=chart.y+chart.h+30;
+  dot(chart.x+5,legendY-4,4,C.green);tx("Volume",chart.x+16,legendY,11,C.muted,650);
+  dot(chart.x+96,legendY-4,4,C.blue);tx("Avg load",chart.x+107,legendY,11,C.muted,650);
+  dot(chart.x+205,legendY-4,4,C.purple);tx("Avg reps",chart.x+216,legendY,11,C.muted,650);
+  y+=chartPanelH+24;
 
-  /* only 3 period-change signals; no extra bars */
-  const changes=[
-    ["Volume",volumeChange,C.green],["Load",loadChange,C.blue],["Reps",repsChange,C.purple]
+  const statW=(contentW-cardGap*2)/3,statH=112;
+  const stats=[
+    ["VOLUME",volumeChange,C.green,`${fmtInt(avg(first,"volume"))} kg → ${fmtInt(avg(last,"volume"))} kg`],
+    ["AVG LOAD",loadChange,C.blue,`${fmt1(avg(first,"avgLoad"))} kg → ${fmt1(avg(last,"avgLoad"))} kg`],
+    ["AVG REPS",repsChange,C.purple,`${fmt1(avg(first,"avgReps"))} → ${fmt1(avg(last,"avgReps"))} reps`]
   ];
-  changes.forEach((d,i)=>{
-    const x=700+i*102;
-    tx(d[0],x,606,9,C.muted,700);
-    tx(`${d[1]>=0?"+":""}${d[1].toFixed(0)}%`,x,628,15,d[1]>=0?d[2]:C.orange,820);
+  stats.forEach((d,i)=>{
+    const x=margin+i*(statW+cardGap);
+    rr(x,y,statW,statH,16,C.panel,C.line);
+    ctx.fillStyle=d[1]>=0?d[2]:C.orange;ctx.fillRect(x,y,4,statH);
+    tx(d[0],x+22,y+28,10,C.muted,760);
+    tx(`${d[1]>=0?"+":""}${d[1].toFixed(0)}%`,x+22,y+62,25,d[1]>=0?d[2]:C.orange,860);
+    tx(d[3],x+22,y+88,10,C.muted,600);
   });
+  y+=statH+42;
 
-  /* ---------- top progress: text only, no bars ---------- */
-  tx("TOP PROGRESS",55,704,18,"#a7b8c0",830);
-  const top=(a.exercises||[]).filter(x=>x.sessions>=2).slice(0,3);
-  top.forEach((x,i)=>{
-    const y=744+i*62;
-    rr(55,y-22,970,50,13,C.panel,C.line);
-    tx(x.name,75,y+3,13,C.text,760);
-    tx(`${x.firstLoad.toFixed(1)} → ${x.lastLoad.toFixed(1)} kg`,720,y+3,11,C.muted,700,"right");
-    tx(`${x.loadChange>=0?"+":""}${x.loadChange.toFixed(1)}%`,1002,y+3,13,x.loadChange>=0?C.green:C.orange,820,"right");
-  });
+  /* muscle group performance */
+  sectionTitle("MUSCLE GROUP PERFORMANCE","Training performance score, based on load, reps, sets, volume & consistency");
+  const mgList=(a.muscles||[]).filter(m=>m.share>0).slice(0,10);
+  if(mgList.length){
+    const cols=2,rowH=66,rowsCount=Math.ceil(mgList.length/cols),colGap=24;
+    const colW=(contentW-colGap)/cols;
+    const panelH=rowsCount*rowH+34;
+    rr(margin,y,contentW,panelH,20,C.panel,C.line);
+    const maxShare=Math.max(...mgList.map(m=>m.share),1);
+    mgList.forEach((m,i)=>{
+      const col=i%cols,row=Math.floor(i/cols);
+      const x=margin+20+col*(colW+colGap),ry=y+22+row*rowH;
+      const [tierLabel,tierColor]=tierOf(m.share);
+      dot(x+7,ry+3,5,tierColor);
+      tx(m.label,x+20,ry+8,13.5,C.text,760);
+      tx(tierLabel,x+20,ry+24,9.5,tierColor,650);
+      const barW=colW-108,barX=x+20,barY=ry+34;
+      rr(barX,barY,barW,8,4,C.base);
+      rr(barX,barY,Math.max(6,barW*Math.min(1,m.share/maxShare)),8,4,tierColor);
+      const chg=muscleChange(m.key);
+      tx(`${chg>=0?"+":""}${chg.toFixed(0)}%`,x+colW-8,ry+16,12.5,chg>=0?tierColor:C.orange,800,"right");
+    });
+    y+=panelH+40;
+  }else{
+    rr(margin,y,contentW,90,20,C.panel,C.line);
+    tx("Not enough logged data yet to score muscle groups.",W/2,y+52,13,C.muted,600,"center");
+    y+=90+40;
+  }
 
-  /* ---------- anatomy engine ---------- */
+  /* muscle emphasis map */
+  sectionTitle("MUSCLE EMPHASIS MAP","Where your selected-period training was concentrated");
+  const mapPanelH=820;
+  rr(margin,y,contentW,mapPanelH,20,C.panel,C.line);
+  const mapTop=y;
+
   const normalize=s=>String(s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
   const scoreRows=(a.muscles||[]).map(m=>({label:normalize(m.label||m.key),share:+m.share||0}));
   const aliases={
-    chest:["chest","pectoral","pectoralis"],
-    shoulders:["shoulder","deltoid","delt"],
-    biceps:["biceps"],
-    triceps:["triceps"],
-    forearms:["forearm","brachioradialis","wrist flexor","wrist extensor"],
-    lats:["latissimus","lat "],
-    back:["rhomboid","trapezius","teres","mid back"],
-    abs:["rectus abdominis","abdominal","abs"],
-    obliques:["oblique"],
-    glutes:["glute"],
-    quads:["quadriceps","rectus femoris","vastus"],
-    hamstrings:["hamstring","biceps femoris","semitendinosus","semimembranosus"],
+    chest:["chest","pectoral","pectoralis"],shoulders:["shoulder","deltoid","delt"],biceps:["biceps"],triceps:["triceps"],
+    forearms:["forearm","brachioradialis","wrist flexor","wrist extensor"],lats:["latissimus","lat "],
+    back:["rhomboid","trapezius","teres","mid back"],abs:["rectus abdominis","abdominal","abs"],obliques:["oblique"],
+    glutes:["glute"],quads:["quadriceps","rectus femoris","vastus"],hamstrings:["hamstring","biceps femoris","semitendinosus","semimembranosus"],
     calves:["gastrocnemius","soleus","calf"]
   };
   const sourceShare=(def)=>{
@@ -8495,15 +8631,12 @@ async function exVisualCanvas(a,start,end){
       const svg=host.querySelector("svg");
       if(!svg)throw new Error("SVG anatomy unavailable");
       svg.setAttribute("xmlns","http://www.w3.org/2000/svg");
-
-      /* Lock intrinsic dimensions to its own viewBox to prevent warped PNG output. */
       const vb=svg.viewBox?.baseVal;
-      if(vb && vb.width>0 && vb.height>0){
+      if(vb&&vb.width>0&&vb.height>0){
         svg.setAttribute("width",String(vb.width));
         svg.setAttribute("height",String(vb.height));
         svg.setAttribute("preserveAspectRatio","xMidYMid meet");
       }
-
       svg.querySelectorAll(".body-chart-muscle").forEach((path,i)=>{
         const share=sourceShare(defs?.[i]);
         path.setAttribute("fill",intensityColor(share));
@@ -8526,43 +8659,129 @@ async function exVisualCanvas(a,start,end){
     }
   }
 
-  /* ---------- body is now the centrepiece ---------- */
-  tx("MUSCLE EMPHASIS",55,980,18,"#a7b8c0",830);
-  tx("Where your selected-period training was concentrated",55,1006,10,C.muted,570);
-
-  rr(55,1035,970,690,20,C.panel,C.line);
-
   let anatomyMode="svg";
+  const bodyW=350,bodyH=520,bodyY=mapTop+34,frontX=margin+95,backX=frontX+bodyW+80;
   try{
     const lib=await exEnsureBodyMuscles();
     const front=await renderAnatomy(lib.ViewSide.FRONT,lib.FRONT_MUSCLES||[]);
     const back=await renderAnatomy(lib.ViewSide.BACK,lib.BACK_MUSCLES||[]);
-
-    /* Large centred bodies, contained by aspect ratio rather than stretched. */
-    drawContain(front,135,1080,350,565);
-    drawContain(back,595,1080,350,565);
-    tx("FRONT",310,1668,10,C.muted,760,"center");
-    tx("BACK",770,1668,10,C.muted,760,"center");
+    drawContain(front,frontX,bodyY,bodyW,bodyH);
+    drawContain(back,backX,bodyY,bodyW,bodyH);
+    tx("FRONT",frontX+bodyW/2,bodyY+bodyH+24,10,C.muted,760,"center");
+    tx("BACK",backX+bodyW/2,bodyY+bodyH+24,10,C.muted,760,"center");
   }catch(err){
     anatomyMode="fallback";
     console.warn("Export SVG anatomy fallback",err);
-    tx("Detailed anatomy unavailable.",540,1330,14,C.muted,650,"center");
+    tx("Detailed anatomy unavailable on this device.",W/2,bodyY+bodyH/2,14,C.muted,650,"center");
   }
 
-  /* ---------- only top muscle emphasis as compact labels ---------- */
-  const topMuscles=(a.muscles||[]).slice(0,5);
-  const totalWidth=topMuscles.length*170;
-  let sx=Math.max(55,(1080-totalWidth)/2);
-  topMuscles.forEach((m,i)=>{
-    const x=sx+i*170;
-    rr(x,1762,150,54,13,"#0a1b24",C.line);
-    tx(m.label,x+12,1785,10,C.text,720);
-    tx(`${m.share.toFixed(0)}%`,x+138,1807,12,m.share>=11?C.green:m.share>=5?C.blue:"#78919d",820,"right");
+  const mapLegendY=bodyY+bodyH+62;
+  const legendItems=[["High Focus",C.green],["Moderate Focus",C.blue],["Lower Focus",C.base]];
+  const legendGap=210;
+  let lx=W/2-(legendItems.length*legendGap)/2+legendGap/2;
+  legendItems.forEach(([label,color])=>{
+    dot(lx-56,mapLegendY-4,6,color);
+    tx(label,lx-42,mapLegendY,11,C.muted,650);
+    lx+=legendGap;
   });
 
-  tx("Training emphasis reflects logged exercises, sets and effort — not measured muscle growth.",540,1865,9,"#5d7681",560,"center");
-  tx(`M/ARC  •  VECTOR ANATOMY: ${anatomyMode.toUpperCase()}`,540,1892,9,C.muted,720,"center");
-  return c;
+  const topShare=(a.muscles||[])[0]?.share||0;
+  const balanced=topShare<30;
+  const noteY=mapLegendY+26;
+  rr(margin+140,noteY,contentW-280,64,14,"#0a1b24",C.line);
+  tx(balanced?"Your training is well balanced":`Training is concentrated on ${(a.muscles||[])[0]?.label||"one muscle group"}`,W/2,noteY+28,12.5,C.text,760,"center");
+  tx(balanced?"Keep pushing progressive overload and recovery.":"Consider adding volume for lagging muscle groups.",W/2,noteY+48,10.5,C.muted,600,"center");
+
+  const topMuscles=(a.muscles||[]).slice(0,5);
+  const chipW=170,chipGap=14,chipsTotal=topMuscles.length*chipW+Math.max(0,topMuscles.length-1)*chipGap;
+  let sx=Math.max(margin,(W-chipsTotal)/2);
+  const chipY=noteY+90;
+  topMuscles.forEach(m=>{
+    rr(sx,chipY,chipW,52,13,"#0a1b24",C.line);
+    tx(m.label,sx+14,chipY+22,10.5,C.text,720);
+    const [,tierColor]=tierOf(m.share);
+    tx(`${m.share.toFixed(0)}%`,sx+chipW-14,chipY+38,12,tierColor,820,"right");
+    sx+=chipW+chipGap;
+  });
+
+  y=mapTop+mapPanelH+40;
+
+  /* top exercise progress */
+  sectionTitle("TOP EXERCISE PROGRESS","Biggest load gains across logged exercises this period");
+  const topEx=(a.exercises||[]).filter(x=>x.sessions>=2).slice(0,5);
+  if(topEx.length){
+    const rowH=78;
+    topEx.forEach((x,i)=>{
+      const ry=y+i*rowH;
+      rr(margin,ry,contentW,rowH-14,16,C.panel,C.line);
+      dumbbell(margin+34,ry+(rowH-14)/2,C.green);
+      tx(x.name,margin+66,ry+30,15,C.text,760);
+      tx(`${fmt1(x.firstLoad)} kg → ${fmt1(x.lastLoad)} kg`,margin+66,ry+50,11,C.muted,650);
+      tx(`${x.loadChange>=0?"+":""}${x.loadChange.toFixed(0)}%`,rightEdge-16,ry+38,20,x.loadChange>=0?C.green:C.orange,850,"right");
+    });
+    y+=topEx.length*rowH+26;
+  }else{
+    rr(margin,y,contentW,80,16,C.panel,C.line);
+    tx("Log an exercise on two or more days to see progress here.",W/2,y+46,13,C.muted,600,"center");
+    y+=80+26;
+  }
+
+  /* highlights */
+  sectionTitle("HIGHLIGHTS","Automatically surfaced from this period's logged data");
+  const hRowH=108;
+  highlights.forEach((h,i)=>{
+    const ry=y+i*hRowH;
+    rr(margin,ry,contentW,hRowH-14,16,C.panel,C.line);
+    monogram(margin+18,ry+16,44,h.mono,h.color);
+    tx(h.kicker,margin+78,ry+28,10,h.color,760);
+    tx(h.title,margin+78,ry+50,17,C.text,800);
+    wrapText(h.desc,contentW-330,10.5,560).slice(0,2).forEach((line,li)=>tx(line,margin+78,ry+68+li*14,10.5,C.muted,560));
+    if(h.metric)tx(h.metric,rightEdge-16,ry+46,22,h.color,850,"right");
+  });
+  y+=highlights.length*hRowH+34;
+
+  /* period comparison */
+  const cmpLabel=weeksSpan>=8?"First 4 weeks vs last 4 weeks":`First ${halfWeeks} week${halfWeeks>1?"s":""} vs last ${halfWeeks} week${halfWeeks>1?"s":""}`;
+  sectionTitle("PERIOD COMPARISON",cmpLabel);
+  const pcRowH=88;
+  rr(margin,y,contentW,pcRows.length*pcRowH+16,20,C.panel,C.line);
+  pcRows.forEach((row,i)=>{
+    const [label,oldV,newV,unit,color]=row;
+    const ry=y+16+i*pcRowH;
+    const chg=pct(oldV,newV);
+    tx(label,margin+24,ry+8,13.5,C.text,760);
+    tx(`${chg>=0?"+":""}${chg.toFixed(0)}%`,rightEdge-24,ry+8,14,chg>=0?color:C.orange,820,"right");
+    const barMax=Math.max(oldV,newV,1),barW=contentW-48,barX=margin+24;
+    rr(barX,ry+22,Math.max(4,barW*Math.min(1,oldV/barMax)),8,4,C.base);
+    rr(barX,ry+36,Math.max(4,barW*Math.min(1,newV/barMax)),8,4,color);
+    tx(`${unit==="kg"?fmtInt(oldV):fmt1(oldV)} ${unit}`,margin+24,ry+62,10,C.muted,650);
+    tx(`${unit==="kg"?fmtInt(newV):fmt1(newV)} ${unit}`,margin+24,ry+76,10,color,650);
+  });
+  y+=pcRows.length*pcRowH+16+40;
+
+  /* next steps */
+  sectionTitle("NEXT STEPS","Suggestions based on this period's data");
+  let stepY=y;
+  tips.forEach(tip=>{
+    const lines=wrapText(tip,contentW-56,13,620);
+    const rh=Math.max(40,16+lines.length*18);
+    rr(margin,stepY,contentW,rh-8,12,C.panel,C.line);
+    checkMark(margin+27,stepY+(rh-8)/2,C.green);
+    lines.forEach((line,li)=>tx(line,margin+52,stepY+22+li*18,13,C.text,620));
+    stepY+=rh+10;
+  });
+  y=stepY+20;
+
+  /* footer */
+  tx("Training emphasis reflects logged exercises, sets and effort — not measured muscle growth.",W/2,y+10,9.5,"#5d7681",560,"center");
+  tx(`M/ARC  •  VECTOR ANATOMY: ${anatomyMode.toUpperCase()}`,W/2,y+32,9.5,C.muted,720,"center");
+  y+=60;
+
+  /* crop scratch canvas down to the actual content height */
+  const finalH=Math.min(MAXH,Math.ceil(y));
+  const out=document.createElement("canvas");out.width=W;out.height=finalH;
+  out.getContext("2d").drawImage(scratch,0,0,W,finalH,0,0,W,finalH);
+  return out;
 }
 function exBase64FromArray(u8){
   let s="",chunk=0x8000;for(let i=0;i<u8.length;i+=chunk)s+=String.fromCharCode(...u8.subarray(i,Math.min(i+chunk,u8.length)));
@@ -8591,6 +8810,7 @@ async function exGenerate(format,start,end){
   }
   const canvas=await exVisualCanvas(analysis,start,end);
   const data=canvas.toDataURL("image/png",1).split(",")[1];
+  window.dtLastExportPreview=`data:image/png;base64,${data}`;
   return exShareBytes(data,`MARC_Visual_Progress_${safe}.png`,"image/png");
 }
 
@@ -8612,7 +8832,7 @@ function exRender(){
     <div class="dt-ex-dates"><div class="dt-ex-date"><label>Start</label><input id="dtExportStart" type="date" value="${r.start}"></div><div class="dt-ex-date"><label>End</label><input id="dtExportEnd" type="date" value="${r.end}"></div></div>
   </div>
   <div class="dt-ex-section"><div class="dt-ex-label">Export format<small>Excel keeps the detailed data. Visual Report summarizes progress as a shareable image.</small></div>
-    <div class="dt-ex-formats"><button class="dt-ex-format active" data-ex-format="visual"><b>Visual Report</b><small>PNG · trends, muscle emphasis and improvement map</small></button><button class="dt-ex-format" data-ex-format="xlsx"><b>Excel</b><small>XLSX · summary, sets, exercise progress and muscle trends</small></button></div>
+    <div class="dt-ex-formats"><button class="dt-ex-format active" data-ex-format="visual"><b>Visual Report</b><small>PNG · progression, muscle scores, top exercises, highlights & next steps</small></button><button class="dt-ex-format" data-ex-format="xlsx"><b>Excel</b><small>XLSX · summary, sets, exercise progress and muscle trends</small></button></div>
     <div id="dtExportSummary" class="dt-ex-summary"></div>
   </div>
   <div class="dt-ex-actions"><button class="dt-ex-cancel" type="button">Cancel</button><button class="dt-ex-generate" type="button">Generate & share</button></div><div class="dt-ex-result"></div>`;
@@ -8627,8 +8847,20 @@ function exRender(){
     const btn=body.querySelector(".dt-ex-generate"),res=body.querySelector(".dt-ex-result");
     const start=body.querySelector("#dtExportStart").value,end=body.querySelector("#dtExportEnd").value,format=body.querySelector("[data-ex-format].active")?.dataset.exFormat||"visual";
     if(!start||!end||start>end){res.className="dt-ex-result bad";res.textContent="Choose a valid date range.";return}
-    btn.disabled=true;btn.textContent="Generating…";res.className="dt-ex-result";res.textContent=format==="xlsx"?"Building Excel workbook…":"Rendering visual report…";
-    try{const msg=await exGenerate(format,start,end);res.className="dt-ex-result good";res.textContent=msg}
+    btn.disabled=true;btn.textContent="Generating…";res.className="dt-ex-result";res.innerHTML="";res.textContent=format==="xlsx"?"Building Excel workbook…":"Rendering visual report…";
+    try{
+      window.dtLastExportPreview=null;
+      const msg=await exGenerate(format,start,end);
+      res.className="dt-ex-result good";
+      if(format==="visual"&&window.dtLastExportPreview){
+        res.innerHTML="";
+        const img=document.createElement("img");img.className="dt-ex-preview";img.alt="Visual report preview";img.src=window.dtLastExportPreview;
+        const cap=document.createElement("div");cap.textContent=msg;
+        res.appendChild(img);res.appendChild(cap);
+      }else{
+        res.textContent=msg;
+      }
+    }
     catch(e){res.className="dt-ex-result bad";res.textContent=e?.message||String(e)}
     finally{btn.disabled=false;btn.textContent="Generate & share"}
   };
@@ -8661,8 +8893,8 @@ window.dtRemoveExportSampleData=exRemoveSampleData;
 window.DT_EXPORT_PROGRESS_VERSION=DT_V14;
 })();
 </script>
-<script>window.DT_VISUAL_REPORT_V2_VERSION="15.0-premium-anatomy-report";</script>
-<script>window.DT_EXPORT_VECTOR_ANATOMY_VERSION="17.0-export-minimal-centered";</script>
+<script>window.DT_VISUAL_REPORT_V2_VERSION="22.0-export-full-report-restored";</script>
+<script>window.DT_EXPORT_VECTOR_ANATOMY_VERSION="22.0-export-full-report-restored";</script>
 
 <style id="dt-v18-release-css">
 /* ===============================
