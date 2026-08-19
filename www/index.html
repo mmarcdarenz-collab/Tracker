@@ -2632,10 +2632,13 @@ function renderCalendar(){
   for(let i=0;i<first;i++){const e=document.createElement("button");e.className="day empty";cal.appendChild(e)}
   for(let d=1;d<=count;d++){
     const dt=new Date(y,m,d),key=dt.toISOString().slice(0,10),r=state.days[key];
+    const sessions=(state.workouts?.sessions||[]).filter(s=>String(s.date||"").slice(0,10)===key);
     const b=document.createElement("button");b.className="day";b.textContent=d;
+    b.dataset.date=key;
     if(key===todayKey())b.classList.add("today");
+    if(sessions.length)b.classList.add("has-workout");
     if(r){const p=r.percent??getPct(r).pct;b.classList.add(p>=80?"done":p>0?"partial":"missed")}
-    b.onclick=()=>alert(r?`${key}\n${r.done||0}/${r.total||0} tasks • ${r.percent||0}%${r.restDay?" • Rest day":""}`:`${key}\nNo saved data.`);
+    b.onclick=()=>window.dtOpenHistoryDay?.(key);
     cal.appendChild(b);
   }
 }
@@ -2938,13 +2941,18 @@ if(fxStatus){
 
 
 function workoutDayLabel(day){
+  if(state.workouts?.dayNames?.[day])return state.workouts.dayNames[day];
+  if(plans?.[day]?.title)return plans[day].title.replace(/\bDAY\b/ig,"Day");
   if(day==="push") return "Push Day";
   if(day==="pull") return "Pull Day";
   if(day==="legs") return "Leg Day";
   return "Workout";
 }
 function workoutDayIcon(day){
-  return day==="push"?"🔵":day==="pull"?"🟢":day==="legs"?"🟡":"🏋️";
+  if(day==="push")return "●";
+  if(day==="pull")return "●";
+  if(day==="legs")return "●";
+  return "◇";
 }
 function workoutSessionExercises(session){
   if(Array.isArray(session.snapshot)) return session.snapshot;
@@ -2993,7 +3001,7 @@ function renderWorkoutHistory(){
         <div class="workout-history-icon">${workoutDayIcon(s.day)}</div>
         <div class="workout-history-main">
           <b>${workoutDayLabel(s.day)}</b>
-          <small>${when.toLocaleDateString([], {day:"numeric",month:"short",year:"numeric"})} • ${when.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}</small>
+          <small>${when.toLocaleDateString("en-AU",{day:"numeric",month:"short",year:"numeric"})} • ${when.toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit",hour12:true})}</small>
         </div>
         <div class="workout-history-right">
           <b>${workoutSessionSets(s)} sets</b>
@@ -3098,7 +3106,7 @@ function renderWorkout(){
       <button class="exercise-chevron" aria-label="Expand activity">⌄</button>
     </div>
     <div class="exbody">
-      <div class="sethead"><span>SET</span><span>PREVIOUS</span><span>KG</span><span>REPS</span><span>EFFORT</span></div>
+      <div class="sethead"><span>SET</span><span>PREVIOUS</span><span>${window.dtWeightUnitLabel?.()||"KG"}</span><span>REPS</span><span>EFFORT</span></div>
       <div class="rows"></div>
       <button class="addset">＋ Add Set</button>
     </div>`;
@@ -3117,11 +3125,11 @@ function renderWorkout(){
       const old=prev(ei,si),pln=e[3][si]||[null,''];
       const row=document.createElement('div');row.className='setrow';
       row.innerHTML=`<b style="text-align:center">${si+1}</b>
-        <div class="prevval">${old?(old.kg||'–')+' × '+(old.reps||'–'):(pln[0]??'–')+' × '+(pln[1]||'')}<br><span style="opacity:.5">${old?'previous':'plan'}</span></div>
-        <input class="loginput kg" type="number" step=".5" value="${x.kg}" placeholder="${old?.kg??pln[0]??'KG'}">
+        <div class="prevval">${old?window.dtFormatLift?.(old.kg,old.reps)||((old.kg||'–')+' × '+(old.reps||'–')):window.dtFormatLift?.(pln[0],pln[1])||((pln[0]??'–')+' × '+(pln[1]||''))}<br><span style="opacity:.5">${old?'previous':'plan'}</span></div>
+        <input class="loginput kg" type="number" step="${window.dtWeightUnit?.()==='lb'?'1':'.5'}" value="${window.dtWeightDisplayValue?.(x.kg)??x.kg}" placeholder="${window.dtWeightDisplayValue?.(old?.kg??pln[0])??old?.kg??pln[0]??window.dtWeightUnitLabel?.()??'KG'}">
         <input class="loginput reps" type="number" value="${x.reps}" placeholder="${old?.reps??'Reps'}">
         <button class="effort ${x.effort}"></button>`;
-      row.querySelector('.kg').oninput=z=>{x.kg=z.target.value;save();updateFinishWorkoutButton()};
+      row.querySelector('.kg').oninput=z=>{x.kg=window.dtWeightInputToKg?window.dtWeightInputToKg(z.target.value):z.target.value;save();updateFinishWorkoutButton()};
       row.querySelector('.reps').oninput=z=>{x.reps=z.target.value;save();updateFinishWorkoutButton()};
       row.querySelector('.effort').onclick=()=>{
         // If this set already has an effort selected, tapping the circle again clears it.
@@ -4173,7 +4181,7 @@ renderTrainingGoal();
             <b>${e[0]} ${e[1]?'<span style="color:var(--muted);font-weight:500">('+e[1]+')</span>':''}</b>
             <small>${e[2]}</small>
           </button>
-          <span class="exsum">${pv?(pv.kg||"–")+" × "+(pv.reps||"–"):(pl[0]??"–")+" × "+(pl[1]||"")}</span>
+          <span class="exsum">${pv?(window.dtFormatLift?.(pv.kg,pv.reps)||((pv.kg||"–")+" × "+(pv.reps||"–"))):(window.dtFormatLift?.(pl[0],pl[1])||((pl[0]??"–")+" × "+(pl[1]||"")))}</span>
           <button class="exercise-menu-btn" type="button" aria-label="Activity menu">⋯</button>
           <button class="exercise-chevron" type="button" aria-label="Expand activity">⌄</button>
         </div>
@@ -4182,7 +4190,7 @@ renderTrainingGoal();
             <div class="smart-next-copy"><small>SMART NEXT SESSION</small><b>${smartRecommendation(e,ei).text}</b></div>
             <div class="smart-next-reason">${smartRecommendation(e,ei).reason}</div>
           </div>
-          <div class="sethead"><span>SET</span><span>PREVIOUS</span><span>KG</span><span>REPS</span><span>EFFORT</span></div>
+          <div class="sethead"><span>SET</span><span>PREVIOUS</span><span>${window.dtWeightUnitLabel?.()||"KG"}</span><span>REPS</span><span>EFFORT</span></div>
           <div class="rows"></div>
           <button class="addset" type="button">＋ Add Set</button>
           <button class="exercise-done-btn" type="button">✓ Done with ${e[0]}</button>
@@ -4209,14 +4217,14 @@ renderTrainingGoal();
         row.className = "setrow";
         row.innerHTML = `
           <b style="text-align:center">${si+1}</b>
-          <div class="prevval">${old?(old.kg||"–")+" × "+(old.reps||"–"):(pln[0]??"–")+" × "+(pln[1]||"")}<br><span style="opacity:.5">${old?"previous":"plan"}</span></div>
-          <input class="loginput kg" inputmode="decimal" type="number" step=".5" value="${x.kg ?? ""}" placeholder="${old?.kg ?? pln[0] ?? "KG"}">
+          <div class="prevval">${old?(window.dtFormatLift?.(old.kg,old.reps)||((old.kg||"–")+" × "+(old.reps||"–"))):(window.dtFormatLift?.(pln[0],pln[1])||((pln[0]??"–")+" × "+(pln[1]||"")))}<br><span style="opacity:.5">${old?"previous":"plan"}</span></div>
+          <input class="loginput kg" inputmode="decimal" type="number" step="${window.dtWeightUnit?.()==='lb'?'1':'.5'}" value="${window.dtWeightDisplayValue?.(x.kg)??x.kg??""}" placeholder="${window.dtWeightDisplayValue?.(old?.kg??pln[0])??old?.kg??pln[0]??window.dtWeightUnitLabel?.()??"KG"}">
           <input class="loginput reps" inputmode="numeric" type="number" value="${x.reps ?? ""}" placeholder="${old?.reps ?? "Reps"}">
           <button class="effort ${x.effort || ""}" type="button"></button>`;
 
         const kg = row.querySelector(".kg");
         const reps = row.querySelector(".reps");
-        kg.oninput = z => { x.kg = z.target.value; persistNow(); };
+        kg.oninput = z => { x.kg = window.dtWeightInputToKg?window.dtWeightInputToKg(z.target.value):z.target.value; persistNow(); };
         reps.oninput = z => { x.reps = z.target.value; persistNow(); };
         kg.onchange = persistNow;
         reps.onchange = persistNow;
@@ -4408,9 +4416,24 @@ renderTrainingGoal();
   function dtEnsureBodyMuscles(){
     if(window.BodyMuscles?.BodyChart)return Promise.resolve(window.BodyMuscles);
     if(dtBodyMusclesPromise)return dtBodyMusclesPromise;
-    dtBodyMusclesPromise=dtLoadExternalScript("https://unpkg.com/body-muscles/dist/umd/body-muscles.umd.min.js")
-      .catch(()=>dtLoadExternalScript("https://cdn.jsdelivr.net/npm/body-muscles/dist/umd/body-muscles.umd.min.js"))
-      .then(lib=>{if(!lib?.BodyChart)throw new Error("Body Muscles renderer unavailable");return lib});
+
+    const nativeLocal=(()=>{
+      try{return !!window.Capacitor?.isNativePlatform?.()}catch(_){return false}
+    })();
+
+    const loadWeb=()=>dtLoadExternalScript("https://unpkg.com/body-muscles/dist/umd/body-muscles.umd.min.js")
+      .catch(()=>dtLoadExternalScript("https://cdn.jsdelivr.net/npm/body-muscles/dist/umd/body-muscles.umd.min.js"));
+
+    /* Android APK packages this file locally in the build workflow.
+       The website keeps the existing CDN path. */
+    dtBodyMusclesPromise=(nativeLocal
+      ? dtLoadExternalScript("body-muscles.umd.min.js").catch(loadWeb)
+      : loadWeb()
+    ).then(lib=>{
+      if(!lib?.BodyChart)throw new Error("Body Muscles renderer unavailable");
+      return lib;
+    });
+
     return dtBodyMusclesPromise;
   }
 
@@ -4462,6 +4485,8 @@ renderTrainingGoal();
       p.style.fillOpacity=role?"1":".66";p.style.pointerEvents="none";
       p.style.filter=role?"drop-shadow(0 0 1.4px rgba(255,255,255,.10))":"none";
     });
+    /* Animation starts only after target fills are actually applied. */
+    document.dispatchEvent(new CustomEvent("dt:musclemapstyled"));
   }
 
   const DT_VECTOR_EXERCISE_MAP={"machine chest press":{"name":"Machine Chest Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"chest press machine":{"name":"Machine Chest Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"machine press":{"name":"Machine Chest Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"seated chest press":{"name":"Machine Chest Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"dumbbell bench press":{"name":"Dumbbell Bench Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"db bench":{"name":"Dumbbell Bench Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"dumbbell press":{"name":"Dumbbell Bench Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"flat dumbbell press":{"name":"Dumbbell Bench Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"barbell bench press":{"name":"Barbell Bench Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"bench press":{"name":"Barbell Bench Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"flat bench":{"name":"Barbell Bench Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"bb bench":{"name":"Barbell Bench Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"smith machine bench press":{"name":"Smith Machine Bench Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"smith bench":{"name":"Smith Machine Bench Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"smith chest press":{"name":"Smith Machine Bench Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"incline machine press":{"name":"Incline Machine Press","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","triceps","chest"],"stabilizerMuscles":[]},"incline chest press machine":{"name":"Incline Machine Press","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","triceps","chest"],"stabilizerMuscles":[]},"incline dumbbell press":{"name":"Incline Dumbbell Press","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","triceps","chest"],"stabilizerMuscles":[]},"incline db press":{"name":"Incline Dumbbell Press","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","triceps","chest"],"stabilizerMuscles":[]},"incline dumbbell bench":{"name":"Incline Dumbbell Press","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","triceps","chest"],"stabilizerMuscles":[]},"incline barbell bench press":{"name":"Incline Barbell Bench Press","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","triceps","chest"],"stabilizerMuscles":[]},"incline bench":{"name":"Incline Barbell Bench Press","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","triceps","chest"],"stabilizerMuscles":[]},"incline barbell press":{"name":"Incline Barbell Bench Press","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","triceps","chest"],"stabilizerMuscles":[]},"smith machine incline press":{"name":"Smith Machine Incline Press","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"smith incline bench":{"name":"Smith Machine Incline Press","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"smith incline press":{"name":"Smith Machine Incline Press","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"decline bench press":{"name":"Decline Bench Press","primaryMuscles":["chest"],"secondaryMuscles":["triceps","front_delts"],"stabilizerMuscles":[]},"decline press":{"name":"Decline Bench Press","primaryMuscles":["chest"],"secondaryMuscles":["triceps","front_delts"],"stabilizerMuscles":[]},"cable chest press":{"name":"Cable Chest Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"standing cable chest press":{"name":"Cable Chest Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"pec fly":{"name":"Pec Fly","primaryMuscles":["chest"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[]},"pec deck":{"name":"Pec Fly","primaryMuscles":["chest"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[]},"machine fly":{"name":"Pec Fly","primaryMuscles":["chest"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[]},"chest fly machine":{"name":"Pec Fly","primaryMuscles":["chest"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[]},"cable fly":{"name":"Cable Fly","primaryMuscles":["chest"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[]},"cable chest fly":{"name":"Cable Fly","primaryMuscles":["chest"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[]},"standing cable fly":{"name":"Cable Fly","primaryMuscles":["chest"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[]},"low to high cable fly":{"name":"Low-to-High Cable Fly","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","chest"],"stabilizerMuscles":[]},"low high cable fly":{"name":"Low-to-High Cable Fly","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","chest"],"stabilizerMuscles":[]},"upper chest cable fly":{"name":"Low-to-High Cable Fly","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","chest"],"stabilizerMuscles":[]},"high to low cable fly":{"name":"High-to-Low Cable Fly","primaryMuscles":["chest"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[]},"high low cable fly":{"name":"High-to-Low Cable Fly","primaryMuscles":["chest"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[]},"dumbbell fly":{"name":"Dumbbell Fly","primaryMuscles":["chest"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[]},"db fly":{"name":"Dumbbell Fly","primaryMuscles":["chest"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[]},"dumbbell chest fly":{"name":"Dumbbell Fly","primaryMuscles":["chest"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[]},"push up":{"name":"Push-Up","primaryMuscles":["chest"],"secondaryMuscles":["triceps","front_delts"],"stabilizerMuscles":["core"]},"pushup":{"name":"Push-Up","primaryMuscles":["chest"],"secondaryMuscles":["triceps","front_delts"],"stabilizerMuscles":["core"]},"press up":{"name":"Push-Up","primaryMuscles":["chest"],"secondaryMuscles":["triceps","front_delts"],"stabilizerMuscles":["core"]},"incline push up":{"name":"Incline Push-Up","primaryMuscles":["chest"],"secondaryMuscles":["triceps","front_delts"],"stabilizerMuscles":["core"]},"incline pushup":{"name":"Incline Push-Up","primaryMuscles":["chest"],"secondaryMuscles":["triceps","front_delts"],"stabilizerMuscles":["core"]},"weighted dip":{"name":"Weighted Dip","primaryMuscles":["chest","triceps"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[]},"weighted dips":{"name":"Weighted Dip","primaryMuscles":["chest","triceps"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[]},"dip":{"name":"Weighted Dip","primaryMuscles":["chest","triceps"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[]},"shoulder press":{"name":"Shoulder Press","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[]},"machine shoulder press":{"name":"Shoulder Press","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps","upper_chest"],"stabilizerMuscles":[]},"overhead press machine":{"name":"Shoulder Press","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps","upper_chest"],"stabilizerMuscles":[]},"dumbbell shoulder press":{"name":"Dumbbell Shoulder Press","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[]},"db shoulder press":{"name":"Dumbbell Shoulder Press","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[]},"dumbbell overhead press":{"name":"Dumbbell Shoulder Press","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[]},"barbell overhead press":{"name":"Barbell Overhead Press","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps","upper_chest"],"stabilizerMuscles":["core"]},"ohp":{"name":"Barbell Overhead Press","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps","upper_chest"],"stabilizerMuscles":["core"]},"military press":{"name":"Barbell Overhead Press","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps","upper_chest"],"stabilizerMuscles":["core"]},"barbell shoulder press":{"name":"Barbell Overhead Press","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps","upper_chest"],"stabilizerMuscles":["core"]},"smith machine shoulder press":{"name":"Smith Machine Shoulder Press","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[]},"smith shoulder press":{"name":"Smith Machine Shoulder Press","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[]},"arnold press":{"name":"Arnold Press","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[]},"arnold shoulder press":{"name":"Arnold Press","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[]},"dumbbell lateral raise":{"name":"Dumbbell Lateral Raise","primaryMuscles":["side_delts"],"secondaryMuscles":["upper_traps"],"stabilizerMuscles":[]},"lateral raise":{"name":"Lateral Raise","primaryMuscles":["side_delts"],"secondaryMuscles":["upper_traps"],"stabilizerMuscles":[]},"side raise":{"name":"Dumbbell Lateral Raise","primaryMuscles":["side_delts"],"secondaryMuscles":["upper_traps"],"stabilizerMuscles":[]},"db lateral raise":{"name":"Dumbbell Lateral Raise","primaryMuscles":["side_delts"],"secondaryMuscles":["upper_traps"],"stabilizerMuscles":[]},"cable lateral raise":{"name":"Cable Lateral Raise","primaryMuscles":["side_delts"],"secondaryMuscles":["upper_traps"],"stabilizerMuscles":[]},"single arm cable lateral raise":{"name":"Cable Lateral Raise","primaryMuscles":["side_delts"],"secondaryMuscles":["upper_traps"],"stabilizerMuscles":[]},"machine lateral raise":{"name":"Machine Lateral Raise","primaryMuscles":["side_delts"],"secondaryMuscles":["upper_traps"],"stabilizerMuscles":[]},"lateral raise machine":{"name":"Machine Lateral Raise","primaryMuscles":["side_delts"],"secondaryMuscles":["upper_traps"],"stabilizerMuscles":[]},"dumbbell front raise":{"name":"Dumbbell Front Raise","primaryMuscles":["front_delts"],"secondaryMuscles":["upper_chest"],"stabilizerMuscles":[]},"front raise":{"name":"Dumbbell Front Raise","primaryMuscles":["front_delts"],"secondaryMuscles":["upper_chest"],"stabilizerMuscles":[]},"db front raise":{"name":"Dumbbell Front Raise","primaryMuscles":["front_delts"],"secondaryMuscles":["upper_chest"],"stabilizerMuscles":[]},"rear delt fly":{"name":"Rear Delt Fly","primaryMuscles":["rear_delts"],"secondaryMuscles":["mid_back"],"stabilizerMuscles":[]},"reverse pec deck":{"name":"Rear Delt Fly","primaryMuscles":["rear_delts"],"secondaryMuscles":["mid_back"],"stabilizerMuscles":[]},"rear delt machine fly":{"name":"Rear Delt Fly","primaryMuscles":["rear_delts"],"secondaryMuscles":["mid_back"],"stabilizerMuscles":[]},"cable rear delt fly":{"name":"Cable Rear Delt Fly","primaryMuscles":["rear_delts"],"secondaryMuscles":["mid_back"],"stabilizerMuscles":[]},"rear delt cable fly":{"name":"Cable Rear Delt Fly","primaryMuscles":["rear_delts"],"secondaryMuscles":["mid_back"],"stabilizerMuscles":[]},"bent over dumbbell rear delt fly":{"name":"Bent-Over Dumbbell Rear Delt Fly","primaryMuscles":["rear_delts"],"secondaryMuscles":["mid_back"],"stabilizerMuscles":[]},"bent over rear delt fly":{"name":"Bent-Over Dumbbell Rear Delt Fly","primaryMuscles":["rear_delts"],"secondaryMuscles":["mid_back"],"stabilizerMuscles":[]},"reverse fly":{"name":"Bent-Over Dumbbell Rear Delt Fly","primaryMuscles":["rear_delts"],"secondaryMuscles":["mid_back"],"stabilizerMuscles":[]},"face pull":{"name":"Face Pull","primaryMuscles":["rear_delts"],"secondaryMuscles":["mid_back","rotator_cuff"],"stabilizerMuscles":[]},"rope face pull":{"name":"Face Pull","primaryMuscles":["rear_delts"],"secondaryMuscles":["mid_back","rotator_cuff"],"stabilizerMuscles":[]},"upright row":{"name":"Upright Row","primaryMuscles":["side_delts","upper_traps"],"secondaryMuscles":["biceps"],"stabilizerMuscles":[]},"upright cable row":{"name":"Upright Row","primaryMuscles":["side_delts","upper_traps"],"secondaryMuscles":["biceps"],"stabilizerMuscles":[]},"barbell upright row":{"name":"Upright Row","primaryMuscles":["side_delts","upper_traps"],"secondaryMuscles":["biceps"],"stabilizerMuscles":[]},"triceps pushdown":{"name":"Triceps Pushdown","primaryMuscles":["triceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"tricep pushdown":{"name":"Triceps Pushdown","primaryMuscles":["triceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"cable pushdown":{"name":"Triceps Pushdown","primaryMuscles":["triceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"pressdown":{"name":"Triceps Pushdown","primaryMuscles":["triceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"rope triceps pushdown":{"name":"Rope Triceps Pushdown","primaryMuscles":["triceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"rope pushdown":{"name":"Rope Triceps Pushdown","primaryMuscles":["triceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"rope pressdown":{"name":"Rope Triceps Pushdown","primaryMuscles":["triceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"straight bar triceps pushdown":{"name":"Straight-Bar Triceps Pushdown","primaryMuscles":["triceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"bar pushdown":{"name":"Straight-Bar Triceps Pushdown","primaryMuscles":["triceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"straight bar pressdown":{"name":"Straight-Bar Triceps Pushdown","primaryMuscles":["triceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"single arm triceps pushdown":{"name":"Single-Arm Triceps Pushdown","primaryMuscles":["triceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"unilateral pushdown":{"name":"Single-Arm Triceps Pushdown","primaryMuscles":["triceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"one arm pushdown":{"name":"Single-Arm Triceps Pushdown","primaryMuscles":["triceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"overhead cable triceps extension":{"name":"Overhead Cable Triceps Extension","primaryMuscles":["triceps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"overhead tricep extension":{"name":"Overhead Cable Triceps Extension","primaryMuscles":["triceps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"cable overhead extension":{"name":"Overhead Cable Triceps Extension","primaryMuscles":["triceps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"dumbbell overhead triceps extension":{"name":"Dumbbell Overhead Triceps Extension","primaryMuscles":["triceps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"db overhead extension":{"name":"Dumbbell Overhead Triceps Extension","primaryMuscles":["triceps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"dumbbell tricep extension":{"name":"Dumbbell Overhead Triceps Extension","primaryMuscles":["triceps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"skull crusher":{"name":"Skull Crusher","primaryMuscles":["triceps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"lying tricep extension":{"name":"Skull Crusher","primaryMuscles":["triceps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"ez bar skullcrusher":{"name":"Skull Crusher","primaryMuscles":["triceps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"close grip bench press":{"name":"Close-Grip Bench Press","primaryMuscles":["triceps"],"secondaryMuscles":["chest","front_delts"],"stabilizerMuscles":[]},"close grip bench":{"name":"Close-Grip Bench Press","primaryMuscles":["triceps"],"secondaryMuscles":["chest","front_delts"],"stabilizerMuscles":[]},"cgbp":{"name":"Close-Grip Bench Press","primaryMuscles":["triceps"],"secondaryMuscles":["chest","front_delts"],"stabilizerMuscles":[]},"bench dip":{"name":"Bench Dip","primaryMuscles":["triceps"],"secondaryMuscles":["front_delts","chest"],"stabilizerMuscles":[]},"bench dips":{"name":"Bench Dip","primaryMuscles":["triceps"],"secondaryMuscles":["front_delts","chest"],"stabilizerMuscles":[]},"lat pulldown":{"name":"Lat Pulldown","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":[]},"wide grip pulldown":{"name":"Lat Pulldown","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":[]},"lat pull down":{"name":"Lat Pulldown","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":[]},"close grip pulldown":{"name":"Close Grip Pulldown","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":[]},"neutral grip pulldown":{"name":"Close-Grip Pulldown","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":[]},"close grip lat pulldown":{"name":"Close-Grip Pulldown","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":[]},"underhand lat pulldown":{"name":"Underhand Lat Pulldown","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":[]},"reverse grip pulldown":{"name":"Underhand Lat Pulldown","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":[]},"single arm lat pulldown":{"name":"Single-Arm Lat Pulldown","primaryMuscles":["lats"],"secondaryMuscles":["biceps"],"stabilizerMuscles":[]},"one arm lat pulldown":{"name":"Single-Arm Lat Pulldown","primaryMuscles":["lats"],"secondaryMuscles":["biceps"],"stabilizerMuscles":[]},"unilateral pulldown":{"name":"Single-Arm Lat Pulldown","primaryMuscles":["lats"],"secondaryMuscles":["biceps"],"stabilizerMuscles":[]},"pull up":{"name":"Pull-Up","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":["core"]},"pullup":{"name":"Pull-Up","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":["core"]},"wide grip pull up":{"name":"Pull-Up","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":["core"]},"chin up":{"name":"Chin-Up","primaryMuscles":["lats","biceps"],"secondaryMuscles":["mid_back"],"stabilizerMuscles":["core"]},"chinup":{"name":"Chin-Up","primaryMuscles":["lats","biceps"],"secondaryMuscles":["mid_back"],"stabilizerMuscles":["core"]},"assisted pull up":{"name":"Assisted Pull-Up","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":[]},"assisted pullup":{"name":"Assisted Pull-Up","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":[]},"chest supported row":{"name":"Chest Supported Row","primaryMuscles":["lats","mid_back"],"secondaryMuscles":["rear_delts","biceps"],"stabilizerMuscles":["upper_traps"]},"chest supported row machine":{"name":"Chest-Supported Row","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps","rear_delts"],"stabilizerMuscles":[]},"machine row":{"name":"Chest-Supported Row","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps","rear_delts"],"stabilizerMuscles":[]},"seated cable row":{"name":"Seated Cable Row","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps","rear_delts"],"stabilizerMuscles":[]},"cable row":{"name":"Seated Cable Row","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps","rear_delts"],"stabilizerMuscles":[]},"seated row":{"name":"Seated Cable Row","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps","rear_delts"],"stabilizerMuscles":[]},"barbell row":{"name":"Barbell Row","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps","rear_delts"],"stabilizerMuscles":["lower_back","core"]},"bent over row":{"name":"Barbell Row","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps","rear_delts"],"stabilizerMuscles":["lower_back","core"]},"bb row":{"name":"Barbell Row","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps","rear_delts"],"stabilizerMuscles":["lower_back","core"]},"pendlay row":{"name":"Pendlay Row","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps","rear_delts"],"stabilizerMuscles":["lower_back"]},"pendlay":{"name":"Pendlay Row","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps","rear_delts"],"stabilizerMuscles":["lower_back"]},"one arm dumbbell row":{"name":"One-Arm Dumbbell Row","primaryMuscles":["lats"],"secondaryMuscles":["mid_back","biceps"],"stabilizerMuscles":["core"]},"one arm row":{"name":"One-Arm Dumbbell Row","primaryMuscles":["lats"],"secondaryMuscles":["mid_back","biceps"],"stabilizerMuscles":["core"]},"single arm dumbbell row":{"name":"One-Arm Dumbbell Row","primaryMuscles":["lats"],"secondaryMuscles":["mid_back","biceps"],"stabilizerMuscles":["core"]},"db row":{"name":"One-Arm Dumbbell Row","primaryMuscles":["lats"],"secondaryMuscles":["mid_back","biceps"],"stabilizerMuscles":["core"]},"t bar row":{"name":"T-Bar Row","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps","rear_delts"],"stabilizerMuscles":[]},"tbar row":{"name":"T-Bar Row","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps","rear_delts"],"stabilizerMuscles":[]},"landmine row":{"name":"Landmine Row","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps"],"stabilizerMuscles":[]},"landmine t bar row":{"name":"Landmine Row","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps"],"stabilizerMuscles":[]},"straight arm pulldown":{"name":"Straight-Arm Pulldown","primaryMuscles":["lats"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[]},"straight arm lat pulldown":{"name":"Straight-Arm Pulldown","primaryMuscles":["lats"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[]},"cable pullover":{"name":"Straight-Arm Pulldown","primaryMuscles":["lats"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[]},"machine pullover":{"name":"Machine Pullover","primaryMuscles":["lats"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[]},"pullover machine":{"name":"Machine Pullover","primaryMuscles":["lats"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[]},"dumbbell pullover":{"name":"Dumbbell Pullover","primaryMuscles":["lats","chest"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[]},"db pullover":{"name":"Dumbbell Pullover","primaryMuscles":["lats","chest"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[]},"dumbbell shrug":{"name":"Dumbbell Shrug","primaryMuscles":["upper_traps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"db shrugs":{"name":"DB Shrugs","primaryMuscles":["upper_traps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"dumbbell shrugs":{"name":"Dumbbell Shrug","primaryMuscles":["upper_traps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"barbell shrug":{"name":"Barbell Shrug","primaryMuscles":["upper_traps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"bb shrug":{"name":"Barbell Shrug","primaryMuscles":["upper_traps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"barbell shrugs":{"name":"Barbell Shrug","primaryMuscles":["upper_traps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"smith machine shrug":{"name":"Smith Machine Shrug","primaryMuscles":["upper_traps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"smith shrug":{"name":"Smith Machine Shrug","primaryMuscles":["upper_traps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"cable shrug":{"name":"Cable Shrug","primaryMuscles":["upper_traps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"cable shrugs":{"name":"Cable Shrug","primaryMuscles":["upper_traps"],"secondaryMuscles":[],"stabilizerMuscles":[]},"back extension":{"name":"Back Extension","primaryMuscles":["lower_back"],"secondaryMuscles":["glutes","hamstrings"],"stabilizerMuscles":[]},"hyperextension":{"name":"Back Extension","primaryMuscles":["lower_back"],"secondaryMuscles":["glutes","hamstrings"],"stabilizerMuscles":[]},"45 degree back extension":{"name":"Back Extension","primaryMuscles":["lower_back"],"secondaryMuscles":["glutes","hamstrings"],"stabilizerMuscles":[]},"dumbbell biceps curl":{"name":"Dumbbell Biceps Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"db biceps curl":{"name":"DB Biceps Curl","primaryMuscles":["biceps"],"secondaryMuscles":["brachialis","forearms"],"stabilizerMuscles":[]},"dumbbell curl":{"name":"Dumbbell Biceps Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"db curl":{"name":"Dumbbell Biceps Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"alternating dumbbell curl":{"name":"Alternating Dumbbell Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"alternating curl":{"name":"Alternating Dumbbell Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"barbell curl":{"name":"Barbell Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"bb curl":{"name":"Barbell Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"ez bar curl":{"name":"EZ-Bar Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"ez curl":{"name":"EZ-Bar Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"ezbar curl":{"name":"EZ-Bar Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"hammer curl":{"name":"Hammer Curl","primaryMuscles":["brachialis","biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"db hammer curl":{"name":"Hammer Curl","primaryMuscles":["brachialis","biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"cross body hammer curl":{"name":"Cross-Body Hammer Curl","primaryMuscles":["brachialis","biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"cross body curl":{"name":"Cross-Body Hammer Curl","primaryMuscles":["brachialis","biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"cable curl":{"name":"Cable Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"cable biceps curl":{"name":"Cable Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"bayesian cable curl":{"name":"Bayesian Cable Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"bayesian curl":{"name":"Bayesian Cable Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"preacher curl":{"name":"Preacher Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"preacher bicep curl":{"name":"Preacher Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"incline dumbbell curl":{"name":"Incline Dumbbell Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"incline curl":{"name":"Incline Dumbbell Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"concentration curl":{"name":"Concentration Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"concentration biceps curl":{"name":"Concentration Curl","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[]},"reverse curl":{"name":"Reverse Curl","primaryMuscles":["forearms","brachialis"],"secondaryMuscles":["biceps"],"stabilizerMuscles":[]},"reverse biceps curl":{"name":"Reverse Curl","primaryMuscles":["forearms","brachialis"],"secondaryMuscles":["biceps"],"stabilizerMuscles":[]},"wrist curl":{"name":"Wrist Curl","primaryMuscles":["forearms"],"secondaryMuscles":[],"stabilizerMuscles":[]},"forearm wrist curl":{"name":"Wrist Curl","primaryMuscles":["forearms"],"secondaryMuscles":[],"stabilizerMuscles":[]},"leg extension":{"name":"Leg Extension","primaryMuscles":["quads"],"secondaryMuscles":[],"stabilizerMuscles":[]},"leg extensions":{"name":"Leg Extension","primaryMuscles":["quads"],"secondaryMuscles":[],"stabilizerMuscles":[]},"quad extension":{"name":"Leg Extension","primaryMuscles":["quads"],"secondaryMuscles":[],"stabilizerMuscles":[]},"seated leg curl":{"name":"Seated Leg Curl","primaryMuscles":["hamstrings"],"secondaryMuscles":["calves"],"stabilizerMuscles":[]},"seated hamstring curl":{"name":"Seated Leg Curl","primaryMuscles":["hamstrings"],"secondaryMuscles":["calves"],"stabilizerMuscles":[]},"hamstring curl seated":{"name":"Seated Leg Curl","primaryMuscles":["hamstrings"],"secondaryMuscles":["calves"],"stabilizerMuscles":[]},"lying leg curl":{"name":"Lying Leg Curl","primaryMuscles":["hamstrings"],"secondaryMuscles":["calves"],"stabilizerMuscles":[]},"lying hamstring curl":{"name":"Lying Leg Curl","primaryMuscles":["hamstrings"],"secondaryMuscles":["calves"],"stabilizerMuscles":[]},"prone leg curl":{"name":"Lying Leg Curl","primaryMuscles":["hamstrings"],"secondaryMuscles":["calves"],"stabilizerMuscles":[]},"standing leg curl":{"name":"Standing Leg Curl","primaryMuscles":["hamstrings"],"secondaryMuscles":["calves"],"stabilizerMuscles":[]},"standing hamstring curl":{"name":"Standing Leg Curl","primaryMuscles":["hamstrings"],"secondaryMuscles":["calves"],"stabilizerMuscles":[]},"leg press":{"name":"Leg Press","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":["core"]},"plate loaded leg press":{"name":"Leg Press","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings","calves"],"stabilizerMuscles":[]},"45 degree leg press":{"name":"Leg Press","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings","calves"],"stabilizerMuscles":[]},"horizontal leg press":{"name":"Horizontal Leg Press","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":[]},"seated leg press":{"name":"Horizontal Leg Press","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":[]},"hack squat":{"name":"Hack Squat","primaryMuscles":["quads"],"secondaryMuscles":["glutes","hamstrings"],"stabilizerMuscles":[]},"hack squat machine":{"name":"Hack Squat","primaryMuscles":["quads"],"secondaryMuscles":["glutes","hamstrings"],"stabilizerMuscles":[]},"pendulum squat":{"name":"Pendulum Squat","primaryMuscles":["quads"],"secondaryMuscles":["glutes","hamstrings"],"stabilizerMuscles":[]},"pendulum":{"name":"Pendulum Squat","primaryMuscles":["quads"],"secondaryMuscles":["glutes","hamstrings"],"stabilizerMuscles":[]},"barbell back squat":{"name":"Barbell Back Squat","primaryMuscles":["quads"],"secondaryMuscles":["glutes","hamstrings"],"stabilizerMuscles":["core","lower_back"]},"back squat":{"name":"Barbell Back Squat","primaryMuscles":["quads"],"secondaryMuscles":["glutes","hamstrings"],"stabilizerMuscles":["core","lower_back"]},"squat":{"name":"Barbell Back Squat","primaryMuscles":["quads"],"secondaryMuscles":["glutes","hamstrings"],"stabilizerMuscles":["core","lower_back"]},"front squat":{"name":"Front Squat","primaryMuscles":["quads"],"secondaryMuscles":["glutes"],"stabilizerMuscles":["core"]},"barbell front squat":{"name":"Front Squat","primaryMuscles":["quads"],"secondaryMuscles":["glutes"],"stabilizerMuscles":["core"]},"goblet squat":{"name":"Goblet Squat","primaryMuscles":["quads"],"secondaryMuscles":["glutes"],"stabilizerMuscles":["core"]},"goblet":{"name":"Goblet Squat","primaryMuscles":["quads"],"secondaryMuscles":["glutes"],"stabilizerMuscles":["core"]},"smith machine squat":{"name":"Smith Machine Squat","primaryMuscles":["quads"],"secondaryMuscles":["glutes","hamstrings"],"stabilizerMuscles":[]},"smith squat":{"name":"Smith Machine Squat","primaryMuscles":["quads"],"secondaryMuscles":["glutes","hamstrings"],"stabilizerMuscles":[]},"bulgarian split squat":{"name":"Bulgarian Split Squat","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":["core"]},"bss":{"name":"Bulgarian Split Squat","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":["core"]},"bulgarian squat":{"name":"Bulgarian Split Squat","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":["core"]},"split squat":{"name":"Bulgarian Split Squat","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":["core"]},"walking lunge":{"name":"Walking Lunge","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings","calves"],"stabilizerMuscles":["core"]},"walking lunges":{"name":"Walking Lunge","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings","calves"],"stabilizerMuscles":["core"]},"reverse lunge":{"name":"Reverse Lunge","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":["core"]},"backward lunge":{"name":"Reverse Lunge","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":["core"]},"forward lunge":{"name":"Forward Lunge","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":["core"]},"front lunge":{"name":"Forward Lunge","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":["core"]},"step up":{"name":"Step-Up","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings","calves"],"stabilizerMuscles":["core"]},"romanian deadlift":{"name":"Romanian Deadlift","primaryMuscles":["hamstrings"],"secondaryMuscles":["glutes","lower_back"],"stabilizerMuscles":["core"]},"rdl":{"name":"Romanian Deadlift","primaryMuscles":["hamstrings"],"secondaryMuscles":["glutes","lower_back"],"stabilizerMuscles":["core"]},"barbell rdl":{"name":"Romanian Deadlift","primaryMuscles":["hamstrings"],"secondaryMuscles":["glutes","lower_back"],"stabilizerMuscles":["core"]},"dumbbell romanian deadlift":{"name":"Dumbbell Romanian Deadlift","primaryMuscles":["hamstrings"],"secondaryMuscles":["glutes","lower_back"],"stabilizerMuscles":["core"]},"db rdl":{"name":"Dumbbell Romanian Deadlift","primaryMuscles":["hamstrings"],"secondaryMuscles":["glutes","lower_back"],"stabilizerMuscles":["core"]},"dumbbell rdl":{"name":"Dumbbell Romanian Deadlift","primaryMuscles":["hamstrings"],"secondaryMuscles":["glutes","lower_back"],"stabilizerMuscles":["core"]},"single leg romanian deadlift":{"name":"Single-Leg Romanian Deadlift","primaryMuscles":["hamstrings"],"secondaryMuscles":["glutes"],"stabilizerMuscles":["core"]},"single leg rdl":{"name":"Single-Leg Romanian Deadlift","primaryMuscles":["hamstrings"],"secondaryMuscles":["glutes"],"stabilizerMuscles":["core"]},"conventional deadlift":{"name":"Conventional Deadlift","primaryMuscles":["hamstrings","glutes","lower_back"],"secondaryMuscles":["quads","lats","upper_traps"],"stabilizerMuscles":["core"]},"deadlift":{"name":"Conventional Deadlift","primaryMuscles":["hamstrings","glutes","lower_back"],"secondaryMuscles":["quads","lats","upper_traps"],"stabilizerMuscles":["core"]},"conventional dl":{"name":"Conventional Deadlift","primaryMuscles":["hamstrings","glutes","lower_back"],"secondaryMuscles":["quads","lats","upper_traps"],"stabilizerMuscles":["core"]},"sumo deadlift":{"name":"Sumo Deadlift","primaryMuscles":["glutes","adductors"],"secondaryMuscles":["quads","hamstrings","lower_back"],"stabilizerMuscles":["core"]},"sumo dl":{"name":"Sumo Deadlift","primaryMuscles":["glutes","adductors"],"secondaryMuscles":["quads","hamstrings","lower_back"],"stabilizerMuscles":["core"]},"hip thrust":{"name":"Hip Thrust","primaryMuscles":["glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":[]},"barbell hip thrust":{"name":"Hip Thrust","primaryMuscles":["glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":[]},"machine hip thrust":{"name":"Hip Thrust","primaryMuscles":["glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":[]},"glute bridge":{"name":"Glute Bridge","primaryMuscles":["glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":[]},"bridge":{"name":"Glute Bridge","primaryMuscles":["glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":[]},"cable kickback":{"name":"Cable Kickback","primaryMuscles":["glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":[]},"glute kickback":{"name":"Cable Kickback","primaryMuscles":["glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":[]},"cable glute kickback":{"name":"Cable Kickback","primaryMuscles":["glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":[]},"hip abduction":{"name":"Hip Abduction","primaryMuscles":["glutes","abductors"],"secondaryMuscles":[],"stabilizerMuscles":[]},"abductor machine":{"name":"Hip Abduction","primaryMuscles":["glutes","abductors"],"secondaryMuscles":[],"stabilizerMuscles":[]},"hip abductor":{"name":"Hip Abduction","primaryMuscles":["glutes","abductors"],"secondaryMuscles":[],"stabilizerMuscles":[]},"hip adduction":{"name":"Hip Adduction","primaryMuscles":["adductors"],"secondaryMuscles":[],"stabilizerMuscles":[]},"adductor machine":{"name":"Hip Adduction","primaryMuscles":["adductors"],"secondaryMuscles":[],"stabilizerMuscles":[]},"hip adductor":{"name":"Hip Adduction","primaryMuscles":["adductors"],"secondaryMuscles":[],"stabilizerMuscles":[]},"seated calf raise":{"name":"Seated Calf Raise","primaryMuscles":["calves"],"secondaryMuscles":[],"stabilizerMuscles":[]},"seated calves":{"name":"Seated Calf Raise","primaryMuscles":["calves"],"secondaryMuscles":[],"stabilizerMuscles":[]},"calf raise seated":{"name":"Seated Calf Raise","primaryMuscles":["calves"],"secondaryMuscles":[],"stabilizerMuscles":[]},"standing calf raise":{"name":"Standing Calf Raise","primaryMuscles":["calves"],"secondaryMuscles":[],"stabilizerMuscles":[]},"standing calves":{"name":"Standing Calf Raise","primaryMuscles":["calves"],"secondaryMuscles":[],"stabilizerMuscles":[]},"calf raises":{"name":"Standing Calf Raise","primaryMuscles":["calves"],"secondaryMuscles":[],"stabilizerMuscles":[]},"leg press calf raise":{"name":"Leg Press Calf Raise","primaryMuscles":["calves"],"secondaryMuscles":[],"stabilizerMuscles":[]},"calf press":{"name":"Leg Press Calf Raise","primaryMuscles":["calves"],"secondaryMuscles":[],"stabilizerMuscles":[]},"leg press calves":{"name":"Leg Press Calf Raise","primaryMuscles":["calves"],"secondaryMuscles":[],"stabilizerMuscles":[]},"crunch":{"name":"Crunch","primaryMuscles":["abs"],"secondaryMuscles":[],"stabilizerMuscles":[]},"ab crunch":{"name":"Crunch","primaryMuscles":["abs"],"secondaryMuscles":[],"stabilizerMuscles":[]},"cable crunch":{"name":"Cable Crunch","primaryMuscles":["abs"],"secondaryMuscles":[],"stabilizerMuscles":[]},"kneeling cable crunch":{"name":"Cable Crunch","primaryMuscles":["abs"],"secondaryMuscles":[],"stabilizerMuscles":[]},"machine crunch":{"name":"Machine Crunch","primaryMuscles":["abs"],"secondaryMuscles":[],"stabilizerMuscles":[]},"ab crunch machine":{"name":"Machine Crunch","primaryMuscles":["abs"],"secondaryMuscles":[],"stabilizerMuscles":[]},"hanging leg raise":{"name":"Hanging Leg Raise","primaryMuscles":["abs"],"secondaryMuscles":["hip_flexors"],"stabilizerMuscles":[]},"hanging leg raises":{"name":"Hanging Leg Raise","primaryMuscles":["abs"],"secondaryMuscles":["hip_flexors"],"stabilizerMuscles":[]},"hanging knee raise":{"name":"Hanging Knee Raise","primaryMuscles":["abs"],"secondaryMuscles":["hip_flexors"],"stabilizerMuscles":[]},"hanging knee raises":{"name":"Hanging Knee Raise","primaryMuscles":["abs"],"secondaryMuscles":["hip_flexors"],"stabilizerMuscles":[]},"reverse crunch":{"name":"Reverse Crunch","primaryMuscles":["abs"],"secondaryMuscles":["hip_flexors"],"stabilizerMuscles":[]},"reverse ab crunch":{"name":"Reverse Crunch","primaryMuscles":["abs"],"secondaryMuscles":["hip_flexors"],"stabilizerMuscles":[]},"plank":{"name":"Plank","primaryMuscles":["core"],"secondaryMuscles":["abs"],"stabilizerMuscles":["glutes","front_delts"]},"front plank":{"name":"Plank","primaryMuscles":["core"],"secondaryMuscles":["abs"],"stabilizerMuscles":["glutes","front_delts"]},"side plank":{"name":"Side Plank","primaryMuscles":["obliques"],"secondaryMuscles":["core"],"stabilizerMuscles":[]},"side plank hold":{"name":"Side Plank","primaryMuscles":["obliques"],"secondaryMuscles":["core"],"stabilizerMuscles":[]},"ab wheel rollout":{"name":"Ab Wheel Rollout","primaryMuscles":["core","abs"],"secondaryMuscles":["lats"],"stabilizerMuscles":["front_delts"]},"ab rollout":{"name":"Ab Wheel Rollout","primaryMuscles":["core","abs"],"secondaryMuscles":["lats"],"stabilizerMuscles":["front_delts"]},"wheel rollout":{"name":"Ab Wheel Rollout","primaryMuscles":["core","abs"],"secondaryMuscles":["lats"],"stabilizerMuscles":["front_delts"]},"russian twist":{"name":"Russian Twist","primaryMuscles":["obliques"],"secondaryMuscles":["abs"],"stabilizerMuscles":[]},"russian twists":{"name":"Russian Twist","primaryMuscles":["obliques"],"secondaryMuscles":["abs"],"stabilizerMuscles":[]},"pallof press":{"name":"Pallof Press","primaryMuscles":["core","obliques"],"secondaryMuscles":[],"stabilizerMuscles":[]},"pallof":{"name":"Pallof Press","primaryMuscles":["core","obliques"],"secondaryMuscles":[],"stabilizerMuscles":[]},"dead bug":{"name":"Dead Bug","primaryMuscles":["core","abs"],"secondaryMuscles":[],"stabilizerMuscles":[]},"deadbug":{"name":"Dead Bug","primaryMuscles":["core","abs"],"secondaryMuscles":[],"stabilizerMuscles":[]},"sled push":{"name":"Sled Push","primaryMuscles":["quads","glutes"],"secondaryMuscles":["calves","core"],"stabilizerMuscles":[]},"prowler push":{"name":"Sled Push","primaryMuscles":["quads","glutes"],"secondaryMuscles":["calves","core"],"stabilizerMuscles":[]},"sled pull":{"name":"Sled Pull","primaryMuscles":["quads","glutes"],"secondaryMuscles":["mid_back","core"],"stabilizerMuscles":[]},"prowler pull":{"name":"Sled Pull","primaryMuscles":["quads","glutes"],"secondaryMuscles":["mid_back","core"],"stabilizerMuscles":[]},"farmer s carry":{"name":"Farmer's Carry","primaryMuscles":["forearms","upper_traps"],"secondaryMuscles":["core","glutes"],"stabilizerMuscles":[]},"farmers walk":{"name":"Farmer's Carry","primaryMuscles":["forearms","upper_traps"],"secondaryMuscles":["core","glutes"],"stabilizerMuscles":[]},"farmer carry":{"name":"Farmer's Carry","primaryMuscles":["forearms","upper_traps"],"secondaryMuscles":["core","glutes"],"stabilizerMuscles":[]},"chest press":{"name":"Chest Press","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[]},"abs work":{"name":"Abs Work","primaryMuscles":["abs"],"secondaryMuscles":["obliques"],"stabilizerMuscles":[]},"hamstring curl":{"name":"Hamstring Curl","primaryMuscles":["hamstrings"],"secondaryMuscles":["calves"],"stabilizerMuscles":[]},"abs workout":{"name":"Abs Workout","primaryMuscles":["abs"],"secondaryMuscles":["obliques"],"stabilizerMuscles":[]}};
@@ -5085,22 +5110,31 @@ renderTrainingGoal();
       path.style.setProperty("--dt-target",DT_ROLE_COLORS[role]);
       path.style.setProperty("--dt-glow",DT_ROLE_GLOWS[role]);
       path.style.setProperty("--dt-base","#3c4851");
-      /* Release: target stays visible; the body enters slowly, then a very soft pulse begins. */
-      path.style.fill=DT_ROLE_COLORS[role];
-      path.style.opacity="1";
+
+      /*
+        Restore the earlier working reveal → glow behavior, slowed down:
+        target fades in by role, remains highlighted, then keeps a subtle pulse.
+      */
+      path.style.fill="#3c4851";
+      path.style.opacity=".48";
       path.style.animation="none";
       void path.getBoundingClientRect();
       path.classList.add("dt-role-animated");
-      path.style.animation=`dtMusclePulse 3.6s ease-in-out ${delay+1.80}s infinite`;
+      path.style.animation=`dtMuscleReveal .82s cubic-bezier(.2,.75,.2,1) ${delay}s forwards, dtMusclePulse 3.4s ease-in-out ${delay+1.55}s infinite`;
     });
   }
 
-  const animationObserver=new MutationObserver(()=>{
-    clearTimeout(animationObserver._t);
-    animationObserver._t=setTimeout(dtAnimateCurrentMuscleMap,70);
-  });
-  animationObserver.observe(document.body,{childList:true,subtree:true});
-  document.addEventListener("click",()=>setTimeout(dtAnimateCurrentMuscleMap,100),true);
+  /*
+    Do not observe the whole app DOM here. Workout timers/history rendering can
+    mutate unrelated nodes and repeatedly restart the muscle animation.
+    The renderer now emits dt:musclemapstyled exactly when target fills are ready.
+  */
+  document.addEventListener("dt:musclemapstyled",()=>setTimeout(dtAnimateCurrentMuscleMap,40));
+  document.addEventListener("click",ev=>{
+    if(ev.target.closest?.(".exercise-head,[data-muscle-detail],.muscle-detail-trigger")){
+      setTimeout(dtAnimateCurrentMuscleMap,220);
+    }
+  },true);
 
   // Watch the workout list: once the last pending exercise is finalized, create summary.
   const workoutList=document.getElementById("wlist");
@@ -5317,7 +5351,14 @@ renderTrainingGoal();
 
   const QUESTIONS={
     goal:{title:'What do you want most right now?',options:[['general','General fitness','Build confidence, strength and consistency.'],['lean','Lean muscle','Build muscle while keeping training balanced.'],['growth','Muscle growth','A little more training volume.'],['strength','Strength','Slightly lower reps on the main lifts.']]},
-    days:{title:'How many days can you realistically train?',options:[['2','2 days / week','Lowest hassle. Great starting point.'],['3','3 days / week','More practice while still beginner-friendly.']]},
+    days:{title:'How many days can you realistically train?',options:[
+      ['2','2 days / week','Simple and easy to recover from.'],
+      ['3','3 days / week','Balanced frequency for most people.'],
+      ['4','4 days / week','Add another training day or repeat a split.'],
+      ['5','5 days / week','Higher frequency with flexible split rotation.'],
+      ['6','6 days / week','Frequent training with one recovery day.'],
+      ['7','7 days / week','Available every day — schedule rest whenever needed.']
+    ]},
     time:{title:'How long should a workout feel?',options:[['short','30–45 minutes','Five focused exercises.'],['medium','45–60 minutes','Six exercises.'],['long','60+ minutes','Up to seven exercises.']]},
     setup:{title:'What do you mostly have access to?',options:[['gym','Full gym','Machines, cables and dumbbells.'],['dumbbells','Dumbbells + bench','A simpler free-weight setup.']]},
     focus:{title:'Any preference for the first program?',options:[['balanced','Balanced','Train the whole body evenly.'],['upper','Upper-body focus','Still full-body, with upper body first.'],['lower','Lower-body focus','Still full-body, with lower body first.']]}
@@ -5329,7 +5370,7 @@ renderTrainingGoal();
     m.querySelectorAll('.dt-onboard-progress i').forEach((x,i)=>x.classList.toggle('on',i<=Math.min(st.step,4)));
     if(st.step>=DT_ONBOARD_STEPS.length){
       const answers=st.answers,program=dtBuildBeginnerProgram(answers);st.preview=program;
-      body.innerHTML=`<div class="dt-program-preview"><h4>Your beginner program</h4>${program.sessions.slice(0,program.days).map(s=>`<div class="dt-program-session"><b>${s.title}</b><span>${s.ex.map(e=>e[0]).join(' · ')}</span></div>`).join('')}<div style="font-size:9px;color:#73909f;margin-top:7px;line-height:1.5">${program.note}</div></div>`;
+      body.innerHTML=`<div class="dt-program-preview"><h4>Your starting program</h4>${program.sessions.slice(0,Math.min(3,program.days)).map(s=>`<div class="dt-program-session"><b>${s.title}</b><span>${s.ex.map(e=>e[0]).join(' · ')}</span></div>`).join('')}${program.days>3?`<div class="dt-program-frequency-note">${program.days} training days selected. These starter sessions can repeat through the week, or you can add your own split from the Workout screen.</div>`:''}<div style="font-size:9px;color:#73909f;margin-top:7px;line-height:1.5">${program.note}</div></div>`;
       next.textContent='Use This Program';back.style.visibility='visible';
       next.onclick=()=>{const demoWasActive=!!state.workouts?.demoDataLoaded;window.dtResetProgramCustomState?.(program);state.workouts.generatedProgram=program;st.completed=true;st.completedAt=new Date().toISOString();dtApplyGeneratedProgram(program);delete state.workouts.drafts;state.workouts.drafts={};save();m.classList.remove('show');renderWorkout();dtRenderSavedRoutines();if(demoWasActive)setTimeout(()=>window.dtLoadDemoWorkoutData?.(),80);};
       back.onclick=()=>dtShowOnboard(DT_ONBOARD_STEPS.length-1);return;
@@ -5497,17 +5538,25 @@ renderTrainingGoal();
     const removed=JSON.parse(JSON.stringify(state.workouts.removed||{push:[],pull:[],legs:[]}));
     const hasOld=Object.values(custom).some(x=>x?.length)||Object.values(edits).some(x=>Object.keys(x||{}).length)||Object.values(removed).some(x=>x?.length);
     if(hasOld){state.workouts.archivedProgramExtras.push({archivedAt:new Date().toISOString(),custom,edits,removed,previousProgram:state.workouts.generatedProgram||null})}
-    state.workouts.custom={push:[],pull:[],legs:[]};
-    state.workouts.edits={push:{},pull:{},legs:{}};
-    state.workouts.removed={push:[],pull:[],legs:[]};
+    const keptSplits=Array.isArray(state.workouts.customSplits)?state.workouts.customSplits.slice(0,4):[];
+    const keptCustom={},keptEdits={},keptRemoved={};
+    keptSplits.forEach(s=>{
+      keptCustom[s.key]=JSON.parse(JSON.stringify(state.workouts.custom?.[s.key]||[]));
+      keptEdits[s.key]=JSON.parse(JSON.stringify(state.workouts.edits?.[s.key]||{}));
+      keptRemoved[s.key]=JSON.parse(JSON.stringify(state.workouts.removed?.[s.key]||[]));
+    });
+    state.workouts.custom={push:[],pull:[],legs:[],...keptCustom};
+    state.workouts.edits={push:{},pull:{},legs:{},...keptEdits};
+    state.workouts.removed={push:[],pull:[],legs:[],...keptRemoved};
+    state.workouts.customSplits=keptSplits;
     state.workouts.drafts={};
     state.workouts.routineOverrides={};
-    state.workouts.programIsolationVersion=4;
+    state.workouts.programIsolationVersion=5;
   };
 
   /* One-time migration for users who already generated a V3 program and saw old custom items appended. */
   function dtMigrateProgramIsolation(){
-    if(!state.workouts?.generatedProgram||Number(state.workouts.programIsolationVersion||0)>=4)return;
+    if(!state.workouts?.generatedProgram||Number(state.workouts.programIsolationVersion||0)>=5)return;
     window.dtResetProgramCustomState(state.workouts.generatedProgram);
     try{save()}catch(e){}
   }
@@ -5599,7 +5648,7 @@ renderTrainingGoal();
         }
         let badge=row.querySelector('.dt-pr-badge');if(!badge){badge=document.createElement('span');badge.className='dt-pr-badge';badge.innerHTML='<span class="cup">🏆</span> PR';row.appendChild(badge)}
         let hint=row.querySelector('.dt-progress-hint');if(!hint){hint=document.createElement('div');hint.className='dt-progress-hint';row.appendChild(hint)}
-        hint.innerHTML=hist.best?`Best: <strong>${hist.best.kg} kg × ${hist.best.reps}</strong> · ${cue.label}`:cue.label;
+        hint.innerHTML=hist.best?`Best: <strong>${window.dtWeightDisplayValue?.(hist.best.kg)??hist.best.kg} ${(window.dtWeightUnitLabel?.()||"KG").toLowerCase()} × ${hist.best.reps}</strong> · ${cue.label}`:cue.label;
         const kgInput=row.querySelector('.kg'),repsInput=row.querySelector('.reps');
         const update=()=>{const kg=parseFloat(kgInput?.value),reps=parseInt(repsInput?.value);badge.classList.toggle('show',isPR(e,kg,reps))};
         if(kgInput&&!kgInput.dataset.v4progress){kgInput.dataset.v4progress='1';kgInput.addEventListener('input',update)}
@@ -6763,24 +6812,37 @@ function schedState(){
   return state.trainingSchedule;
 }
 function availableSessions(){
-  const days=["push","pull","legs"];
+  const generatedDays=Number(state.workouts?.generatedProgram?.days||3);
+  const base=generatedDays===2?["push","pull"]:["push","pull","legs"];
+  const custom=(state.workouts?.customSplits||[]).map(x=>x.key);
+  const days=[...base,...custom].slice(0,7);
   return days.filter(day=>{
-    try{return (effectiveExercises(day)||[]).length>0}catch(_){return false}
-  }).map(day=>({key:day,name:window.dtWorkoutDisplayName?window.dtWorkoutDisplayName(day):(plans?.[day]?.title||day.toUpperCase())}));
+    try{
+      /* Empty custom splits are still schedulable while the user is building them. */
+      return !!plans?.[day];
+    }catch(_){return false}
+  }).map(day=>({
+    key:day,
+    name:state.workouts?.dayNames?.[day]||plans?.[day]?.title||day.toUpperCase()
+  }));
 }
 function todaySchedKey(){return DAY_KEYS[new Date().getDay()]}
 function currentAssignedDay(){return schedState().days[todaySchedKey()]||null}
 
 function autoSchedule(){
-  const st=schedState(),sessions=availableSessions();
+  const st=schedState(),sessions=availableSessions().slice(0,7);
   st.days={sun:null,mon:null,tue:null,wed:null,thu:null,fri:null,sat:null};
-  if(sessions.length<=1){
-    st.days.mon=sessions[0]?.key||null;
-  }else if(sessions.length===2){
-    st.days.mon=sessions[0].key;st.days.thu=sessions[1].key;
-  }else{
-    st.days.mon=sessions[0].key;st.days.wed=sessions[1].key;st.days.fri=sessions[2].key;
-  }
+  if(!sessions.length)return;
+  const slots={
+    1:["mon"],
+    2:["mon","thu"],
+    3:["mon","wed","fri"],
+    4:["mon","tue","thu","sat"],
+    5:["mon","tue","wed","fri","sat"],
+    6:["mon","tue","wed","thu","fri","sat"],
+    7:["sun","mon","tue","wed","thu","fri","sat"]
+  }[sessions.length]||["mon","tue","wed","thu","fri","sat","sun"];
+  sessions.forEach((s,i)=>{if(slots[i])st.days[slots[i]]=s.key});
 }
 function ensureInitialSchedule(){
   const st=schedState();
@@ -6815,7 +6877,7 @@ function renderModal(){
       <button class="dt-sched-auto" type="button">Auto arrange</button>
       <button class="dt-sched-save" type="button">Save schedule</button>
     </div>
-    <div class="dt-sched-note">Auto arrange uses simple spacing only: 2 sessions → Mon/Thu, 3 sessions → Mon/Wed/Fri. It does not lock the schedule. You can change any day manually.</div>`;
+    <div class="dt-sched-note">Auto arrange spaces your current splits across the week. Nothing is locked — you can repeat a split, move it, or leave any day as Rest.</div>`;
 
   document.querySelectorAll("#dtSchedBody .dt-sched-select").forEach(sel=>{
     sel.onchange=()=>{
@@ -8825,7 +8887,12 @@ function releaseSettingsCleanup(){
     document.getElementById("dtDemoWorkoutDataBtn")?.remove();
     document.getElementById("dtDemoDataModal")?.remove();
     document.getElementById("dtDemoActiveBadge")?.remove();
-    const resetWorkoutButtons=[...document.querySelectorAll("button")].filter(function(btn){
+    /*
+      Release reset cleanup:
+      - only inspect settings-row reset controls
+      - NEVER include the confirmation button inside dtWorkoutResetModal
+    */
+    const resetWorkoutButtons=[...document.querySelectorAll("button.dt-data-tool")].filter(function(btn){
       const bold=btn.querySelector("b");
       const title=((bold ? bold.textContent : btn.textContent) || "").trim().toLowerCase();
       return title.indexOf("reset workout data")===0;
@@ -8843,7 +8910,11 @@ function releaseSettingsCleanup(){
 
     const sourceStatus=document.getElementById("healthSourceStatus");
     if(sourceStatus)sourceStatus.textContent="Health Connect";
+
+    /* Create/keep the single workout-only reset first, then remove the old
+       generic app-reset row from the release surface. */
     ensureReleaseWorkoutReset();
+    document.getElementById("resetBtn")?.remove();
   }catch(_){}
 }
 
@@ -8890,9 +8961,11 @@ function releaseTodayCleanup(){
 function keepMuscleTargetsVisible(){
   document.querySelectorAll(".dt-vector-body .body-chart-muscle").forEach(path=>{
     const target=path.style.getPropertyValue("--dt-target");
-    if(target){
+    if(!target)return;
+    path.style.setProperty("opacity","1");
+    /* During reveal, the animation owns fill. Afterward, forwards keeps target. */
+    if(!path.classList.contains("dt-role-animated")){
       path.style.setProperty("fill",target,"important");
-      path.style.setProperty("opacity","1");
     }
   });
 }
@@ -9076,5 +9149,575 @@ window.dtRemoveWorkoutSet=removeSet;
 })();
 </script>
 
+
+<style id="dt-v19-mobile-release-layout">
+/* M/ARC V19 — mobile release layout fixes */
+
+/* More and Stats are major app surfaces, not small bottom sheets. */
+#dtV10MoreModal,
+#dtWeeklyPerformanceModal{
+  align-items:stretch!important;
+  justify-content:center!important;
+  overflow:hidden!important;
+}
+
+#dtV10MoreModal .dt-more-sheet,
+#dtWeeklyPerformanceModal .dt-wp-sheet{
+  width:min(560px,100%)!important;
+  height:100dvh!important;
+  min-height:100dvh!important;
+  max-height:100dvh!important;
+  box-sizing:border-box!important;
+  border-radius:0!important;
+  border-top:0!important;
+  border-bottom:0!important;
+  padding-top:calc(18px + env(safe-area-inset-top))!important;
+  padding-bottom:calc(24px + env(safe-area-inset-bottom))!important;
+  overflow-y:auto!important;
+  overscroll-behavior:contain;
+}
+
+/* Keep the title/close area visible while scrolling long Stats content. */
+#dtV10MoreModal .dt-more-head,
+#dtWeeklyPerformanceModal .dt-wp-head{
+  position:sticky!important;
+  top:calc(-18px - env(safe-area-inset-top))!important;
+  z-index:4!important;
+  background:linear-gradient(180deg,#071720 82%,rgba(7,23,32,.92))!important;
+  padding-top:calc(18px + env(safe-area-inset-top))!important;
+  padding-bottom:12px!important;
+}
+
+/* Reset stays a confirmation sheet, but both actions must remain visible. */
+#dtWorkoutResetModal{
+  align-items:flex-end!important;
+  overflow:hidden!important;
+}
+#dtWorkoutResetModal .dt-data-sheet{
+  width:min(560px,100%)!important;
+  max-height:min(82dvh,680px)!important;
+  overflow-y:auto!important;
+  box-sizing:border-box!important;
+  padding-bottom:calc(22px + env(safe-area-inset-bottom))!important;
+}
+#dtWorkoutResetModal .dt-data-actions{
+  position:sticky!important;
+  bottom:0!important;
+  background:#071720!important;
+  padding-top:12px!important;
+  margin-top:14px!important;
+}
+#dtWorkoutResetModal .dt-data-actions button{
+  min-height:48px!important;
+}
+
+/* Slow, clear, minimal muscle-map entrance. */
+@keyframes dtV19BodyEnter{
+  from{opacity:0;transform:translateY(10px) scale(.965)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+.dt-vector-body .body-chart-svg{
+  animation:dtV19BodyEnter .92s cubic-bezier(.2,.75,.2,1) both!important;
+}
+#dtVectorBack .body-chart-svg{animation-delay:.14s!important}
+
+@media(max-width:430px){
+  #dtV10MoreModal .dt-more-sheet,
+  #dtWeeklyPerformanceModal .dt-wp-sheet{
+    padding-left:18px!important;
+    padding-right:18px!important;
+  }
+}
+</style>
+<script>window.DT_MARC_RELEASE_FIX_VERSION="21.0-history-units";</script>
+
+<style id="dt-v20-custom-splits-css">
+/* V20 — flexible workout splits */
+#workout .workout-tabs{
+  display:flex!important;
+  overflow-x:auto!important;
+  overflow-y:hidden!important;
+  scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
+  gap:8px!important;
+  padding:1px 1px 5px!important;
+}
+#workout .workout-tabs::-webkit-scrollbar{display:none}
+#workout .workout-tab{
+  flex:0 0 auto!important;
+  min-width:144px!important;
+  max-width:190px!important;
+  padding:11px 15px!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:7px!important;
+}
+.dt-split-dot{width:9px;height:9px;border-radius:50%;flex:none;background:#55aaff;box-shadow:0 0 0 3px rgba(85,170,255,.08)}
+.dt-split-add{
+  flex:0 0 46px!important;
+  width:46px!important;height:42px!important;
+  border:1px dashed #35566a!important;border-radius:13px!important;
+  background:#081820!important;color:#75bfff!important;
+  font-size:22px!important;font-weight:500!important;line-height:1!important;
+}
+.dt-split-add:disabled{opacity:.28!important;color:#75838b!important}
+#dtSplitModal{
+  position:fixed;inset:0;z-index:10040;background:rgba(0,7,12,.80);
+  backdrop-filter:blur(7px);display:none;align-items:flex-end;justify-content:center
+}
+#dtSplitModal.show{display:flex}
+.dt-split-sheet{
+  width:min(560px,100%);background:#071a23;border:1px solid #284858;border-bottom:0;
+  border-radius:24px 24px 0 0;padding:25px 24px calc(25px + env(safe-area-inset-bottom));
+  box-sizing:border-box;box-shadow:0 -18px 50px rgba(0,0,0,.28)
+}
+.dt-split-kicker{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#55dda0;font-weight:850}
+.dt-split-title{font-size:24px;font-weight:900;margin:7px 0 5px;color:#eef5f7}
+.dt-split-sub{font-size:12px;line-height:1.55;color:#8296a2;margin-bottom:20px}
+.dt-split-field{display:block;font-size:10px;color:#8ca0ab;font-weight:800;margin-bottom:7px}
+#dtSplitName{
+  width:100%;box-sizing:border-box;border:1px solid #294653;border-radius:14px;
+  background:#091923;color:#eef5f7;padding:14px 15px;font:750 15px system-ui;outline:none
+}
+#dtSplitName:focus{border-color:#55dda0;box-shadow:0 0 0 3px rgba(85,221,160,.08)}
+.dt-split-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px}
+.dt-split-actions button{
+  min-height:48px;border-radius:14px;border:1px solid #294653;background:#0a1a24;color:#d9e5ea;font-weight:850
+}
+#dtCreateSplit{background:#10442f;border-color:#2c8d63;color:#6be4aa}
+#dtDeleteCurrentSplit{margin-top:10px;width:100%;min-height:44px;border-radius:13px;border:1px solid rgba(225,102,118,.25);background:rgba(225,102,118,.06);color:#e98290;font-weight:800;display:none}
+.dt-program-frequency-note{
+  margin-top:9px;padding:9px 10px;border-radius:10px;background:#091b24;
+  border:1px solid #203b48;color:#89a0ab;font-size:9px;line-height:1.5
+}
+</style>
+<script id="dt-v20-custom-splits-js">
+(()=>{
+  "use strict";
+  const MAX_SPLITS=7;
+  const BASE_KEYS=["push","pull","legs"];
+  const COLORS=["#4d9dff","#7fc44b","#ffc845","#b071ff","#ff7a89","#4fd2c2","#ef9d55"];
+
+  function ensureState(){
+    if(!state.workouts)state.workouts={sessions:[],drafts:{}};
+    if(!Array.isArray(state.workouts.customSplits))state.workouts.customSplits=[];
+    if(!state.workouts.custom)state.workouts.custom={push:[],pull:[],legs:[]};
+    if(!state.workouts.edits)state.workouts.edits={push:{},pull:{},legs:{}};
+    if(!state.workouts.removed)state.workouts.removed={push:[],pull:[],legs:[]};
+    if(!state.workouts.dayNames)state.workouts.dayNames={};
+
+    /* Recover persisted custom splits into the live plans table on every launch. */
+    state.workouts.customSplits=state.workouts.customSplits.slice(0,4).filter(s=>s&&s.key&&s.name);
+    state.workouts.customSplits.forEach(s=>{
+      if(!plans[s.key])plans[s.key]={title:String(s.name).toUpperCase(),sub:"",ex:[]};
+      plans[s.key].title=String(state.workouts.dayNames[s.key]||s.name).toUpperCase();
+      state.workouts.custom[s.key]=state.workouts.custom[s.key]||[];
+      state.workouts.edits[s.key]=state.workouts.edits[s.key]||{};
+      state.workouts.removed[s.key]=state.workouts.removed[s.key]||[];
+    });
+  }
+
+  function baseKeys(){
+    const n=Number(state.workouts?.generatedProgram?.days||3);
+    return n===2?["push","pull"]:BASE_KEYS.slice();
+  }
+  function allKeys(){
+    ensureState();
+    return [...baseKeys(),...state.workouts.customSplits.map(s=>s.key)].slice(0,MAX_SPLITS);
+  }
+  function splitName(key){
+    const saved=state.workouts?.dayNames?.[key];
+    if(saved)return saved;
+    const custom=state.workouts?.customSplits?.find(s=>s.key===key);
+    if(custom)return custom.name;
+    return String(plans?.[key]?.title||key).replace(/\bDAY\b/ig,"Day");
+  }
+  function splitColor(key,index){
+    if(key==="push")return COLORS[0];
+    if(key==="pull")return COLORS[1];
+    if(key==="legs")return COLORS[2];
+    return COLORS[Math.min(index,COLORS.length-1)];
+  }
+
+  function selectSplit(key,btn){
+    ensureState();
+    if(!plans[key])return;
+    wday=key;
+    document.querySelectorAll("#workout .workout-tab[data-wday]").forEach(x=>x.classList.toggle("active",x.dataset.wday===key));
+    if(btn)btn.scrollIntoView({behavior:"smooth",inline:"center",block:"nearest"});
+    renderWorkout();
+  }
+
+  function renderTabs(){
+    ensureState();
+    const wrap=document.querySelector("#workout .workout-tabs");
+    if(!wrap)return;
+    const keys=allKeys();
+    if(!keys.includes(wday))wday=keys[0]||"push";
+
+    wrap.innerHTML="";
+    keys.forEach((key,i)=>{
+      const btn=document.createElement("button");
+      btn.type="button";btn.className="workout-tab"+(wday===key?" active":"");
+      btn.dataset.wday=key;
+      btn.title=splitName(key);
+      btn.innerHTML=`<span class="dt-split-dot" style="background:${splitColor(key,i)};box-shadow:0 0 0 3px ${splitColor(key,i)}14"></span><span>${splitName(key)}</span>`;
+      btn.onclick=()=>selectSplit(key,btn);
+      wrap.appendChild(btn);
+    });
+
+    const add=document.createElement("button");
+    add.type="button";add.id="dtAddSplitBtn";add.className="dt-split-add";
+    const currentIsCustom=state.workouts.customSplits.some(s=>s.key===wday);
+    const atMax=keys.length>=MAX_SPLITS;
+    add.textContent=atMax&&currentIsCustom?"⋯":"+";
+    add.setAttribute("aria-label",atMax&&currentIsCustom?"Manage current split":"Add workout split");
+    add.title=atMax?(currentIsCustom?"Manage current custom split":"Maximum 7 workout splits"):"Add workout split";
+    add.disabled=atMax&&!currentIsCustom;
+    add.onclick=openModal;
+    wrap.appendChild(add);
+  }
+
+  function ensureModal(){
+    let m=document.getElementById("dtSplitModal");
+    if(m)return m;
+    m=document.createElement("div");m.id="dtSplitModal";
+    m.innerHTML=`<section class="dt-split-sheet">
+      <div class="dt-split-kicker">Workout split</div>
+      <div class="dt-split-title">Add another split</div>
+      <div class="dt-split-sub">Create an empty workout day, then add any exercises you want. Your total is limited to seven splits.</div>
+      <label class="dt-split-field" for="dtSplitName">Split name</label>
+      <input id="dtSplitName" maxlength="28" autocomplete="off" placeholder="e.g. Full Body D, Arms, Upper 2">
+      <div class="dt-split-actions">
+        <button id="dtCancelSplit" type="button">Cancel</button>
+        <button id="dtCreateSplit" type="button">Create split</button>
+      </div>
+      <button id="dtDeleteCurrentSplit" type="button">Delete current custom split</button>
+    </section>`;
+    document.body.appendChild(m);
+    m.onclick=e=>{if(e.target===m)m.classList.remove("show")};
+    m.querySelector("#dtCancelSplit").onclick=()=>m.classList.remove("show");
+    m.querySelector("#dtCreateSplit").onclick=createSplit;
+    m.querySelector("#dtSplitName").onkeydown=e=>{if(e.key==="Enter")createSplit()};
+    m.querySelector("#dtDeleteCurrentSplit").onclick=deleteCurrent;
+    return m;
+  }
+
+  function openModal(){
+    ensureState();
+    const m=ensureModal();
+    const count=allKeys().length;
+    const currentIsCustom=state.workouts.customSplits.some(s=>s.key===wday);
+    if(count>=MAX_SPLITS && !currentIsCustom)return;
+
+    const input=m.querySelector("#dtSplitName");
+    const create=m.querySelector("#dtCreateSplit");
+    const title=m.querySelector(".dt-split-title");
+    const sub=m.querySelector(".dt-split-sub");
+    input.value="";
+    input.disabled=count>=MAX_SPLITS;
+    create.disabled=count>=MAX_SPLITS;
+    title.textContent=currentIsCustom?"Manage split":"Add another split";
+    sub.textContent=count>=MAX_SPLITS
+      ?"You already have seven splits. Delete this custom split if you want to create a different one."
+      :"Create an empty workout day, then add any exercises you want. Your total is limited to seven splits.";
+
+    const del=m.querySelector("#dtDeleteCurrentSplit");
+    del.style.display=currentIsCustom?"block":"none";
+    m.classList.add("show");
+    if(!input.disabled)setTimeout(()=>input.focus(),100);
+  }
+
+  function createSplit(){
+    ensureState();
+    if(allKeys().length>=MAX_SPLITS)return;
+    const m=ensureModal(),input=m.querySelector("#dtSplitName");
+    const name=input.value.trim().replace(/\s+/g," ").slice(0,28);
+    if(!name){input.focus();return}
+    const key="split_"+Date.now().toString(36);
+    state.workouts.customSplits.push({key,name,createdAt:new Date().toISOString()});
+    state.workouts.dayNames[key]=name;
+    state.workouts.custom[key]=[];
+    state.workouts.edits[key]={};
+    state.workouts.removed[key]=[];
+    plans[key]={title:name.toUpperCase(),sub:"",ex:[]};
+    wday=key;
+    try{save()}catch(e){console.warn("Split save failed",e)}
+    m.classList.remove("show");
+    renderTabs();
+    renderWorkout();
+    /* New split starts empty: use the existing Add Exercise flow. */
+    setTimeout(()=>document.getElementById("addExerciseBtn")?.scrollIntoView({behavior:"smooth",block:"center"}),120);
+    try{window.dtRenderTodaySchedule?.()}catch(_){}
+  }
+
+  function deleteCurrent(){
+    ensureState();
+    const idx=state.workouts.customSplits.findIndex(s=>s.key===wday);
+    if(idx<0)return;
+    const item=state.workouts.customSplits[idx];
+    if(!confirm(`Delete "${item.name}"? Workout history already logged under this split will be kept.`))return;
+
+    const key=item.key;
+    state.workouts.customSplits.splice(idx,1);
+    delete state.workouts.custom[key];
+    delete state.workouts.edits[key];
+    delete state.workouts.removed[key];
+    delete state.workouts.dayNames[key];
+    delete plans[key];
+
+    Object.keys(state.workouts.drafts||{}).filter(k=>k.startsWith(key+"_")).forEach(k=>delete state.workouts.drafts[k]);
+    if(state.trainingSchedule?.days){
+      Object.keys(state.trainingSchedule.days).forEach(d=>{if(state.trainingSchedule.days[d]===key)state.trainingSchedule.days[d]=null});
+    }
+    wday=baseKeys()[0]||"push";
+    try{save()}catch(e){}
+    ensureModal().classList.remove("show");
+    renderTabs();renderWorkout();
+    try{window.dtRenderTodaySchedule?.()}catch(_){}
+  }
+
+  /* Keep custom tabs in sync after renders, onboarding, and renaming. */
+  const previousRender=window.renderWorkout;
+  if(typeof previousRender==="function"){
+    window.renderWorkout=function(...args){
+      ensureState();
+      const r=previousRender.apply(this,args);
+      setTimeout(renderTabs,0);
+      return r;
+    };
+  }
+
+  const originalShowOnboard=window.dtShowOnboard;
+  if(typeof originalShowOnboard==="function"){
+    window.dtShowOnboard=function(...args){
+      const r=originalShowOnboard.apply(this,args);
+      setTimeout(()=>{ensureState();renderTabs()},60);
+      return r;
+    };
+  }
+
+  document.addEventListener("click",e=>{
+    if(e.target.closest?.("#dtRenameWorkout")){
+      setTimeout(()=>{
+        ensureState();
+        const c=state.workouts.customSplits.find(s=>s.key===wday);
+        if(c&&state.workouts.dayNames?.[wday])c.name=state.workouts.dayNames[wday];
+        if(c&&plans[wday])plans[wday].title=c.name.toUpperCase();
+        try{save()}catch(_){}
+        renderTabs();
+      },120);
+    }
+  },true);
+
+  ensureState();
+  ensureModal();
+  renderTabs();
+  window.dtRenderWorkoutSplits=renderTabs;
+  window.dtAddWorkoutSplit=openModal;
+  window.DT_CUSTOM_SPLITS_VERSION="20.0";
+})();
+</script>
+
+<style id="dt-v21-history-units-css">
+/* Calendar day with logged workout */
+#history .day.has-workout::after{
+  content:"";position:absolute;left:50%;bottom:7px;width:4px;height:4px;
+  transform:translateX(-50%);border-radius:50%;background:#55dda0;
+  box-shadow:0 0 7px rgba(85,221,160,.55)
+}
+#history .day{position:relative}
+
+/* Native in-app day detail instead of browser alert */
+#dtHistoryDayModal{
+  position:fixed;inset:0;z-index:10060;background:rgba(0,7,12,.78);
+  backdrop-filter:blur(7px);display:none;align-items:flex-end;justify-content:center
+}
+#dtHistoryDayModal.show{display:flex}
+.dt-history-day-sheet{
+  width:min(560px,100%);max-height:82dvh;overflow:auto;box-sizing:border-box;
+  background:#071a23;border:1px solid #284858;border-bottom:0;border-radius:24px 24px 0 0;
+  padding:24px 22px calc(24px + env(safe-area-inset-bottom))
+}
+.dt-hd-head{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;margin-bottom:18px}
+.dt-hd-kicker{font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:#55dda0;font-weight:850}
+.dt-hd-date{font-size:24px;color:#edf4f7;font-weight:900;margin-top:5px}
+.dt-hd-close{width:46px;height:46px;border:1px solid #294653;background:#0a1a24;color:#eaf2f5;border-radius:14px;font-size:24px}
+.dt-hd-empty{padding:28px 16px;text-align:center;border:1px solid #1e3845;border-radius:18px;background:#081820}
+.dt-hd-empty b{display:block;color:#dbe7ec;font-size:15px;margin-bottom:6px}
+.dt-hd-empty span{color:#718895;font-size:11px}
+.dt-hd-session{border:1px solid #1e3845;background:#081820;border-radius:18px;padding:15px;margin-top:10px}
+.dt-hd-session-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.dt-hd-session-title b{display:block;font-size:14px;color:#edf4f7}
+.dt-hd-session-title small{display:block;margin-top:3px;font-size:10px;color:#728995}
+.dt-hd-setcount{font-size:10px;color:#55dda0;font-weight:850;white-space:nowrap}
+.dt-hd-exercises{margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,.06)}
+.dt-hd-ex{padding:7px 0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.dt-hd-ex b{font-size:11px;color:#cddce3}
+.dt-hd-ex span{font-size:9px;color:#78909b;text-align:right}
+
+/* Minimal kg / lb dashboard switch */
+.dt-workout-unit-wrap{
+  display:flex;justify-content:flex-end;margin:-3px 0 9px;
+}
+#dtWeightToggle{
+  height:34px;min-width:80px;padding:3px;border:1px solid #274553;border-radius:12px;
+  background:#081820;display:grid;grid-template-columns:1fr 1fr;gap:2px;position:relative;
+  color:#738995;font:850 9px system-ui;letter-spacing:.02em
+}
+#dtWeightToggle span{
+  min-width:32px;border-radius:9px;display:grid;place-items:center;position:relative;z-index:2;
+  transition:color .18s ease,background .18s ease
+}
+#dtWeightToggle[data-unit="kg"] .kg,
+#dtWeightToggle[data-unit="lb"] .lb{
+  color:#6ae3aa;background:rgba(60,173,116,.14)
+}
+#dtWeightToggle::after{
+  content:"";position:absolute;left:50%;top:7px;bottom:7px;width:1px;background:#213845
+}
+</style>
+
+<script id="dt-v21-history-units-js">
+(()=>{
+  "use strict";
+  const KG_TO_LB=2.2046226218;
+
+  function ensureUnits(){
+    if(!state.preferences)state.preferences={};
+    if(!state.preferences.units)state.preferences.units={weight:"kg",bodyWeight:"kg"};
+    if(!["kg","lb"].includes(state.preferences.units.weight))state.preferences.units.weight="kg";
+  }
+  function unit(){ensureUnits();return state.preferences.units.weight}
+  function displayKg(v){
+    if(v===""||v==null||!Number.isFinite(Number(v)))return v==null?"":v;
+    const n=Number(v);
+    const out=unit()==="lb"?n*KG_TO_LB:n;
+    const rounded=unit()==="lb"?Math.round(out*2)/2:Math.round(out*2)/2;
+    return Number.isInteger(rounded)?String(rounded):rounded.toFixed(1);
+  }
+  function inputToKg(v){
+    if(v===""||v==null)return "";
+    const n=Number(v);if(!Number.isFinite(n))return "";
+    const kg=unit()==="lb"?n/KG_TO_LB:n;
+    return Math.round(kg*100)/100;
+  }
+  function unitLabel(){return unit()==="lb"?"LB":"KG"}
+  function formatLift(kg,reps){
+    const hasKg=kg!==""&&kg!=null&&Number.isFinite(Number(kg));
+    const weight=hasKg?`${displayKg(kg)} ${unitLabel().toLowerCase()}`:"—";
+    return `${weight} × ${reps||"–"}`;
+  }
+
+  window.dtWeightUnit=unit;
+  window.dtWeightUnitLabel=unitLabel;
+  window.dtWeightDisplayValue=displayKg;
+  window.dtWeightInputToKg=inputToKg;
+  window.dtFormatLift=formatLift;
+
+  function ensureToggle(){
+    let btn=document.getElementById("dtWeightToggle");
+    if(btn)return btn;
+    const goal=document.getElementById("trainingGoalCard");
+    if(!goal)return null;
+    const row=document.createElement("div");row.className="dt-workout-unit-wrap";
+    btn=document.createElement("button");btn.id="dtWeightToggle";btn.type="button";
+    btn.setAttribute("aria-label","Switch weight unit");
+    btn.innerHTML='<span class="kg">kg</span><span class="lb">lb</span>';
+    row.appendChild(btn);
+    goal.insertAdjacentElement("afterend",row);
+    btn.onclick=()=>{
+      ensureUnits();
+      state.preferences.units.weight=unit()==="kg"?"lb":"kg";
+      try{save()}catch(_){}
+      syncToggle();
+      try{renderWorkout()}catch(_){}
+      try{renderWorkoutHistory()}catch(_){}
+    };
+    return btn;
+  }
+  function syncToggle(){
+    const b=ensureToggle();if(!b)return;
+    b.dataset.unit=unit();
+    b.title=unit()==="kg"?"Weights shown in kilograms":"Weights shown in pounds";
+  }
+
+  /* Day-history sheet */
+  function ensureDayModal(){
+    let m=document.getElementById("dtHistoryDayModal");if(m)return m;
+    m=document.createElement("div");m.id="dtHistoryDayModal";
+    m.innerHTML=`<section class="dt-history-day-sheet">
+      <div class="dt-hd-head"><div><div class="dt-hd-kicker">Workout history</div><div class="dt-hd-date" id="dtHistoryDayTitle"></div></div><button class="dt-hd-close" type="button" aria-label="Close">×</button></div>
+      <div id="dtHistoryDayBody"></div>
+    </section>`;
+    document.body.appendChild(m);
+    m.onclick=e=>{if(e.target===m)m.classList.remove("show")};
+    m.querySelector(".dt-hd-close").onclick=()=>m.classList.remove("show");
+    return m;
+  }
+  function sessionSets(s){
+    try{return workoutSessionSets(s)}catch(_){
+      return (s.snapshot||[]).reduce((n,e)=>n+(e.sets||[]).filter(x=>x.kg||x.reps||x.effort).length,0)
+    }
+  }
+  function sessionExercises(s){
+    try{return workoutSessionExercises(s)}catch(_){return s.snapshot||[]}
+  }
+  function daySessions(key){
+    return (state.workouts?.sessions||[])
+      .filter(s=>String(s.date||"").slice(0,10)===key)
+      .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  }
+  function openDay(key){
+    const m=ensureDayModal(),body=m.querySelector("#dtHistoryDayBody");
+    const date=new Date(key+"T12:00:00");
+    m.querySelector("#dtHistoryDayTitle").textContent=date.toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short",year:"numeric"});
+    const sessions=daySessions(key);
+
+    if(!sessions.length){
+      body.innerHTML=`<div class="dt-hd-empty"><b>No workout sessions this day</b><span>Once a workout is finished and saved, it will appear here.</span></div>`;
+    }else{
+      body.innerHTML=sessions.map(s=>{
+        const when=new Date(s.date);
+        const title=typeof workoutDayLabel==="function"?workoutDayLabel(s.day):(s.day||"Workout");
+        const time=when.toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit",hour12:true});
+        const ex=sessionExercises(s);
+        const details=ex.map(e=>{
+          const logged=(e.sets||[]).filter(x=>x.kg||x.reps||x.effort);
+          const top=logged.slice(0,3).map(x=>formatLift(x.kg,x.reps)).join(" · ");
+          return logged.length?`<div class="dt-hd-ex"><b>${e.name}</b><span>${top}${logged.length>3?" …":""}</span></div>`:"";
+        }).join("");
+        return `<article class="dt-hd-session">
+          <div class="dt-hd-session-top">
+            <div class="dt-hd-session-title"><b>${title}</b><small>${time}</small></div>
+            <div class="dt-hd-setcount">${sessionSets(s)} sets</div>
+          </div>
+          <div class="dt-hd-exercises">${details||'<div class="dt-hd-ex"><b>No detailed set data</b></div>'}</div>
+        </article>`;
+      }).join("");
+    }
+    m.classList.add("show");
+  }
+  window.dtOpenHistoryDay=openDay;
+
+  const oldRender=window.renderWorkout;
+  if(typeof oldRender==="function"){
+    window.renderWorkout=function(...args){
+      ensureUnits();
+      const r=oldRender.apply(this,args);
+      setTimeout(syncToggle,0);
+      return r;
+    };
+  }
+
+  ensureUnits();ensureDayModal();syncToggle();
+  window.DT_HISTORY_DAY_VERSION="21.0";
+  window.DT_WEIGHT_TOGGLE_VERSION="21.0";
+})();
+</script>
 </body>
 </html>
