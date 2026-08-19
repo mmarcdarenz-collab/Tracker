@@ -28,22 +28,48 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
+      - name: Install Capacitor asset generator
+        run: npm install --no-save @capacitor/assets
+
       - name: Create Android project
         run: npx cap add android
 
-      - name: Raise Android minSdk for Health Connect
+      - name: Generate M/ARC Android app icon
+        run: |
+          npx @capacitor/assets generate --android \
+            --assetPath assets \
+            --iconBackgroundColor '#071018' \
+            --iconBackgroundColorDark '#071018' \
+            --splashBackgroundColor '#071018' \
+            --splashBackgroundColorDark '#071018'
+
+      - name: Set Android minSdk for Health Connect
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re
-          p = Path("android/variables.gradle")
-          s = p.read_text()
-          new_s, n = re.subn(r'minSdkVersion\s*=\s*\d+', 'minSdkVersion = 26', s, count=1)
-          if n != 1:
-              raise SystemExit("Could not find minSdkVersion in android/variables.gradle")
-          p.write_text(new_s)
-          print("Updated minSdkVersion to 26:")
-          print(p.read_text())
+
+          variables = Path("android/variables.gradle")
+          if variables.exists():
+              s = variables.read_text()
+              s2, n = re.subn(
+                  r'(minSdkVersion\s*=\s*)\d+',
+                  r'\g<1>26',
+                  s
+              )
+              if n == 0:
+                  raise SystemExit("minSdkVersion not found in android/variables.gradle")
+              variables.write_text(s2)
+              print("Updated android/variables.gradle:")
+              print(s2)
+          else:
+              raise SystemExit("android/variables.gradle not found")
+
+          app_gradle = Path("android/app/build.gradle")
+          if app_gradle.exists():
+              s = app_gradle.read_text()
+              s = re.sub(r'(?m)^(\s*minSdk(?:Version)?\s+)\d+\s*$', r'\g<1>26', s)
+              app_gradle.write_text(s)
           PY
 
       - name: Add Health Connect SDK dependency
@@ -79,13 +105,15 @@ jobs:
       - name: Verify Health Connect setup
         run: |
           echo "Checking minSdk..."
-          grep -n 'minSdkVersion = 26' android/variables.gradle
+          grep -n 'minSdkVersion' android/variables.gradle
           echo "Checking dependency..."
           grep -n 'androidx.health.connect:connect-client:1.1.0' android/app/build.gradle
           echo "Checking plugin registration..."
           grep -n 'registerPlugin(HealthConnectNativePlugin.class)' android/app/src/main/java/com/mrcdrnzz/dailytracker/MainActivity.java
           echo "Checking manifest permission..."
           grep -n 'android.permission.health.READ_SLEEP' android/app/src/main/AndroidManifest.xml
+          echo "Checking generated M/ARC launcher icon resources..."
+          find android/app/src/main/res -iname 'ic_launcher*' -print | head -30
 
       - name: Build debug APK
         run: |
