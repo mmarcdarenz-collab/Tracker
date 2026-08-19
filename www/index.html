@@ -7413,6 +7413,27 @@ window.DT_WORKOUT_FIRST_UI_VERSION=DT_V10;
 }
 </style>
 
+
+<script id="dt-v13-localnotifications-bootstrap">
+/*
+  Capacitor v8 / plain-HTML bridge compatibility:
+  Official plugins are linked through registerPlugin(). The app previously
+  checked only Capacitor.Plugins.LocalNotifications, which can be absent in
+  a plain static HTML app even when the native plugin is installed.
+*/
+(()=>{
+  try{
+    const cap=window.Capacitor;
+    if(!cap)return;
+    if(!cap.Plugins)cap.Plugins={};
+    if(!cap.Plugins.LocalNotifications && typeof cap.registerPlugin==="function"){
+      cap.Plugins.LocalNotifications=cap.registerPlugin("LocalNotifications");
+    }
+  }catch(e){
+    console.warn("M/ARC LocalNotifications bootstrap failed",e);
+  }
+})();
+</script>
 <script id="dt-v11-reminders-detail-progress-js">
 (()=>{
 "use strict";
@@ -7998,6 +8019,213 @@ setTimeout(productionBoot,850);
 
 window.dtApplyProgressV2=applyProgressV2;
 window.DT_MARC_PRODUCTION_V12=DT_V12;
+})();
+</script>
+
+<style id="dt-v13-notification-diagnostics-css">
+.dt-n13-card{
+  margin-top:11px;padding:12px;border:1px solid #1b3744;border-radius:15px;background:#081a23
+}
+.dt-n13-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.dt-n13-head b{color:#dfeaed;font:850 11px system-ui}
+.dt-n13-refresh{border:0;background:transparent;color:#6fb7e7;font:800 8px system-ui;padding:4px}
+.dt-n13-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.dt-n13-stat{padding:9px 8px;border:1px solid #193541;border-radius:12px;background:#091820;min-width:0}
+.dt-n13-stat small{display:block;color:#6d8591;font:750 7px system-ui;text-transform:uppercase;letter-spacing:.05em}
+.dt-n13-stat strong{display:block;color:#dce8ec;font:850 10px system-ui;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dt-n13-stat strong.ok{color:#62dda1}
+.dt-n13-stat strong.warn{color:#e1a46f}
+.dt-n13-stat strong.bad{color:#e57878}
+.dt-n13-next{
+  margin-top:8px;padding:8px 9px;border-left:2px solid #335f50;background:#091820;border-radius:0 10px 10px 0;
+  color:#8096a1;font:650 8px/1.4 system-ui
+}
+.dt-n13-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:9px}
+.dt-n13-actions button{padding:10px 8px;border-radius:11px;font:850 8px system-ui}
+.dt-n13-request{border:1px solid #294653;background:#0b1b25;color:#b9cbd2}
+.dt-n13-test{border:1px solid #2d7256;background:#123629;color:#70dfa8}
+.dt-n13-test:disabled,.dt-n13-request:disabled{opacity:.5}
+.dt-n13-result{
+  min-height:16px;margin-top:8px;color:#708794;font:600 8px/1.4 system-ui
+}
+.dt-n13-result.good{color:#63dca2}.dt-n13-result.bad{color:#df8179}
+
+@media(max-width:390px){
+  .dt-n13-grid{grid-template-columns:1fr 1fr}
+  .dt-n13-stat:last-child{grid-column:1/-1}
+}
+</style>
+
+<script id="dt-v13-notification-diagnostics-js">
+(()=>{
+"use strict";
+const DT_V13="13.0-native-notification-repair";
+const TEST_CHANNEL="marc-notification-test";
+const TEST_ID=739913;
+
+function n13Plugin(){
+  try{
+    const cap=window.Capacitor;
+    if(!cap)return null;
+    if(!cap.Plugins)cap.Plugins={};
+    if(!cap.Plugins.LocalNotifications && typeof cap.registerPlugin==="function"){
+      cap.Plugins.LocalNotifications=cap.registerPlugin("LocalNotifications");
+    }
+    return cap.Plugins.LocalNotifications||null;
+  }catch(_){return null}
+}
+function n13Native(){
+  try{return !!window.Capacitor?.isNativePlatform?.()}catch(_){return false}
+}
+async function n13Status(){
+  const p=n13Plugin();
+  const out={native:n13Native(),connected:!!p,permission:"unavailable",enabled:false,pending:0,next:null,error:null};
+  if(!p)return out;
+  try{
+    const perm=await p.checkPermissions();
+    out.permission=perm?.display||"unknown";
+  }catch(e){out.error="Permission check failed"}
+  try{
+    if(typeof p.areEnabled==="function"){
+      const en=await p.areEnabled();out.enabled=!!en?.value;
+    }
+  }catch(_){}
+  try{
+    const pending=await p.getPending();
+    const arr=pending?.notifications||[];
+    out.pending=arr.filter(x=>x?.extra?.type==="training-day").length;
+    const dated=arr.filter(x=>x?.extra?.type==="training-day"&&x.schedule?.at)
+      .map(x=>({x,t:new Date(x.schedule.at).getTime()})).filter(o=>Number.isFinite(o.t)).sort((a,b)=>a.t-b.t);
+    if(dated[0])out.next=dated[0].x.schedule.at;
+  }catch(e){
+    if(!out.error)out.error="Pending check failed";
+  }
+  return out;
+}
+function n13ValClass(v){
+  if(v==="Connected"||v==="Allowed"||v==="On")return "ok";
+  if(v==="Blocked"||v==="Not connected")return "bad";
+  return "warn";
+}
+function n13NextText(v){
+  if(!v)return "No training reminder is currently pending.";
+  try{return "Next scheduled training reminder: "+new Date(v).toLocaleString([],{
+    weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"
+  })}catch(_){return "A training reminder is pending."}
+}
+async function n13Render(){
+  const host=document.getElementById("dtNotificationDiagnostics");if(!host)return;
+  const st=await n13Status();
+  const connection=st.connected?"Connected":"Not connected";
+  const permission=st.permission==="granted"?"Allowed":st.permission==="denied"?"Blocked":st.permission;
+  const enabled=st.enabled?"On":"Off";
+  host.innerHTML=`
+    <div class="dt-n13-head"><b>Notification check</b><button type="button" class="dt-n13-refresh">Refresh</button></div>
+    <div class="dt-n13-grid">
+      <div class="dt-n13-stat"><small>Native plugin</small><strong class="${n13ValClass(connection)}">${connection}</strong></div>
+      <div class="dt-n13-stat"><small>Permission</small><strong class="${n13ValClass(permission)}">${permission}</strong></div>
+      <div class="dt-n13-stat"><small>Pending</small><strong>${st.pending} reminder${st.pending===1?"":"s"}</strong></div>
+    </div>
+    <div class="dt-n13-next">${st.connected?n13NextText(st.next):"The Android Local Notifications bridge is unavailable in this build."}</div>
+    <div class="dt-n13-actions">
+      <button type="button" class="dt-n13-request" ${!st.connected?"disabled":""}>Request permission</button>
+      <button type="button" class="dt-n13-test" ${!st.connected?"disabled":""}>Send test notification</button>
+    </div>
+    <div class="dt-n13-result ${st.error?"bad":""}">${st.error||""}</div>`;
+  host.querySelector(".dt-n13-refresh").onclick=n13Render;
+  const req=host.querySelector(".dt-n13-request");
+  const test=host.querySelector(".dt-n13-test");
+  if(req)req.onclick=async()=>{
+    const result=host.querySelector(".dt-n13-result");req.disabled=true;result.textContent="Requesting Android notification permission…";
+    try{
+      const p=n13Plugin(),r=await p.requestPermissions();
+      result.className="dt-n13-result "+(r?.display==="granted"?"good":"bad");
+      result.textContent=r?.display==="granted"?"Notifications allowed.":"Permission was not granted.";
+      await n13Render();
+    }catch(e){
+      result.className="dt-n13-result bad";result.textContent="Permission request failed: "+(e?.message||e);
+    }finally{req.disabled=false}
+  };
+  if(test)test.onclick=n13SendTest;
+}
+async function n13SendTest(){
+  const host=document.getElementById("dtNotificationDiagnostics");
+  const result=host?.querySelector(".dt-n13-result");
+  const btn=host?.querySelector(".dt-n13-test");
+  if(btn)btn.disabled=true;
+  if(result){result.className="dt-n13-result";result.textContent="Checking permission…"}
+  try{
+    const p=n13Plugin();
+    if(!p)throw new Error("Native Local Notifications plugin is not connected.");
+    let perm=await p.checkPermissions();
+    if(perm?.display!=="granted")perm=await p.requestPermissions();
+    if(perm?.display!=="granted")throw new Error("Android notification permission was not granted.");
+
+    try{
+      await p.createChannel({
+        id:TEST_CHANNEL,
+        name:"M/ARC notification test",
+        description:"Temporary channel used only to verify M/ARC notifications.",
+        importance:4,
+        vibration:false,
+        lights:false
+      });
+    }catch(e){console.warn("Test channel create warning",e)}
+
+    /* No schedule field = deliver immediately. This avoids testing with an inexact alarm. */
+    await p.schedule({notifications:[{
+      id:TEST_ID,
+      title:"M/ARC · Notifications working",
+      body:"Your training reminders are connected.",
+      channelId:TEST_CHANNEL,
+      autoCancel:true,
+      ongoing:false,
+      foreground:true,
+      extra:{type:"notification-test"}
+    }]});
+
+    if(result){
+      result.className="dt-n13-result good";
+      result.textContent="Test sent. Check your notification panel now.";
+    }
+    setTimeout(n13Render,500);
+  }catch(e){
+    if(result){
+      result.className="dt-n13-result bad";
+      result.textContent="Test failed: "+(e?.message||e);
+    }
+  }finally{if(btn)btn.disabled=false}
+}
+function n13Inject(){
+  const body=document.getElementById("dtReminderBody");
+  if(!body||document.getElementById("dtNotificationDiagnostics"))return;
+  const host=document.createElement("div");host.id="dtNotificationDiagnostics";host.className="dt-n13-card";
+  const actions=body.querySelector(".dt-rem-actions");
+  if(actions)actions.insertAdjacentElement("beforebegin",host);else body.appendChild(host);
+  n13Render();
+}
+
+/* Reminder settings are rebuilt by the V11 renderer, so re-inject after each open/render. */
+const obs=new MutationObserver(()=>{
+  if(document.getElementById("dtReminderModal")?.classList.contains("show")){
+    setTimeout(n13Inject,30);
+  }
+});
+obs.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:["class"]});
+
+document.addEventListener("click",ev=>{
+  if(ev.target.closest?.("#dtReminderSettingsBtn,[data-more='reminders']")){
+    setTimeout(n13Inject,100);
+  }
+},true);
+
+setTimeout(()=>{
+  if(document.getElementById("dtReminderModal")?.classList.contains("show"))n13Inject();
+},900);
+
+window.dtNotificationDiagnostics=n13Status;
+window.dtSendTestNotification=n13SendTest;
+window.DT_NATIVE_NOTIFICATION_REPAIR_VERSION=DT_V13;
 })();
 </script>
 </body>
