@@ -26,12 +26,15 @@ jobs:
           java-version: "21"
 
       - name: Install npm dependencies
-        run: npm install
+        run: |
+          echo "Installing M/ARC Capacitor dependencies..."
+          node -e "console.log(require('./package.json').dependencies)"
+          npm install
 
       - name: Verify permanent Local Notifications dependency
         run: |
           node -e "console.log('Capacitor core:', require('./node_modules/@capacitor/core/package.json').version)"
-          node -e "console.log('Local Notifications:', require('./node_modules/@capacitor/local-notifications/package.json').version)"
+          node -e "const v=require('./node_modules/@capacitor/local-notifications/package.json').version; console.log('Local Notifications:',v); if(v!=='8.2.1') process.exit(1)"
           npm ls @capacitor/local-notifications
 
       - name: Install Capacitor asset generator
