@@ -28,12 +28,14 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
-      - name: Install Capacitor build plugins
+      - name: Verify permanent Local Notifications dependency
         run: |
-          CAP_MAJOR=$(node -p "require('./node_modules/@capacitor/core/package.json').version.split('.')[0]")
-          echo "Detected Capacitor major: $CAP_MAJOR"
-          npm install --no-save @capacitor/assets "@capacitor/local-notifications@$CAP_MAJOR"
-          npm ls @capacitor/assets @capacitor/local-notifications
+          node -e "console.log('Capacitor core:', require('./node_modules/@capacitor/core/package.json').version)"
+          node -e "console.log('Local Notifications:', require('./node_modules/@capacitor/local-notifications/package.json').version)"
+          npm ls @capacitor/local-notifications
+
+      - name: Install Capacitor asset generator
+        run: npm install --no-save @capacitor/assets
 
       - name: Create Android project
         run: npx cap add android
@@ -121,10 +123,18 @@ jobs:
       - name: Sync web app
         run: npx cap sync android
 
-      - name: Verify Local Notifications plugin
+      - name: Verify Local Notifications native integration
         run: |
+          echo "Checking permanent npm dependency..."
           npm ls @capacitor/local-notifications
-          node -e "console.log('Local Notifications:', require('./node_modules/@capacitor/local-notifications/package.json').version)"
+          echo "Checking Capacitor generated plugin registry..."
+          test -f android/app/src/main/assets/capacitor.plugins.json
+          cat android/app/src/main/assets/capacitor.plugins.json
+          grep -q "LocalNotificationsPlugin" android/app/src/main/assets/capacitor.plugins.json
+          grep -q "com.capacitorjs.plugins.localnotifications.LocalNotificationsPlugin" android/app/src/main/assets/capacitor.plugins.json
+          echo "Checking Android 13+ notification permission in merged source manifests..."
+          grep -R "android.permission.POST_NOTIFICATIONS" node_modules/@capacitor/local-notifications/android/src/main/AndroidManifest.xml
+          echo "Local Notifications native integration verified."
 
       - name: Install Health Connect native bridge
         run: |
@@ -145,6 +155,8 @@ jobs:
           grep -n 'registerPlugin(HealthConnectNativePlugin.class)' android/app/src/main/java/com/mrcdrnzz/dailytracker/MainActivity.java
           echo "Checking manifest permission..."
           grep -n 'android.permission.health.READ_SLEEP' android/app/src/main/AndroidManifest.xml
+          echo "Checking M/ARC Capacitor app name..."
+          grep -n '"appName": "M/ARC"' capacitor.config.json
           echo "Checking M/ARC launcher label..."
           grep -n 'name="app_name">M/ARC<' android/app/src/main/res/values/strings.xml
           echo "Checking generated M/ARC launcher icon resources..."
