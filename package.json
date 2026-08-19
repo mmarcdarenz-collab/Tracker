@@ -1,12 +1,13 @@
 {
-  "name": "daily-tracker",
+  "name": "marc-workout-tracker",
   "version": "1.0.0",
   "private": true,
-  "description": "Daily Tracker Android app built with Capacitor",
+  "description": "M/ARC workout tracker Android app built with Capacitor",
   "dependencies": {
     "@capacitor/android": "^8.0.0",
     "@capacitor/core": "^8.0.0",
-    "@capacitor/app-launcher": "^8.0.0"
+    "@capacitor/app-launcher": "^8.0.0",
+    "@capacitor/local-notifications": "latest-8"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.0.0"
