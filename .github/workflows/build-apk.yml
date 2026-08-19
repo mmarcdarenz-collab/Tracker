@@ -30,6 +30,13 @@ jobs:
           echo "Installing M/ARC Capacitor dependencies..."
           node -e "console.log(require('./package.json').dependencies)"
           npm install
+          npm ls @capacitor/local-notifications @capacitor/filesystem @capacitor/share xlsx
+
+      - name: Copy offline Excel engine into web app
+        run: |
+          test -f node_modules/xlsx/dist/xlsx.full.min.js
+          cp node_modules/xlsx/dist/xlsx.full.min.js www/xlsx.full.min.js
+          test -s www/xlsx.full.min.js
 
       - name: Verify permanent Local Notifications dependency
         run: |
@@ -135,6 +142,11 @@ jobs:
           cat android/app/src/main/assets/capacitor.plugins.json
           grep -q "LocalNotificationsPlugin" android/app/src/main/assets/capacitor.plugins.json
           grep -q "com.capacitorjs.plugins.localnotifications.LocalNotificationsPlugin" android/app/src/main/assets/capacitor.plugins.json
+          echo "Checking Filesystem and Share native plugins..."
+          grep -q "FilesystemPlugin" android/app/src/main/assets/capacitor.plugins.json
+          grep -q "SharePlugin" android/app/src/main/assets/capacitor.plugins.json
+          echo "Checking offline Excel engine copied into Android web assets..."
+          test -s android/app/src/main/assets/public/xlsx.full.min.js
           echo "Checking Android 13+ notification permission in merged source manifests..."
           grep -R "android.permission.POST_NOTIFICATIONS" node_modules/@capacitor/local-notifications/android/src/main/AndroidManifest.xml
           echo "Local Notifications native integration verified."
