@@ -28,6 +28,12 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
+      - name: Install matching Capacitor Local Notifications plugin
+        run: |
+          CAP_MAJOR=$(node -p "require('./node_modules/@capacitor/core/package.json').version.split('.')[0]")
+          echo "Detected Capacitor major: $CAP_MAJOR"
+          npm install --no-save "@capacitor/local-notifications@$CAP_MAJOR"
+
       - name: Install Capacitor asset generator
         run: npm install --no-save @capacitor/assets
 
@@ -92,6 +98,12 @@ jobs:
 
       - name: Sync web app
         run: npx cap sync android
+
+      - name: Verify Local Notifications plugin
+        run: |
+          test -d node_modules/@capacitor/local-notifications
+          node -p "require('./node_modules/@capacitor/local-notifications/package.json').version"
+          grep -R "LocalNotifications" android/app/src/main 2>/dev/null | head -20 || true
 
       - name: Install Health Connect native bridge
         run: |
