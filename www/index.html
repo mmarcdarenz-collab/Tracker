@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Daily Tracker</title>
+<title>M/ARC</title>
 <style>
 :root{
   --bg:#071018;
@@ -7767,6 +7767,237 @@ setTimeout(()=>{addReminderSettingsEntry();addReminderToMore();maybePromptRemind
 window.dtOpenReminderSettings=openReminderSettings;
 window.dtSyncTrainingReminders=syncTrainingReminders;
 window.DT_REMINDERS_DETAIL_PROGRESS_VERSION=DT_V11;
+})();
+</script>
+
+<style id="dt-v12-production-progress-css">
+/* =========================================================
+   V12 — production cleanup + M/ARC Exercise Progress V2
+   ========================================================= */
+
+/* Testing-only demo UI is removed from production. */
+#dtDemoActiveBadge,#dtDemoWorkoutDataBtn{display:none!important}
+
+/* Premium Exercise Progress layout inspired by the approved M/ARC concept. */
+.dt-v12-progress-card{
+  padding:0!important;
+  border:0!important;
+  background:transparent!important;
+}
+.dt-v12-periods{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:3px;
+  border:1px solid #193441;border-radius:11px;padding:3px;background:#081820;margin:1px 0 14px
+}
+.dt-v12-periods button{
+  border:0;background:transparent;color:#6e8693;border-radius:8px;padding:7px 5px;
+  font:800 8px system-ui
+}
+.dt-v12-periods button.active{background:#163b2d;color:#69e2a7}
+.dt-v12-stack{display:grid;gap:12px}
+.dt-v12-metric{
+  padding:14px 13px 12px;border:1px solid #18343f;border-radius:15px;background:#081921;
+  overflow:hidden
+}
+.dt-v12-metric-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.dt-v12-metric-title small{
+  display:block;color:#738b98;font:800 8px system-ui;letter-spacing:.07em;text-transform:uppercase
+}
+.dt-v12-metric-title strong{
+  display:block;color:#eef5f7;font:880 22px/1.1 system-ui;margin-top:5px;letter-spacing:-.35px
+}
+.dt-v12-change{
+  display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:3px 6px;border-radius:999px;
+  color:#64dda4;background:rgba(85,221,160,.07);border:1px solid rgba(85,221,160,.16);
+  font:800 7px system-ui;vertical-align:middle
+}
+.dt-v12-change.down{
+  color:#dca06e;background:rgba(220,160,110,.06);border-color:rgba(220,160,110,.16)
+}
+.dt-v12-change.flat{
+  color:#7895a5;background:rgba(92,126,145,.07);border-color:rgba(92,126,145,.16)
+}
+.dt-v12-compare{text-align:right;flex:none}
+.dt-v12-compare small{display:block;color:#617986;font:700 7px system-ui;text-transform:uppercase}
+.dt-v12-compare b{display:block;color:#98aab4;font:800 9px system-ui;margin-top:3px}
+.dt-v12-chart{height:118px;margin-top:10px}
+.dt-v12-chart svg{display:block;width:100%;height:100%}
+.dt-v12-grid{stroke:#17313d;stroke-width:.62}
+.dt-v12-line{fill:none;stroke-width:1.05;stroke-linejoin:miter;stroke-linecap:round}
+.dt-v12-date{fill:#607985;font:650 6.4px system-ui}
+.dt-v12-point{stroke-width:1;fill:#081921}
+.dt-v12-prod-note{
+  color:#5f7784;font:500 8px/1.5 system-ui;padding:2px 2px 0
+}
+.dt-v12-empty{
+  min-height:112px;display:grid;place-items:center;text-align:center;color:#718994;
+  font:650 9px/1.45 system-ui;padding:14px
+}
+
+/* Hide old Combined/Detail control if any earlier layer creates it. */
+.dt-v12-progress-card .dt-v11-mode{display:none!important}
+</style>
+
+<script id="dt-v12-production-progress-js">
+(()=>{
+"use strict";
+const DT_V12="12.0-production-brand-progress-v2";
+
+/* ---------- Remove testing demo data without touching real history ---------- */
+function removeDemoDataMigration(){
+  if(!state.workouts)return;
+  const w=state.workouts;
+  const demoRecords=(w.completedExercises||[]).filter(x=>String(x.id||"").startsWith("demo|"));
+  const demoDays=new Set(demoRecords.map(x=>String(x.dayKey||"")).filter(Boolean));
+
+  w.completedExercises=(w.completedExercises||[]).filter(x=>!String(x.id||"").startsWith("demo|"));
+  w.sessions=(w.sessions||[]).filter(s=>!s.demo && !String(s.summaryId||"").startsWith("demo-summary|"));
+
+  /* The testing build made at most one daily summary from demo records.
+     Remove only summaries belonging to a date that actually contained demo records. */
+  if(w.dailySummaries){
+    Object.keys(w.dailySummaries).forEach(k=>{
+      const s=w.dailySummaries[k];
+      if(demoDays.has(String(s?.dayKey||"")))delete w.dailySummaries[k];
+    });
+  }
+  w.demoDataLoaded=false;
+  w.demoDataVersion=null;
+  w.demoDataLoadedAt=null;
+  w.demoDataDismissed=true;
+
+  const badge=document.getElementById("dtDemoActiveBadge");if(badge)badge.remove();
+  const btn=document.getElementById("dtDemoWorkoutDataBtn");if(btn)btn.remove();
+
+  try{save()}catch(_){}
+}
+
+/* Prevent testing controls from returning after DOM rerenders. */
+const demoObserver=new MutationObserver(()=>{
+  document.getElementById("dtDemoActiveBadge")?.remove();
+  document.getElementById("dtDemoWorkoutDataBtn")?.remove();
+});
+demoObserver.observe(document.body,{childList:true,subtree:true});
+
+/* ---------- Exercise Progress V2 ---------- */
+function p12Norm(v){return String(v||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}
+function p12Key(e){try{return String(exerciseKey(e))}catch(_){return String(e?.[4]||"")}}
+function p12Sessions(e){
+  const key=p12Key(e),name=p12Norm(e?.[0]),type=p12Norm(e?.[1]),by=new Map();
+  (state.workouts?.completedExercises||[]).forEach(x=>{
+    if(String(x.id||"").startsWith("demo|"))return;
+    const exact=x.exerciseKey&&key&&String(x.exerciseKey)===key;
+    const named=p12Norm(x.name)===name&&(!type||!x.type||p12Norm(x.type)===type);
+    if(!exact&&!named)return;
+    const sets=(x.sets||[]).map(s=>({kg:+s.kg||0,reps:+s.reps||0})).filter(s=>s.kg>0&&s.reps>0);
+    if(!sets.length)return;
+    const dk=String(x.dayKey||x.finalizedAt||"").slice(0,10);
+    const rec=by.get(dk)||{date:dk,sets:[]};rec.sets.push(...sets);by.set(dk,rec);
+  });
+  return [...by.values()].sort((a,b)=>a.date.localeCompare(b.date)).map(x=>({
+    date:x.date,
+    volume:x.sets.reduce((n,s)=>n+s.kg*s.reps,0),
+    reps:x.sets.reduce((n,s)=>n+s.reps,0),
+    sets:x.sets.length
+  }));
+}
+function p12Date(s){try{return new Intl.DateTimeFormat(undefined,{month:"short",day:"numeric"}).format(new Date(s+"T12:00:00"))}catch(_){return s}}
+function p12Sum(a,f){return a.reduce((n,x)=>n+(+x[f]||0),0)}
+function p12Pct(a,b){return a?((b-a)/a*100):(b?100:0)}
+function p12Format(field,v){
+  if(field==="volume")return `${Math.round(v).toLocaleString()} kg`;
+  if(field==="reps")return `${Math.round(v).toLocaleString()} reps`;
+  return `${Math.round(v).toLocaleString()} sets`;
+}
+function p12Chart(data,field,color){
+  if(data.length<2)return `<div class="dt-v12-empty">Complete this exercise in at least two workouts to unlock the trend.</div>`;
+  const W=500,H=116,px=13,base=87,usable=W-px*2,max=Math.max(...data.map(x=>x[field]),1);
+  const pts=data.map((d,i)=>({x:px+i*usable/(data.length-1),y:base-(d[field]/max)*65,d}));
+  const line="M "+pts.map(p=>`${p.x} ${p.y}`).join(" L ");
+  const area=`M ${pts[0].x} ${base} L `+pts.map(p=>`${p.x} ${p.y}`).join(" L ")+` L ${pts.at(-1).x} ${base} Z`;
+  const labels=pts.map((p,i)=>{
+    if(data.length>7 && i!==0 && i!==data.length-1)return "";
+    return `<text class="dt-v12-date" x="${p.x}" y="111" text-anchor="middle">${p12Date(p.d.date)}</text>`;
+  }).join("");
+  const points=pts.map(p=>`<circle class="dt-v12-point" cx="${p.x}" cy="${p.y}" r="2.6" stroke="${color}"/>`).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <defs><linearGradient id="p12${field}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".30"/><stop offset="1" stop-color="${color}" stop-opacity=".015"/></linearGradient></defs>
+    <line class="dt-v12-grid" x1="${px}" x2="${W-px}" y1="22" y2="22"/>
+    <line class="dt-v12-grid" x1="${px}" x2="${W-px}" y1="54" y2="54"/>
+    <line class="dt-v12-grid" x1="${px}" x2="${W-px}" y1="${base}" y2="${base}"/>
+    <path d="${area}" fill="url(#p12${field})"/>
+    <path class="dt-v12-line" d="${line}" stroke="${color}"/>
+    ${points}${labels}
+  </svg>`;
+}
+function p12Periods(all,days){
+  const now=Date.now(),ms=days*86400000,curStart=now-ms,prevStart=now-ms*2;
+  const current=all.filter(x=>new Date(x.date+"T12:00:00").getTime()>=curStart);
+  const previous=all.filter(x=>{
+    const t=new Date(x.date+"T12:00:00").getTime();return t>=prevStart&&t<curStart;
+  });
+  return {current,previous};
+}
+function p12Metric(field,label,color,current,previous){
+  const total=p12Sum(current,field),prev=p12Sum(previous,field),change=p12Pct(prev,total);
+  const avg=current.length?total/current.length:0;
+  const ccls=change>0.2?"":change<-.2?"down":"flat";
+  const arrow=change>0.2?"↑":change<-.2?"↓":"→";
+  return `<section class="dt-v12-metric">
+    <div class="dt-v12-metric-head">
+      <div class="dt-v12-metric-title"><small>${label}</small><strong>${p12Format(field,total)}${current.length&&previous.length?`<span class="dt-v12-change ${ccls}">${arrow} ${Math.abs(change).toFixed(1)}%</span>`:""}</strong></div>
+      <div class="dt-v12-compare"><small>Avg / workout</small><b>${p12Format(field,avg)}</b></div>
+    </div>
+    <div class="dt-v12-chart">${p12Chart(current,field,color)}</div>
+  </section>`;
+}
+function applyProgressV2(e,days=90){
+  const content=document.getElementById("dtPxContent");if(!content)return;
+  const card=[...content.querySelectorAll(".dt-px-card")].find(x=>x.querySelector("h4")?.textContent.trim().toLowerCase()==="performance trend");
+  if(!card)return;
+
+  const all=p12Sessions(e),{current,previous}=p12Periods(all,days);
+  card.className="dt-px-card dt-v12-progress-card";
+  card.dataset.v12="1";
+  card.innerHTML=`<h4>Performance trend</h4>
+    <div class="dt-v12-periods">${[[30,"1M"],[90,"3M"],[180,"6M"],[365,"1Y"]].map(([d,l])=>`<button type="button" data-p12-days="${d}" class="${d===days?"active":""}">${l}</button>`).join("")}</div>
+    <div class="dt-v12-stack">
+      ${p12Metric("volume","Volume (kg)","#55dda0",current,previous)}
+      ${p12Metric("reps","Reps","#55aaff",current,previous)}
+      ${p12Metric("sets","Sets","#a45cf2",current,previous)}
+      <div class="dt-v12-prod-note">Period change compares the selected range with the immediately preceding equal-length range. Volume is load × reps across logged working sets. These are training-history trends, not direct measures of muscle growth.</div>
+    </div>`;
+  card.querySelectorAll("[data-p12-days]").forEach(b=>b.onclick=()=>applyProgressV2(e,+b.dataset.p12Days));
+}
+
+/* Capture both legacy and current Progress buttons. */
+document.addEventListener("click",ev=>{
+  if(!ev.target.closest?.(".dt-progress-open"))return;
+  setTimeout(()=>{
+    const title=document.querySelector("#dtPxContent .dt-px-title")?.textContent.trim();
+    if(!title)return;
+    let e=null;try{e=(effectiveExercises(wday)||[]).find(x=>String(x[0])===title)}catch(_){}
+    if(e)applyProgressV2(e,90);
+  },230);
+},true);
+
+const p12OldOpen=window.dtOpenExerciseProgress;
+if(typeof p12OldOpen==="function"){
+  window.dtOpenExerciseProgress=function(e){
+    p12OldOpen(e);setTimeout(()=>applyProgressV2(e,90),210);
+  };
+}
+
+function productionBoot(){
+  removeDemoDataMigration();
+  /* Make sure the old test controls are not visible after migration. */
+  document.getElementById("dtDemoActiveBadge")?.remove();
+  document.getElementById("dtDemoWorkoutDataBtn")?.remove();
+}
+document.readyState==="loading"?document.addEventListener("DOMContentLoaded",productionBoot):productionBoot();
+setTimeout(productionBoot,850);
+
+window.dtApplyProgressV2=applyProgressV2;
+window.DT_MARC_PRODUCTION_V12=DT_V12;
 })();
 </script>
 </body>
