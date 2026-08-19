@@ -4719,7 +4719,7 @@ renderTrainingGoal();
     secondary:"rgba(67,167,255,.52)",
     stabilizer:"rgba(165,92,255,.48)"
   };
-  const DT_ROLE_DELAYS = {primary:.34,secondary:.72,stabilizer:1.08};
+  const DT_ROLE_DELAYS = {primary:.16,secondary:.58,stabilizer:1.00};
   const DT_ROLE_WEIGHTS = {primary:1.0,secondary:.55,stabilizer:.25};
   const DT_EFFORT_MULT = {easy:.90,ideal:1.00,max:1.10};
 
@@ -5085,12 +5085,13 @@ renderTrainingGoal();
       path.style.setProperty("--dt-target",DT_ROLE_COLORS[role]);
       path.style.setProperty("--dt-glow",DT_ROLE_GLOWS[role]);
       path.style.setProperty("--dt-base","#3c4851");
-      path.style.fill="#3c4851";
-      path.style.opacity=".48";
+      /* Release: target stays visible; the body enters slowly, then a very soft pulse begins. */
+      path.style.fill=DT_ROLE_COLORS[role];
+      path.style.opacity="1";
       path.style.animation="none";
       void path.getBoundingClientRect();
       path.classList.add("dt-role-animated");
-      path.style.animation=`dtMuscleReveal .44s cubic-bezier(.2,.75,.2,1) ${delay}s forwards, dtMusclePulse 2.8s ease-in-out ${delay+1.10}s infinite`;
+      path.style.animation=`dtMusclePulse 3.6s ease-in-out ${delay+1.80}s infinite`;
     });
   }
 
@@ -5811,7 +5812,7 @@ function insight(rows,muscles,prs,sessions){if(!rows.length)return ['•','Build
 function openWeekly(){ensure();const w=weekBounds(),rows=completedInWeek(w),sessions=sessionIds(rows),sets=rows.reduce((n,x)=>n+validSets(x).length,0),volume=Math.round(rows.reduce((n,x)=>n+validSets(x).reduce((a,s)=>a+(+s.kg)*(+s.reps),0),0)),muscles=muscleTotals(rows),prs=prList(rows,w),totalM=muscles.reduce((a,x)=>a+x[1],0)||1,active=new Set(rows.map(x=>String(x.dayKey||x.finalizedAt||'').slice(0,10))),ins=insight(rows,muscles,prs,sessions);
  const muscleHtml=muscles.length?muscles.slice(0,6).map(([name,v])=>{const pct=Math.round(v/totalM*100),on=Math.max(1,Math.round(pct/10));return `<div class="dt-wp-muscle-line"><b>${name}</b><div class="dt-wp-track">${Array.from({length:10},(_,i)=>`<i class="${i<on?'on':''}"></i>`).join('')}</div><strong>${pct}%</strong></div>`}).join(''):'<div class="dt-wp-sub">Muscle emphasis appears after completed workout sets.</div>';
  const prHtml=prs.length?prs.slice(0,5).map(p=>`<div class="dt-wp-pr"><div><b>${p.name}</b><span>${p.date}</span></div><strong>🏆 ${p.kg} × ${p.reps}</strong></div>`).join(''):'<div class="dt-wp-sub">No new performance records detected this week.</div>';
- document.getElementById('dtWpContent').innerHTML=`<div class="dt-wp-head"><div><div class="dt-wp-kicker">Weekly Performance</div><div class="dt-wp-title">Your training week</div><div class="dt-wp-sub">${fmtRange(w)}</div></div><button class="dt-wp-close" onclick="document.getElementById('dtWeeklyPerformanceModal').classList.remove('show')">×</button></div><div class="dt-wp-grid"><div class="dt-wp-stat"><small>Workouts</small><strong>${sessions}</strong><em>completed</em></div><div class="dt-wp-stat"><small>Working sets</small><strong>${sets}</strong><em>logged sets</em></div><div class="dt-wp-stat"><small>Volume load</small><strong>${volume?volume.toLocaleString():'—'}</strong><em>${volume?'kg logged':'no data'}</em></div><div class="dt-wp-stat"><small>PRs</small><strong>${prs.length}</strong><em>this week</em></div></div><div class="dt-wp-card"><h4>Consistency</h4><div class="dt-wp-days">${w.keys.map((k,i)=>`<div class="dt-wp-day ${active.has(k)?'on':''}"><i></i><span>${['M','T','W','T','F','S','S'][i]}</span></div>`).join('')}</div></div><div class="dt-wp-card"><h4>Logged set emphasis</h4><div class="dt-wp-muscles">${muscleHtml}</div><div class="dt-wp-foot">Set emphasis is a tracker summary, not a measurement of muscle activation or growth. Multi-muscle exercise labels are split fractionally.</div></div><div class="dt-wp-card"><h4>Performance records</h4><div class="dt-wp-prs">${prHtml}</div></div><div class="dt-wp-card"><h4>Weekly insight</h4><div class="dt-wp-insight"><div class="dt-wp-insight-icon">${ins[0]}</div><div><b>${ins[1]}</b><span>${ins[2]}</span></div></div></div>`;document.getElementById('dtWeeklyPerformanceModal').classList.add('show')}
+ document.getElementById('dtWpContent').innerHTML=`<div class="dt-wp-head"><div><div class="dt-wp-kicker">Weekly Performance</div><div class="dt-wp-title">Your training week</div><div class="dt-wp-sub">${fmtRange(w)}</div></div><button class="dt-wp-close" onclick="document.getElementById('dtWeeklyPerformanceModal').classList.remove('show')">×</button></div><div class="dt-wp-grid"><div class="dt-wp-stat"><small>Workouts</small><strong>${sessions}</strong><em>completed</em></div><div class="dt-wp-stat"><small>Working sets</small><strong>${sets}</strong><em>logged sets</em></div><div class="dt-wp-stat"><small>Volume load</small><strong>${volume?volume.toLocaleString():'—'}</strong><em>${volume?'kg logged':'no data'}</em></div><div class="dt-wp-stat"><small>PRs</small><strong>${prs.length}</strong><em>this week</em></div></div><div class="dt-wp-card"><h4>Consistency</h4><div class="dt-wp-days">${w.keys.map((k,i)=>`<div class="dt-wp-day ${active.has(k)?'on':''}"><i></i><span>${['M','T','W','T','F','S','S'][i]}</span></div>`).join('')}</div></div><div class="dt-wp-card"><h4>Logged set emphasis</h4><div class="dt-wp-muscles">${muscleHtml}</div><div class="dt-wp-foot">Relative share of your logged working sets this week.</div></div><div class="dt-wp-card"><h4>Performance records</h4><div class="dt-wp-prs">${prHtml}</div></div><div class="dt-wp-card"><h4>Weekly insight</h4><div class="dt-wp-insight"><div class="dt-wp-insight-icon">${ins[0]}</div><div><b>${ins[1]}</b><span>${ins[2]}</span></div></div></div>`;document.getElementById('dtWeeklyPerformanceModal').classList.add('show')}
 function addButton(){if(document.getElementById('dtWeeklyPerformanceBtn'))return;const tabs=document.querySelector('.workout-tabs');if(!tabs)return;const b=document.createElement('button');b.id='dtWeeklyPerformanceBtn';b.type='button';b.innerHTML='<span>Weekly Performance</span><small>Trends · sets · PRs ›</small>';b.onclick=openWeekly;tabs.parentNode.insertBefore(b,tabs);}
 const boot=()=>{ensure();addButton()};document.readyState==='loading'?document.addEventListener('DOMContentLoaded',boot):boot();setTimeout(addButton,400);window.dtOpenWeeklyPerformance=openWeekly;window.DT_WEEKLY_PERFORMANCE_VERSION=DT_V6;
 })();
@@ -7111,7 +7112,7 @@ function ensureMore(){
     <button class="dt-more-item" data-more="goals"><b>Progress goals</b><small>Weekly consistency and optional lift target.</small></button>
     <button class="dt-more-item" data-more="stats"><b>Weekly performance</b><small>Sets, consistency, muscle emphasis and PRs.</small></button>
     <button class="dt-more-item money" data-more="money"><span><b>Money</b><small>Secondary feature · available balance</small></span><strong id="dtMoreMoneyValue">—</strong></button>
-    <button class="dt-more-item settings" data-more="settings"><b>Settings</b><small>Health Connect, workout setup, demo/reset and preferences.</small></button>
+    <button class="dt-more-item settings" data-more="settings"><b>Settings</b><small>Health Connect, workout setup and preferences.</small></button>
   </div></section>`;
   m.onclick=e=>{if(e.target===m)m.classList.remove("show")};
   m.querySelector(".dt-more-close").onclick=()=>m.classList.remove("show");
@@ -8550,7 +8551,6 @@ function exRender(){
   </div>
   <div class="dt-ex-section"><div class="dt-ex-label">Export format<small>Excel keeps the detailed data. Visual Report summarizes progress as a shareable image.</small></div>
     <div class="dt-ex-formats"><button class="dt-ex-format active" data-ex-format="visual"><b>Visual Report</b><small>PNG · trends, muscle emphasis and improvement map</small></button><button class="dt-ex-format" data-ex-format="xlsx"><b>Excel</b><small>XLSX · summary, sets, exercise progress and muscle trends</small></button></div>
-    <div class="dt-ex-sample">This testing build includes about 3 months of sample workout history so you can evaluate both export types immediately. Sample records are tagged separately from your own logs.</div>
     <div id="dtExportSummary" class="dt-ex-summary"></div>
   </div>
   <div class="dt-ex-actions"><button class="dt-ex-cancel" type="button">Cancel</button><button class="dt-ex-generate" type="button">Generate & share</button></div><div class="dt-ex-result"></div>`;
@@ -8590,7 +8590,7 @@ function exAddEntry(){
     const h=history.querySelector("h1");if(h){const b=document.createElement("button");b.id="dtHistoryExportBtn";b.type="button";b.textContent="Export";b.style.cssText="float:right;margin-top:-39px;border:1px solid #25414e;border-radius:11px;background:#081821;color:#72aee0;padding:7px 11px;font:800 9px system-ui";b.onclick=exOpen;h.insertAdjacentElement("afterend",b)}
   }
 }
-function exBoot(){exSeedSampleData();exEnsureModal();exAddEntry()}
+function exBoot(){exRemoveSampleData();exEnsureModal();exAddEntry()}
 document.readyState==="loading"?document.addEventListener("DOMContentLoaded",exBoot):exBoot();
 setTimeout(exAddEntry,900);
 
@@ -8601,5 +8601,480 @@ window.DT_EXPORT_PROGRESS_VERSION=DT_V14;
 </script>
 <script>window.DT_VISUAL_REPORT_V2_VERSION="15.0-premium-anatomy-report";</script>
 <script>window.DT_EXPORT_VECTOR_ANATOMY_VERSION="17.0-export-minimal-centered";</script>
+
+<style id="dt-v18-release-css">
+/* ===============================
+   M/ARC V18 RELEASE POLISH
+   =============================== */
+
+/* Keep the workout surface focused. Money remains available from More. */
+#dtWorkoutMoneyTile{display:none!important}
+
+/* Developer / diagnostic-only surfaces are hidden in release. */
+#dtDemoWorkoutDataBtn,
+#dtDemoDataModal,
+#dtDemoActiveBadge,
+#diagnoseHealth,
+#healthDiagResults,
+.dt-demo-active,
+.dt-ex-sample,
+.dt-vector-note{display:none!important}
+
+/* The source selector was useful during integration; release uses Health Connect. */
+#healthSourceSelect{display:none!important}
+
+/* Non-interactive weekly consistency markers should not look like buttons. */
+.dt-wp-day{
+  border:0!important;
+  background:transparent!important;
+  min-width:0!important;
+}
+.dt-wp-day>i{
+  width:24px!important;height:24px!important;
+  border-radius:50%!important;
+  border:1px solid #25404d!important;
+  background:#0a1922!important;
+  position:relative;
+}
+.dt-wp-day.on>i{
+  border-color:rgba(85,221,160,.48)!important;
+  background:rgba(85,221,160,.11)!important;
+}
+.dt-wp-day>i::after{
+  content:"";
+  position:absolute;left:50%;top:50%;
+  width:5px;height:5px;border-radius:50%;
+  transform:translate(-50%,-50%);
+  background:#506672;
+}
+.dt-wp-day.on>i::after{background:#55dda0}
+
+/* Keep text inside cards / buttons at narrow Android widths. */
+.exercise-head,.smart-next,.dt-more-item,.dt-rem-line,.dt-g-row,.dt-px-row,
+.dt-ex-section,.training-goal-main,.program-option,.health-connect-row{
+  min-width:0!important
+}
+.exname,.smart-next-copy,.dt-more-item>span,.training-goal-copy,
+.dt-rem-line>div,.dt-g-copy,.dt-px-row>div{min-width:0!important}
+.exname b,.exname small,.smart-next-copy b,.smart-next-reason,
+.dt-more-item small,.dt-rem-line small,.dt-g-copy small,.dt-px-row span,
+.program-option p,.program-how p,.health-test-note{
+  overflow-wrap:anywhere;
+  word-break:normal;
+}
+.exsum{flex:none!important;max-width:70px;overflow:hidden;text-overflow:ellipsis}
+.exercise-menu-btn,.exercise-chevron{flex:none!important}
+
+/* Increase real tap targets while keeping icons visually compact. */
+.exercise-menu-btn,.exercise-chevron,.dt-more-close,.program-close,
+.dt-rem-close,.dt-px-close,.dt-ex-close,.dt-summary-close{
+  min-width:48px!important;min-height:48px!important
+}
+
+/* Muscle visual: slower, persistent, and never flashes back to grey. */
+@keyframes dtReleaseMuscleReveal{
+  0%{fill:var(--dt-target);opacity:.42;filter:drop-shadow(0 0 0 rgba(0,0,0,0))}
+  55%{fill:var(--dt-target);opacity:1;filter:drop-shadow(0 0 7px var(--dt-glow))}
+  100%{fill:var(--dt-target);opacity:1;filter:drop-shadow(0 0 2px var(--dt-glow))}
+}
+@keyframes dtReleaseBodyEnter{
+  from{opacity:0;transform:translateY(9px) scale(.965)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+.dt-vector-body .body-chart-svg{
+  animation:dtReleaseBodyEnter .72s cubic-bezier(.2,.75,.2,1) both!important;
+}
+#dtVectorBack .body-chart-svg{animation-delay:.12s!important}
+.dt-vector-body .body-chart-muscle.dt-role-animated{
+  transform-box:fill-box;
+  transform-origin:center;
+}
+
+/* Swipe-to-remove set: visual affordance stays subtle. */
+.setrow{
+  position:relative;
+  transition:transform .18s ease,opacity .18s ease,background .18s ease;
+  will-change:transform;
+  touch-action:pan-y;
+  border-radius:10px;
+}
+.setrow.dt-set-swiping{
+  background:linear-gradient(90deg,rgba(205,78,78,.08),transparent 34%,transparent 66%,rgba(205,78,78,.08));
+}
+.setrow.dt-set-remove{
+  opacity:.1;
+  transform:translateX(var(--dt-set-exit,120px))!important;
+}
+.dt-set-remove-hint{
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:flex-end;
+  padding:0 10px;pointer-events:none;
+  color:#df7777;font:800 8px system-ui;
+  opacity:0;transition:opacity .12s ease;
+}
+.setrow.dt-set-swiping .dt-set-remove-hint{opacity:.75}
+.dt-sr-only{
+  position:absolute!important;width:1px!important;height:1px!important;
+  padding:0!important;margin:-1px!important;overflow:hidden!important;
+  clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important
+}
+
+/* Undo toast */
+#dtReleaseToast{
+  position:fixed;left:50%;bottom:calc(88px + env(safe-area-inset-bottom));
+  transform:translate(-50%,18px);z-index:12000;
+  min-width:min(330px,calc(100vw - 32px));max-width:420px;
+  padding:11px 12px;border:1px solid #29414e;border-radius:14px;
+  background:#0b1a23;color:#dce8ed;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  box-shadow:0 12px 34px rgba(0,0,0,.35);
+  opacity:0;pointer-events:none;transition:.2s ease;
+}
+#dtReleaseToast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+#dtReleaseToast span{font:700 10px system-ui}
+#dtReleaseToast button{
+  border:0;background:transparent;color:#62dda2;
+  font:850 10px system-ui;padding:8px 10px;min-height:40px
+}
+
+/* Today: remove money from the workout-first dashboard. */
+.dt-release-hide{display:none!important}
+#today .summary-grid.dt-release-training-grid{grid-template-columns:repeat(2,1fr)}
+#today .glance-grid.dt-release-training-grid{grid-template-columns:repeat(2,1fr)}
+
+@media(max-width:430px){
+  #workout .exercise-head{
+    display:grid!important;
+    grid-template-columns:34px minmax(0,1fr) 38px 38px!important;
+    grid-template-areas:
+      "num name menu chev"
+      "num sum progress progress"!important;
+    column-gap:7px!important;row-gap:2px!important;
+    align-items:center!important;
+  }
+  #workout .exnum{grid-area:num!important}
+  #workout .exname{grid-area:name!important;max-width:none!important}
+  #workout .exsum{grid-area:sum!important;max-width:none!important;justify-self:start!important}
+  #workout .exercise-menu-btn{grid-area:menu!important}
+  #workout .exercise-chevron{grid-area:chev!important}
+  #workout .dt-progress-open{
+    grid-area:progress!important;
+    justify-self:end!important;
+    padding:7px 2px!important;
+    font-size:9px!important;
+  }
+  #workout .exname b{font-size:12px!important;line-height:1.18!important}
+  #workout .exname small{font-size:8px!important}
+}
+</style>
+
+<script id="dt-v18-release-js">
+(()=>{
+"use strict";
+const DT_V18="18.0-release-polish";
+
+/* -------------------------------
+   Release data cleanup
+   ------------------------------- */
+function cleanupTestingData(){
+  try{
+    if(!state?.workouts)return;
+    const w=state.workouts;
+    // Export test records are always explicitly tagged.
+    w.completedExercises=(w.completedExercises||[]).filter(x=>
+      !String(x?.id||"").startsWith("export-sample|")
+    );
+
+    // Old demo sessions/records are explicitly prefixed/tagged.
+    w.completedExercises=(w.completedExercises||[]).filter(x=>
+      !String(x?.id||"").startsWith("demo|")
+    );
+    w.sessions=(w.sessions||[]).filter(x=>!x?.demo && !x?.exportSample);
+    if(w.dailySummaries){
+      Object.keys(w.dailySummaries).forEach(k=>{
+        if(String(k).startsWith("demo-summary|"))delete w.dailySummaries[k];
+      });
+    }
+    w.demoDataLoaded=false;
+    w.demoDataVersion=null;
+    w.exportSampleVersion=null;
+    w.exportSampleAddedAt=null;
+    try{save()}catch(_){}
+  }catch(e){console.warn("Release data cleanup skipped",e)}
+}
+
+/* -------------------------------
+   Remove developer-only settings
+   ------------------------------- */
+function ensureReleaseWorkoutReset(){
+  try{
+    if(document.getElementById("dtResetWorkoutDataBtn"))return;
+    const resetBtn=document.getElementById("resetBtn");if(!resetBtn)return;
+    const b=document.createElement("button");b.id="dtResetWorkoutDataBtn";b.className="dt-data-tool danger";b.type="button";
+    b.innerHTML='<span><b>Reset workout data</b><small>Clear workout logs and start from zero.</small></span><span>›</span>';
+    b.onclick=()=>{
+      try{if(typeof ensureModals==="function")ensureModals()}catch(_){}
+      const m=document.getElementById("dtWorkoutResetModal");
+      if(m)m.classList.add("show");
+    };
+    resetBtn.parentNode.insertBefore(b,resetBtn);
+  }catch(_){}
+}
+function releaseSettingsCleanup(){
+  try{
+    document.getElementById("dtDemoWorkoutDataBtn")?.remove();
+    document.getElementById("dtDemoDataModal")?.remove();
+    document.getElementById("dtDemoActiveBadge")?.remove();
+    const resetWorkoutButtons=[...document.querySelectorAll("button")].filter(function(btn){
+      const bold=btn.querySelector("b");
+      const title=((bold ? bold.textContent : btn.textContent) || "").trim().toLowerCase();
+      return title.indexOf("reset workout data")===0;
+    });
+    resetWorkoutButtons.slice(1).forEach(function(x){x.remove();});
+
+    const diag=document.getElementById("diagnoseHealth");
+    if(diag)diag.closest(".health-connect-row")?.remove();
+
+    const source=document.getElementById("healthSourceSelect");
+    if(source){
+      const row=source.closest(".health-connect-row")||source.parentElement;
+      if(row)row.style.display="none";
+    }
+
+    const sourceStatus=document.getElementById("healthSourceStatus");
+    if(sourceStatus)sourceStatus.textContent="Health Connect";
+    ensureReleaseWorkoutReset();
+  }catch(_){}
+}
+
+/* -------------------------------
+   Workout-first Today cleanup
+   ------------------------------- */
+function weeklyTrainingCount(){
+  try{
+    const now=new Date(),dow=(now.getDay()+6)%7;
+    const monday=new Date(now);monday.setHours(0,0,0,0);monday.setDate(now.getDate()-dow);
+    const sunday=new Date(monday);sunday.setDate(monday.getDate()+7);
+    const ids=new Set();
+    (state.workouts?.completedExercises||[]).forEach(x=>{
+      const raw=String(x?.dayKey||x?.finalizedAt||"").slice(0,10);
+      const d=new Date(raw+"T12:00:00");
+      if(d>=monday&&d<sunday)ids.add(`${raw}|${x.day||""}`);
+    });
+    return ids.size;
+  }catch(_){return 0}
+}
+function releaseTodayCleanup(){
+  try{
+    ["sumSpending","sumSavings","sumLimitLeft","glanceSpent","glanceSavings"].forEach(id=>{
+      const el=document.getElementById(id);
+      const card=el?.closest(".summary-metric,.glance-item");
+      if(card)card.classList.add("dt-release-hide");
+    });
+    document.querySelector("#today .summary-grid")?.classList.add("dt-release-training-grid");
+    document.querySelector("#today .glance-grid")?.classList.add("dt-release-training-grid");
+
+    const count=weeklyTrainingCount();
+    const grade=document.getElementById("weekGrade");
+    const note=document.getElementById("weekGradeNote");
+    if(grade&&note){
+      grade.textContent=count>=4?"Strong Training Week":count>=2?"Building Momentum":"Start the Week";
+      note.textContent=count?`${count} workout${count===1?"":"s"} completed this week.`:"Your first completed workout will start this summary.";
+    }
+  }catch(_){}
+}
+
+/* -------------------------------
+   Persistent muscle highlight
+   ------------------------------- */
+function keepMuscleTargetsVisible(){
+  document.querySelectorAll(".dt-vector-body .body-chart-muscle").forEach(path=>{
+    const target=path.style.getPropertyValue("--dt-target");
+    if(target){
+      path.style.setProperty("fill",target,"important");
+      path.style.setProperty("opacity","1");
+    }
+  });
+}
+const muscleObserver=new MutationObserver(()=>{
+  clearTimeout(muscleObserver._t);
+  muscleObserver._t=setTimeout(keepMuscleTargetsVisible,180);
+});
+
+/* -------------------------------
+   Swipe a logged set to remove it.
+   An accessible hidden Remove Set button remains available to assistive tech.
+   ------------------------------- */
+let lastRemoved=null,toastTimer=null;
+
+function ensureToast(){
+  let t=document.getElementById("dtReleaseToast");
+  if(t)return t;
+  t=document.createElement("div");t.id="dtReleaseToast";
+  t.innerHTML='<span>Set removed</span><button type="button">Undo</button>';
+  t.querySelector("button").onclick=undoRemovedSet;
+  document.body.appendChild(t);
+  return t;
+}
+function showToast(label="Set removed"){
+  const t=ensureToast();
+  t.querySelector("span").textContent=label;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove("show"),4200);
+}
+function currentExerciseIndex(box){
+  try{
+    const key=box.dataset.exerciseKey;
+    const exs=effectiveExercises(wday)||[];
+    return exs.findIndex((e,i)=>{
+      const k=typeof exerciseStableKey==="function"?exerciseStableKey(e,i):
+        (typeof exerciseKey==="function"?exerciseKey(e):`${e?.[0]||""}|${e?.[1]||""}`);
+      return String(k)===String(key);
+    });
+  }catch(_){return -1}
+}
+function removeSet(box,si){
+  try{
+    const ei=currentExerciseIndex(box);if(ei<0)return;
+    const d=draft();const sets=d?.[ei]?.sets;if(!Array.isArray(sets)||!sets[si])return;
+    if(sets.length<=1){
+      showToast("Keep at least one set");
+      return;
+    }
+    const removed=JSON.parse(JSON.stringify(sets[si]));
+    lastRemoved={day:wday,exerciseKey:box.dataset.exerciseKey,ei,si,set:removed,at:Date.now()};
+    sets.splice(si,1);
+    if(typeof persistNow==="function")persistNow();else try{save()}catch(_){}
+    if(typeof renderWorkout==="function")renderWorkout();
+    requestAnimationFrame(()=>{
+      const reopened=[...document.querySelectorAll(".exercise")].find(x=>x.dataset.exerciseKey===lastRemoved.exerciseKey);
+      reopened?.classList.add("open");
+    });
+    showToast("Set removed");
+  }catch(e){console.warn("Remove set failed",e)}
+}
+function undoRemovedSet(){
+  if(!lastRemoved)return;
+  try{
+    if(lastRemoved.day!==wday){lastRemoved=null;return}
+    const exs=effectiveExercises(wday)||[];
+    const ei=exs.findIndex((e,i)=>{
+      const k=typeof exerciseStableKey==="function"?exerciseStableKey(e,i):
+        (typeof exerciseKey==="function"?exerciseKey(e):`${e?.[0]||""}|${e?.[1]||""}`);
+      return String(k)===String(lastRemoved.exerciseKey);
+    });
+    const d=draft();if(ei<0||!d?.[ei]?.sets)return;
+    d[ei].sets.splice(Math.min(lastRemoved.si,d[ei].sets.length),0,lastRemoved.set);
+    if(typeof persistNow==="function")persistNow();else try{save()}catch(_){}
+    const key=lastRemoved.exerciseKey;lastRemoved=null;
+    renderWorkout();
+    requestAnimationFrame(()=>{
+      [...document.querySelectorAll(".exercise")].find(x=>x.dataset.exerciseKey===key)?.classList.add("open");
+    });
+    const t=ensureToast();t.querySelector("span").textContent="Set restored";t.classList.add("show");
+    clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove("show"),1800);
+  }catch(e){console.warn("Undo set failed",e)}
+}
+function bindSetRow(row,box,si){
+  if(row.dataset.releaseSwipeBound==="1")return;
+  row.dataset.releaseSwipeBound="1";
+  row.tabIndex=0;
+  row.setAttribute("role","group");
+  row.setAttribute("aria-label",`Set ${si+1}. Swipe left or right to remove.`);
+  const hint=document.createElement("span");hint.className="dt-set-remove-hint";hint.textContent="Remove";row.appendChild(hint);
+  const sr=document.createElement("button");sr.type="button";sr.className="dt-sr-only";sr.textContent=`Remove set ${si+1}`;
+  sr.onclick=()=>removeSet(box,si);row.appendChild(sr);
+
+  let sx=0,sy=0,dx=0,active=false;
+  row.addEventListener("touchstart",e=>{
+    if(e.target.closest("input,button,select,textarea"))return;
+    const t=e.changedTouches?.[0];if(!t)return;
+    sx=t.clientX;sy=t.clientY;dx=0;active=true;
+  },{passive:true});
+  row.addEventListener("touchmove",e=>{
+    if(!active)return;
+    const t=e.changedTouches?.[0];if(!t)return;
+    dx=t.clientX-sx;const dy=t.clientY-sy;
+    if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>8){
+      row.classList.add("dt-set-swiping");
+      row.style.transform=`translateX(${Math.max(-92,Math.min(92,dx))}px)`;
+    }
+  },{passive:true});
+  row.addEventListener("touchend",()=>{
+    if(!active)return;active=false;
+    if(Math.abs(dx)>=58){
+      row.style.setProperty("--dt-set-exit",`${dx>0?130:-130}px`);
+      row.classList.add("dt-set-remove");
+      setTimeout(()=>removeSet(box,si),150);
+    }else{
+      row.classList.remove("dt-set-swiping");
+      row.style.transform="";
+    }
+  },{passive:true});
+}
+function scanSetRows(){
+  document.querySelectorAll(".exercise").forEach(box=>{
+    box.querySelectorAll(".setrow").forEach((row,si)=>bindSetRow(row,box,si));
+  });
+}
+const setObserver=new MutationObserver(()=>{
+  clearTimeout(setObserver._t);
+  setObserver._t=setTimeout(scanSetRows,60);
+});
+
+/* -------------------------------
+   Text / surface final cleanup
+   ------------------------------- */
+function releaseTextCleanup(){
+  try{
+    const more=document.getElementById("dtV10MoreModal");
+    const settings=more?.querySelector('[data-more="settings"] small');
+    if(settings)settings.textContent="Health Connect, workout setup and preferences.";
+
+    // The old wording sounded like a diagnostic/developer surface.
+    document.querySelectorAll(".dt-wp-foot").forEach(x=>{
+      if(x.textContent.includes("tracker summary"))x.textContent="Relative share of your logged working sets this week.";
+    });
+
+    // Notification settings should read as a user preference, not engineering language.
+    document.querySelectorAll(".dt-rem-style-head small").forEach(x=>{
+      x.textContent="Choose how noticeable training reminders should be.";
+    });
+  }catch(_){}
+}
+
+/* -------------------------------
+   Boot
+   ------------------------------- */
+function bootRelease(){
+  cleanupTestingData();
+  releaseSettingsCleanup();
+  releaseTodayCleanup();
+  releaseTextCleanup();
+  scanSetRows();
+  muscleObserver.observe(document.body,{childList:true,subtree:true});
+  const wl=document.getElementById("wlist");if(wl)setObserver.observe(wl,{childList:true,subtree:true});
+  keepMuscleTargetsVisible();
+
+  // Re-apply cleanup after delayed feature bootstraps.
+  setTimeout(()=>{releaseSettingsCleanup();releaseTodayCleanup();releaseTextCleanup();scanSetRows()},700);
+}
+document.readyState==="loading"?document.addEventListener("DOMContentLoaded",bootRelease):bootRelease();
+
+/* Wrap Today renderer so the cleanup survives every tab refresh. */
+setTimeout(()=>{
+  if(typeof window.renderTodayDashboardExtras==="function"&&!window.renderTodayDashboardExtras.__releaseWrapped){
+    const original=window.renderTodayDashboardExtras;
+    const wrapped=function(){original.apply(this,arguments);releaseTodayCleanup()};
+    wrapped.__releaseWrapped=true;window.renderTodayDashboardExtras=wrapped;
+  }
+},0);
+
+window.DT_RELEASE_POLISH_VERSION=DT_V18;
+window.dtRemoveWorkoutSet=removeSet;
+})();
+</script>
+
 </body>
 </html>
