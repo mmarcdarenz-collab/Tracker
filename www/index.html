@@ -998,6 +998,7 @@ nav button.active{color:var(--green);background:#10231a}
 </style>
 
 <link rel="icon" type="image/png" href="marc-icon.png">
+<script src="xlsx.full.min.js"></script>
 </head>
 <body>
 <div class="app">
@@ -7438,7 +7439,11 @@ window.DT_WORKOUT_FIRST_UI_VERSION=DT_V10;
 (()=>{
 "use strict";
 const DT_V11="11.0-reminders-detailed-progress";
-const REM_CHANNEL="marc-training-reminders";
+const REM_CHANNELS={
+  silent:"marc-training-silent",
+  vibrate:"marc-training-vibrate",
+  alert:"marc-training-alert"
+};
 const REM_ID_BASE=730000;
 const DAY_KEYS=["sun","mon","tue","wed","thu","fri","sat"];
 const CAP_WEEKDAY=[1,2,3,4,5,6,7];
@@ -7448,6 +7453,7 @@ function reminderState(){
   const n=state.notifications;
   if(typeof n.trainingEnabled!=="boolean")n.trainingEnabled=false;
   if(!n.trainingTime)n.trainingTime="17:30";
+  if(!["silent","vibrate","alert"].includes(n.trainingStyle))n.trainingStyle="silent";
   if(!Array.isArray(n.scheduledIds))n.scheduledIds=[];
   return n;
 }
@@ -7477,19 +7483,18 @@ function dayCompleted(dateKey){
   if(state.days?.[dateKey]?.workout)return true;
   return (state.workouts?.completedExercises||[]).some(x=>String(x.dayKey||"")===dateKey);
 }
-async function ensureReminderChannel(){
+async function ensureReminderChannel(style="silent"){
   const p=localPlugin();if(!p?.createChannel)return false;
+  const defs={
+    silent:{id:REM_CHANNELS.silent,name:"Training reminders · Silent",description:"Silent M/ARC training-day reminders.",importance:2,vibration:false,lights:false},
+    vibrate:{id:REM_CHANNELS.vibrate,name:"Training reminders · Vibrate",description:"M/ARC training-day reminders with vibration.",importance:3,vibration:true,lights:false},
+    alert:{id:REM_CHANNELS.alert,name:"Training reminders · Alert",description:"More noticeable M/ARC training-day reminders.",importance:4,vibration:true,lights:false}
+  };
   try{
-    await p.createChannel({
-      id:REM_CHANNEL,
-      name:"Training reminders",
-      description:"Quiet reminders on scheduled training days.",
-      importance:2,
-      vibration:false,
-      lights:false
-    });
-    return true;
-  }catch(e){console.warn("Reminder channel unavailable",e);return false}
+    /* Channels are intentionally permanent: Android users retain final control in system settings. */
+    for(const def of Object.values(defs))await p.createChannel(def);
+    return defs[style]||defs.silent;
+  }catch(e){console.warn("Reminder channel unavailable",e);return defs[style]||defs.silent}
 }
 async function notificationPermission(request=false){
   const p=localPlugin();if(!p)return "unavailable";
@@ -7530,7 +7535,7 @@ async function syncTrainingReminders({requestPermission=false}={}){
     renderReminderSettings();
     return {ok:false,status:perm};
   }
-  await ensureReminderChannel();
+  const selectedChannel=await ensureReminderChannel(n.trainingStyle||"silent");
 
   const assignments=trainingAssignments();
   const [hh,mm]=String(n.trainingTime||"17:30").split(":").map(Number);
@@ -7550,7 +7555,7 @@ async function syncTrainingReminders({requestPermission=false}={}){
       id,
       title:"M/ARC · Training day",
       body:`${slotName(ass.slot)} is ready when you are.`,
-      channelId:REM_CHANNEL,
+      channelId:selectedChannel?.id||REM_CHANNELS.silent,
       autoCancel:true,
       ongoing:false,
       schedule:{at:d,allowWhileIdle:false},
@@ -7561,7 +7566,7 @@ async function syncTrainingReminders({requestPermission=false}={}){
   try{
     if(notifications.length)await p.schedule({notifications});
     n.scheduledIds=notifications.map(x=>x.id);
-    n.lastStatus=notifications.length?`${notifications.length} quiet reminders scheduled`:"No upcoming training days";
+    n.lastStatus=notifications.length?`${notifications.length} reminders scheduled`:"No upcoming training days";
     n.lastSyncedAt=new Date().toISOString();
     save();
     renderReminderSettings();
@@ -7604,24 +7609,35 @@ function ensureReminderModals(){
 }
 function renderReminderSettings(){
   const body=document.getElementById("dtReminderBody");if(!body)return;
-  const n=reminderState(),native=isNativeApp();
+  const n=reminderState();
   body.innerHTML=`<div class="dt-rem-card">
-    <div class="dt-rem-line"><div><b>Training-day reminder</b><small>One notification on scheduled workout days.</small></div><button id="dtReminderToggle" class="dt-rem-toggle ${n.trainingEnabled?"on":""}" type="button" aria-label="Toggle reminder"><i></i></button></div>
-    <div class="dt-rem-line"><div><b>Preferred time</b><small>Timing is intentionally approximate and non-urgent.</small></div><input id="dtReminderTime" class="dt-rem-time" type="time" value="${n.trainingTime||"17:30"}"></div>
+    <div class="dt-rem-line"><div><b>Training-day reminder</b><small>One reminder on scheduled workout days.</small></div><button id="dtReminderToggle" class="dt-rem-toggle ${n.trainingEnabled?"on":""}" type="button" aria-label="Toggle reminder"><i></i></button></div>
+    <div class="dt-rem-line"><div><b>Preferred time</b><small>Choose when M/ARC should remind you.</small></div><input id="dtReminderTime" class="dt-rem-time" type="time" value="${n.trainingTime||"17:30"}"></div>
+    <div class="dt-rem-style-wrap">
+      <div class="dt-rem-style-head"><b>Notification style</b><small>Android still lets you override this in system settings.</small></div>
+      <div class="dt-rem-style-tabs">
+        ${[["silent","Silent","Tray only"],["vibrate","Vibrate","Short vibration"],["alert","Alert","More noticeable"]].map(([id,label,sub])=>`<button type="button" data-rem-style="${id}" class="${n.trainingStyle===id?"active":""}"><b>${label}</b><small>${sub}</small></button>`).join("")}
+      </div>
+    </div>
     <div class="dt-rem-preview"><b>M/ARC · Training day</b><span>${slotName(trainingAssignments()[0]?.slot||"push")} is ready when you are.</span></div>
-    <div class="dt-rem-status">${native?(n.lastStatus||"Ready to configure"):"APK only · browser preview cannot schedule native reminders"}</div>
+    <div class="dt-rem-status">${n.lastStatus||"Ready"}</div>
   </div>
   <div class="dt-rem-actions"><button class="dt-rem-cancel" type="button">Cancel</button><button class="dt-rem-save" type="button">Save reminder</button></div>`;
   body.querySelector("#dtReminderToggle").onclick=e=>e.currentTarget.classList.toggle("on");
+  body.querySelectorAll("[data-rem-style]").forEach(b=>b.onclick=()=>{
+    body.querySelectorAll("[data-rem-style]").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+  });
   body.querySelector(".dt-rem-cancel").onclick=()=>document.getElementById("dtReminderModal").classList.remove("show");
   body.querySelector(".dt-rem-save").onclick=async()=>{
     const n=reminderState();
     n.trainingEnabled=body.querySelector("#dtReminderToggle").classList.contains("on");
     n.trainingTime=body.querySelector("#dtReminderTime").value||"17:30";
+    n.trainingStyle=body.querySelector("[data-rem-style].active")?.dataset.remStyle||"silent";
     n.promptSeen=true;save();
     const btn=body.querySelector(".dt-rem-save");btn.textContent="Saving…";btn.disabled=true;
     const res=await syncTrainingReminders({requestPermission:n.trainingEnabled});
-    btn.textContent=res.ok?"Saved ✓":"Saved locally";
+    btn.textContent=res.ok?"Saved ✓":"Could not schedule";
     setTimeout(()=>document.getElementById("dtReminderModal")?.classList.remove("show"),550);
   };
 }
@@ -8022,210 +8038,370 @@ window.DT_MARC_PRODUCTION_V12=DT_V12;
 })();
 </script>
 
-<style id="dt-v13-notification-diagnostics-css">
-.dt-n13-card{
-  margin-top:11px;padding:12px;border:1px solid #1b3744;border-radius:15px;background:#081a23
-}
-.dt-n13-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
-.dt-n13-head b{color:#dfeaed;font:850 11px system-ui}
-.dt-n13-refresh{border:0;background:transparent;color:#6fb7e7;font:800 8px system-ui;padding:4px}
-.dt-n13-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
-.dt-n13-stat{padding:9px 8px;border:1px solid #193541;border-radius:12px;background:#091820;min-width:0}
-.dt-n13-stat small{display:block;color:#6d8591;font:750 7px system-ui;text-transform:uppercase;letter-spacing:.05em}
-.dt-n13-stat strong{display:block;color:#dce8ec;font:850 10px system-ui;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dt-n13-stat strong.ok{color:#62dda1}
-.dt-n13-stat strong.warn{color:#e1a46f}
-.dt-n13-stat strong.bad{color:#e57878}
-.dt-n13-next{
-  margin-top:8px;padding:8px 9px;border-left:2px solid #335f50;background:#091820;border-radius:0 10px 10px 0;
-  color:#8096a1;font:650 8px/1.4 system-ui
-}
-.dt-n13-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:9px}
-.dt-n13-actions button{padding:10px 8px;border-radius:11px;font:850 8px system-ui}
-.dt-n13-request{border:1px solid #294653;background:#0b1b25;color:#b9cbd2}
-.dt-n13-test{border:1px solid #2d7256;background:#123629;color:#70dfa8}
-.dt-n13-test:disabled,.dt-n13-request:disabled{opacity:.5}
-.dt-n13-result{
-  min-height:16px;margin-top:8px;color:#708794;font:600 8px/1.4 system-ui
-}
-.dt-n13-result.good{color:#63dca2}.dt-n13-result.bad{color:#df8179}
 
-@media(max-width:390px){
-  .dt-n13-grid{grid-template-columns:1fr 1fr}
-  .dt-n13-stat:last-child{grid-column:1/-1}
-}
+
+
+
+<style id="dt-v14-export-final-css">
+/* Final notification UI */
+.dt-rem-style-wrap{margin-top:12px;padding-top:12px;border-top:1px solid #142e3a}
+.dt-rem-style-head b{display:block;color:#dfe9ed;font:800 11px system-ui}
+.dt-rem-style-head small{display:block;color:#6d8592;font:550 8px/1.4 system-ui;margin-top:3px}
+.dt-rem-style-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:9px}
+.dt-rem-style-tabs button{border:1px solid #1c3946;background:#091a23;border-radius:12px;padding:9px 5px;color:#8498a3}
+.dt-rem-style-tabs button b{display:block;font:800 9px system-ui;color:#aebdc4}
+.dt-rem-style-tabs button small{display:block;font:550 7px system-ui;margin-top:3px}
+.dt-rem-style-tabs button.active{border-color:#317658;background:#113529}
+.dt-rem-style-tabs button.active b{color:#66dfa5}
+
+/* Export Progress */
+#dtExportModal{position:fixed;inset:0;z-index:10450;display:none;align-items:flex-end;justify-content:center;background:rgba(1,7,12,.8);backdrop-filter:blur(9px)}
+#dtExportModal.show{display:flex}
+.dt-ex-sheet{width:min(650px,100%);max-height:94vh;overflow:auto;background:#071720;border:1px solid #214154;border-radius:27px 27px 0 0;padding:20px 17px calc(23px + env(safe-area-inset-bottom))}
+.dt-ex-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.dt-ex-kicker{color:#61dda2;font:800 9px system-ui;letter-spacing:.11em;text-transform:uppercase}
+.dt-ex-title{color:#f0f6f8;font:850 23px/1.12 system-ui;margin:5px 0}
+.dt-ex-copy{color:#78909d;font:550 9px/1.5 system-ui}
+.dt-ex-close{width:38px;height:38px;border:1px solid #294553;border-radius:13px;background:#0b1b25;color:#eef6fa;font-size:21px}
+.dt-ex-section{margin-top:13px;padding:13px;border:1px solid #1c3745;border-radius:16px;background:#091a24}
+.dt-ex-label{color:#dfe9ed;font:800 10px system-ui}
+.dt-ex-label small{display:block;color:#6d8592;font:550 8px/1.4 system-ui;margin-top:3px}
+.dt-ex-presets{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:9px}
+.dt-ex-presets button{padding:8px 4px;border:1px solid #1b3947;border-radius:10px;background:#081820;color:#7d929d;font:800 8px system-ui}
+.dt-ex-presets button.active{border-color:#307456;background:#113428;color:#67dea5}
+.dt-ex-dates{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.dt-ex-date label{display:block;color:#687f8b;font:700 7px system-ui;text-transform:uppercase;margin:0 0 4px 2px}
+.dt-ex-date input{width:100%;box-sizing:border-box;border:1px solid #25414e;border-radius:11px;background:#081821;color:#e7eff2;padding:10px;font:750 9px system-ui}
+.dt-ex-formats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}
+.dt-ex-format{padding:12px;border:1px solid #1b3947;border-radius:13px;background:#081820;color:#8195a0;text-align:left}
+.dt-ex-format b{display:block;color:#cbd8dd;font:850 10px system-ui}
+.dt-ex-format small{display:block;font:550 8px/1.4 system-ui;margin-top:4px}
+.dt-ex-format.active{border-color:#337c5d;background:#113529}
+.dt-ex-format.active b{color:#6be0a8}
+.dt-ex-sample{margin-top:10px;padding:8px 10px;border-left:2px solid #3e6f5e;background:#081820;border-radius:0 10px 10px 0;color:#6f8793;font:600 8px/1.4 system-ui}
+.dt-ex-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+.dt-ex-summary div{padding:8px;border:1px solid #173440;border-radius:10px;background:#081820}
+.dt-ex-summary small{display:block;color:#6c8390;font:700 7px system-ui;text-transform:uppercase}
+.dt-ex-summary b{display:block;color:#dfe9ed;font:850 12px system-ui;margin-top:3px}
+.dt-ex-actions{display:grid;grid-template-columns:1fr 1.3fr;gap:8px;margin-top:14px}
+.dt-ex-actions button{padding:12px;border-radius:13px;font:850 10px system-ui}
+.dt-ex-cancel{border:1px solid #29414f;background:#0b1a24;color:#a8bbc3}
+.dt-ex-generate{border:1px solid #2f785a;background:#12382a;color:#72e0ab}
+.dt-ex-generate:disabled{opacity:.55}
+.dt-ex-result{min-height:18px;margin-top:9px;color:#728a96;font:650 8px/1.45 system-ui}
+.dt-ex-result.good{color:#66dda5}.dt-ex-result.bad{color:#df837a}
 </style>
 
-<script id="dt-v13-notification-diagnostics-js">
+<script id="dt-v14-export-final-js">
 (()=>{
 "use strict";
-const DT_V13="13.0-native-notification-repair";
-const TEST_CHANNEL="marc-notification-test";
-const TEST_ID=739913;
+const DT_V14="14.0-export-progress-final-notifications";
+const EX_SAMPLE_PREFIX="export-sample|";
 
-function n13Plugin(){
+/* Native proxy helpers */
+function exPlugin(name){
   try{
-    const cap=window.Capacitor;
-    if(!cap)return null;
+    const cap=window.Capacitor;if(!cap)return null;
     if(!cap.Plugins)cap.Plugins={};
-    if(!cap.Plugins.LocalNotifications && typeof cap.registerPlugin==="function"){
-      cap.Plugins.LocalNotifications=cap.registerPlugin("LocalNotifications");
-    }
-    return cap.Plugins.LocalNotifications||null;
+    if(!cap.Plugins[name]&&typeof cap.registerPlugin==="function")cap.Plugins[name]=cap.registerPlugin(name);
+    return cap.Plugins[name]||null;
   }catch(_){return null}
 }
-function n13Native(){
-  try{return !!window.Capacitor?.isNativePlatform?.()}catch(_){return false}
-}
-async function n13Status(){
-  const p=n13Plugin();
-  const out={native:n13Native(),connected:!!p,permission:"unavailable",enabled:false,pending:0,next:null,error:null};
-  if(!p)return out;
-  try{
-    const perm=await p.checkPermissions();
-    out.permission=perm?.display||"unknown";
-  }catch(e){out.error="Permission check failed"}
-  try{
-    if(typeof p.areEnabled==="function"){
-      const en=await p.areEnabled();out.enabled=!!en?.value;
-    }
-  }catch(_){}
-  try{
-    const pending=await p.getPending();
-    const arr=pending?.notifications||[];
-    out.pending=arr.filter(x=>x?.extra?.type==="training-day").length;
-    const dated=arr.filter(x=>x?.extra?.type==="training-day"&&x.schedule?.at)
-      .map(x=>({x,t:new Date(x.schedule.at).getTime()})).filter(o=>Number.isFinite(o.t)).sort((a,b)=>a.t-b.t);
-    if(dated[0])out.next=dated[0].x.schedule.at;
-  }catch(e){
-    if(!out.error)out.error="Pending check failed";
+function exIsNative(){try{return !!window.Capacitor?.isNativePlatform?.()}catch(_){return false}}
+
+/* ---------- Sample data, explicitly for this export-testing build ---------- */
+function exDate(d){return d.toISOString().slice(0,10)}
+function exSeedSampleData(){
+  if(!state.workouts)state.workouts={sessions:[],drafts:{}};
+  if(state.workouts.exportSampleVersion==="3m-v1")return;
+  if((state.workouts.completedExercises||[]).some(x=>String(x.id||"").startsWith(EX_SAMPLE_PREFIX))){
+    state.workouts.exportSampleVersion="3m-v1";save();return;
   }
-  return out;
-}
-function n13ValClass(v){
-  if(v==="Connected"||v==="Allowed"||v==="On")return "ok";
-  if(v==="Blocked"||v==="Not connected")return "bad";
-  return "warn";
-}
-function n13NextText(v){
-  if(!v)return "No training reminder is currently pending.";
-  try{return "Next scheduled training reminder: "+new Date(v).toLocaleString([],{
-    weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"
-  })}catch(_){return "A training reminder is pending."}
-}
-async function n13Render(){
-  const host=document.getElementById("dtNotificationDiagnostics");if(!host)return;
-  const st=await n13Status();
-  const connection=st.connected?"Connected":"Not connected";
-  const permission=st.permission==="granted"?"Allowed":st.permission==="denied"?"Blocked":st.permission;
-  const enabled=st.enabled?"On":"Off";
-  host.innerHTML=`
-    <div class="dt-n13-head"><b>Notification check</b><button type="button" class="dt-n13-refresh">Refresh</button></div>
-    <div class="dt-n13-grid">
-      <div class="dt-n13-stat"><small>Native plugin</small><strong class="${n13ValClass(connection)}">${connection}</strong></div>
-      <div class="dt-n13-stat"><small>Permission</small><strong class="${n13ValClass(permission)}">${permission}</strong></div>
-      <div class="dt-n13-stat"><small>Pending</small><strong>${st.pending} reminder${st.pending===1?"":"s"}</strong></div>
-    </div>
-    <div class="dt-n13-next">${st.connected?n13NextText(st.next):"The Android Local Notifications bridge is unavailable in this build."}</div>
-    <div class="dt-n13-actions">
-      <button type="button" class="dt-n13-request" ${!st.connected?"disabled":""}>Request permission</button>
-      <button type="button" class="dt-n13-test" ${!st.connected?"disabled":""}>Send test notification</button>
-    </div>
-    <div class="dt-n13-result ${st.error?"bad":""}">${st.error||""}</div>`;
-  host.querySelector(".dt-n13-refresh").onclick=n13Render;
-  const req=host.querySelector(".dt-n13-request");
-  const test=host.querySelector(".dt-n13-test");
-  if(req)req.onclick=async()=>{
-    const result=host.querySelector(".dt-n13-result");req.disabled=true;result.textContent="Requesting Android notification permission…";
-    try{
-      const p=n13Plugin(),r=await p.requestPermissions();
-      result.className="dt-n13-result "+(r?.display==="granted"?"good":"bad");
-      result.textContent=r?.display==="granted"?"Notifications allowed.":"Permission was not granted.";
-      await n13Render();
-    }catch(e){
-      result.className="dt-n13-result bad";result.textContent="Permission request failed: "+(e?.message||e);
-    }finally{req.disabled=false}
+
+  const source={
+    push:(effectiveExercises("push")||[]).slice(0,6),
+    pull:(effectiveExercises("pull")||[]).slice(0,6),
+    legs:(effectiveExercises("legs")||[]).slice(0,5)
   };
-  if(test)test.onclick=n13SendTest;
-}
-async function n13SendTest(){
-  const host=document.getElementById("dtNotificationDiagnostics");
-  const result=host?.querySelector(".dt-n13-result");
-  const btn=host?.querySelector(".dt-n13-test");
-  if(btn)btn.disabled=true;
-  if(result){result.className="dt-n13-result";result.textContent="Checking permission…"}
-  try{
-    const p=n13Plugin();
-    if(!p)throw new Error("Native Local Notifications plugin is not connected.");
-    let perm=await p.checkPermissions();
-    if(perm?.display!=="granted")perm=await p.requestPermissions();
-    if(perm?.display!=="granted")throw new Error("Android notification permission was not granted.");
-
-    try{
-      await p.createChannel({
-        id:TEST_CHANNEL,
-        name:"M/ARC notification test",
-        description:"Temporary channel used only to verify M/ARC notifications.",
-        importance:4,
-        vibration:false,
-        lights:false
+  const start=new Date();start.setHours(12,0,0,0);start.setDate(start.getDate()-88);
+  const records=[];
+  let seq=0;
+  for(let week=0;week<13;week++){
+    [["push",1],["pull",3],["legs",5]].forEach(([day,offset],di)=>{
+      const date=new Date(start);date.setDate(start.getDate()+week*7+offset);
+      if(date>new Date())return;
+      (source[day]||[]).forEach((e,ei)=>{
+        const baseLoad=Math.max(5,[35,25,40,20,10,12.5][ei%6]||10);
+        const gain=1+(week*0.018)+(ei%2)*0.004;
+        const kg=Math.round((baseLoad*gain)*2)/2;
+        const reps=8+((week+ei)%4);
+        const sets=ei<3?3:2;
+        records.push({
+          id:`${EX_SAMPLE_PREFIX}${exDate(date)}|${day}|${ei}|${seq++}`,
+          day,dayKey:exDate(date),exerciseKey:typeof exerciseKey==="function"?exerciseKey(e):`${day}|${ei}`,
+          name:e?.[0]||`Exercise ${ei+1}`,type:e?.[1]||"",muscle:e?.[2]||"",
+          exportSample:true,
+          sets:Array.from({length:sets},(_,si)=>({
+            kg:String(Math.max(1,kg-(si===sets-1&&week%4===0?2.5:0))),
+            reps:String(Math.max(6,reps-(si===sets-1?1:0))),
+            effort:week<3?"easy":week%5===0?"max":"ideal"
+          })),
+          finalizedAt:exDate(date)+"T18:00:00"
+        });
       });
-    }catch(e){console.warn("Test channel create warning",e)}
-
-    /* No schedule field = deliver immediately. This avoids testing with an inexact alarm. */
-    await p.schedule({notifications:[{
-      id:TEST_ID,
-      title:"M/ARC · Notifications working",
-      body:"Your training reminders are connected.",
-      channelId:TEST_CHANNEL,
-      autoCancel:true,
-      ongoing:false,
-      foreground:true,
-      extra:{type:"notification-test"}
-    }]});
-
-    if(result){
-      result.className="dt-n13-result good";
-      result.textContent="Test sent. Check your notification panel now.";
-    }
-    setTimeout(n13Render,500);
-  }catch(e){
-    if(result){
-      result.className="dt-n13-result bad";
-      result.textContent="Test failed: "+(e?.message||e);
-    }
-  }finally{if(btn)btn.disabled=false}
-}
-function n13Inject(){
-  const body=document.getElementById("dtReminderBody");
-  if(!body||document.getElementById("dtNotificationDiagnostics"))return;
-  const host=document.createElement("div");host.id="dtNotificationDiagnostics";host.className="dt-n13-card";
-  const actions=body.querySelector(".dt-rem-actions");
-  if(actions)actions.insertAdjacentElement("beforebegin",host);else body.appendChild(host);
-  n13Render();
-}
-
-/* Reminder settings are rebuilt by the V11 renderer, so re-inject after each open/render. */
-const obs=new MutationObserver(()=>{
-  if(document.getElementById("dtReminderModal")?.classList.contains("show")){
-    setTimeout(n13Inject,30);
+    });
   }
-});
-obs.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:["class"]});
+  state.workouts.completedExercises=(state.workouts.completedExercises||[]).concat(records);
+  state.workouts.exportSampleVersion="3m-v1";
+  state.workouts.exportSampleAddedAt=new Date().toISOString();
+  save();
+}
+function exRemoveSampleData(){
+  if(!state.workouts)return;
+  state.workouts.completedExercises=(state.workouts.completedExercises||[]).filter(x=>!String(x.id||"").startsWith(EX_SAMPLE_PREFIX));
+  state.workouts.sessions=(state.workouts.sessions||[]).filter(x=>!x.exportSample);
+  state.workouts.exportSampleVersion=null;state.workouts.exportSampleAddedAt=null;save();
+}
+function exRecords(start,end){
+  const a=String(start),b=String(end);
+  return (state.workouts?.completedExercises||[]).filter(x=>{
+    const d=String(x.dayKey||x.finalizedAt||"").slice(0,10);return d>=a&&d<=b;
+  });
+}
+function exRoleMeta(name,muscle){
+  try{
+    if(typeof dtInferMeta==="function")return dtInferMeta(name,muscle);
+  }catch(_){}
+  const raw=String(muscle||"").trim()||"Other";
+  return {primaryMuscles:[raw.toLowerCase().replace(/\s+/g,"_")],secondaryMuscles:[],stabilizerMuscles:[]};
+}
+function exMuscleLabel(k){
+  try{if(typeof dtSummaryLabel==="function")return dtSummaryLabel(k)}catch(_){}
+  return String(k||"Other").replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
+}
+function exAnalyze(records){
+  const sessions=new Set(),sets=[],byExercise=new Map(),muscles=new Map(),prs=[];
+  records.forEach(r=>{
+    sessions.add(`${r.dayKey}|${r.day}`);
+    const meta=exRoleMeta(r.name,r.muscle);
+    (r.sets||[]).forEach((s,si)=>{
+      const kg=+s.kg||0,reps=+s.reps||0;if(!kg&&!reps)return;
+      const volume=kg*reps;
+      sets.push({date:r.dayKey,day:r.day,exercise:r.name,type:r.type||"",muscle:r.muscle||"",set:si+1,kg,reps,effort:s.effort||"",volume});
+      const ek=r.exerciseKey||r.name,ex=byExercise.get(ek)||{key:ek,name:r.name,muscle:r.muscle||"",dates:new Set(),sets:[],first:null,last:null};
+      ex.dates.add(r.dayKey);ex.sets.push({date:r.dayKey,kg,reps,volume,effort:s.effort||""});byExercise.set(ek,ex);
+      const factor=s.effort==="easy"?.9:s.effort==="max"?1.1:1;
+      [["primaryMuscles",1],["secondaryMuscles",.55],["stabilizerMuscles",.25]].forEach(([role,w])=>{
+        const arr=[...new Set(meta[role]||[])];if(!arr.length)return;
+        arr.forEach(k=>muscles.set(k,(muscles.get(k)||0)+(w*factor/arr.length)));
+      });
+    });
+  });
+  const exercises=[...byExercise.values()].map(ex=>{
+    const sorted=ex.sets.slice().sort((a,b)=>a.date.localeCompare(b.date));
+    const dates=[...ex.dates].sort();
+    const firstDate=dates[0],lastDate=dates.at(-1);
+    const first=sorted.filter(s=>s.date===firstDate),last=sorted.filter(s=>s.date===lastDate);
+    const avg=(a,f)=>a.length?a.reduce((n,x)=>n+x[f],0)/a.length:0;
+    const firstLoad=avg(first,"kg"),lastLoad=avg(last,"kg");
+    const firstReps=avg(first,"reps"),lastReps=avg(last,"reps");
+    const top=Math.max(...sorted.map(s=>s.kg),0),best=sorted.reduce((a,b)=>(b.kg*b.reps)>(a.kg*a.reps)?b:a,sorted[0]||{kg:0,reps:0});
+    return {name:ex.name,muscle:ex.muscle,sessions:dates.length,topLoad:top,bestSet:`${best.kg} × ${best.reps}`,
+      firstLoad,lastLoad,loadChange:firstLoad?((lastLoad-firstLoad)/firstLoad*100):0,
+      firstReps,lastReps,repsChange:firstReps?((lastReps-firstReps)/firstReps*100):0,
+      totalVolume:sorted.reduce((n,x)=>n+x.volume,0)};
+  }).sort((a,b)=>b.loadChange-a.loadChange);
+  const muscleTotal=[...muscles.values()].reduce((a,b)=>a+b,0)||1;
+  const muscleRows=[...muscles.entries()].map(([key,score])=>({key,label:exMuscleLabel(key),score,share:score/muscleTotal*100})).sort((a,b)=>b.score-a.score);
+  return {workouts:sessions.size,sets:sets.length,volume:sets.reduce((n,x)=>n+x.volume,0),setsRows:sets,exercises,muscles:muscleRows};
+}
 
-document.addEventListener("click",ev=>{
-  if(ev.target.closest?.("#dtReminderSettingsBtn,[data-more='reminders']")){
-    setTimeout(n13Inject,100);
+/* ---------- XLSX ---------- */
+function exSheetFromRows(rows,headers){
+  const data=[headers,...rows.map(r=>headers.map(h=>r[h]??""))];
+  return XLSX.utils.aoa_to_sheet(data);
+}
+function exWorkbook(analysis,start,end){
+  if(!window.XLSX)throw new Error("Excel engine is not available in this build.");
+  const wb=XLSX.utils.book_new();
+  const summary=[
+    ["M/ARC Training Export"],["Period",`${start} to ${end}`],["Workouts",analysis.workouts],["Working Sets",analysis.sets],
+    ["Volume Load (kg)",Math.round(analysis.volume)],[],["Note","Training-performance data from logged workouts. Muscle scores reflect logged training emphasis, not measured muscle size."]
+  ];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(summary),"Summary");
+  const setHeaders=["date","day","exercise","type","muscle","set","kg","reps","effort","volume"];
+  XLSX.utils.book_append_sheet(wb,exSheetFromRows(analysis.setsRows,setHeaders),"Sets");
+  const exRows=analysis.exercises.map(x=>({
+    Exercise:x.name,Muscle:x.muscle,Sessions:x.sessions,"Top Load kg":x.topLoad,"Best Set":x.bestSet,
+    "First Avg Load":+x.firstLoad.toFixed(1),"Latest Avg Load":+x.lastLoad.toFixed(1),"Load Change %":+x.loadChange.toFixed(1),
+    "First Avg Reps":+x.firstReps.toFixed(1),"Latest Avg Reps":+x.lastReps.toFixed(1),"Reps Change %":+x.repsChange.toFixed(1),
+    "Total Volume":Math.round(x.totalVolume)
+  }));
+  const exHeaders=exRows.length?Object.keys(exRows[0]):["Exercise"];
+  XLSX.utils.book_append_sheet(wb,exSheetFromRows(exRows,exHeaders),"Exercise Progress");
+  const mRows=analysis.muscles.map(x=>({Muscle:x.label,"Training Share %":+x.share.toFixed(1),"Emphasis Score":+x.score.toFixed(2)}));
+  const mh=mRows.length?Object.keys(mRows[0]):["Muscle"];
+  XLSX.utils.book_append_sheet(wb,exSheetFromRows(mRows,mh),"Muscle Trends");
+  return wb;
+}
+
+/* ---------- Visual PNG report ---------- */
+function exRoundRect(ctx,x,y,w,h,r,fill,stroke){
+  ctx.beginPath();ctx.roundRect(x,y,w,h,r);if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.stroke()}
+}
+function exText(ctx,t,x,y,size,color="#eaf2f4",weight=700,align="left"){
+  ctx.font=`${weight} ${size}px system-ui,Arial`;ctx.fillStyle=color;ctx.textAlign=align;ctx.fillText(t,x,y);
+}
+function exVisualCanvas(a,start,end){
+  const c=document.createElement("canvas");c.width=1080;c.height=1450;const ctx=c.getContext("2d");
+  ctx.fillStyle="#06131b";ctx.fillRect(0,0,c.width,c.height);
+  const grad=ctx.createLinearGradient(0,0,1080,0);grad.addColorStop(0,"#52dfa0");grad.addColorStop(1,"#5ca9ff");
+  ctx.fillStyle=grad;ctx.fillRect(48,50,7,74);
+  exText(ctx,"M/ARC",80,92,44,"#f3f7f8",850);exText(ctx,"TRAINING PROGRESS",82,126,18,"#6f8793",750);
+  exText(ctx,`${start}  →  ${end}`,1030,92,18,"#8ba0aa",700,"right");
+  exText(ctx,"Performance from your logged workouts",80,166,17,"#718994",550);
+
+  const cards=[["WORKOUTS",a.workouts],["WORKING SETS",a.sets],["VOLUME LOAD",Math.round(a.volume).toLocaleString()+" kg"]];
+  cards.forEach((d,i)=>{const x=55+i*330;exRoundRect(ctx,x,205,305,105,18,"#091b24","#193844");exText(ctx,d[0],x+20,238,13,"#6f8793",750);exText(ctx,String(d[1]),x+20,283,30,"#eef5f7",850)});
+
+  exText(ctx,"TOP EXERCISE PROGRESS",55,368,18,"#91a5af",800);
+  const top=a.exercises.filter(x=>x.sessions>=2).slice(0,5);
+  top.forEach((x,i)=>{
+    const y=408+i*69;exText(ctx,x.name,55,y+20,16,"#e4ecef",750);
+    exText(ctx,`${x.firstLoad.toFixed(1)} → ${x.lastLoad.toFixed(1)} kg`,445,y+20,14,"#78dfa8",750,"right");
+    exRoundRect(ctx,475,y+6,475,18,9,"#112934");
+    const pct=Math.max(0,Math.min(100,50+x.loadChange*2.2));exRoundRect(ctx,475,y+6,475*pct/100,18,9,"#55dda0");
+    exText(ctx,`${x.loadChange>=0?"+":""}${x.loadChange.toFixed(1)}% load`,1018,y+20,13,x.loadChange>=0?"#62dda3":"#dd9a72",750,"right");
+    exText(ctx,`Reps ${x.firstReps.toFixed(1)} → ${x.lastReps.toFixed(1)}`,55,y+43,11,"#667f8c",650);
+  });
+
+  exText(ctx,"MUSCLE TRAINING EMPHASIS",55,790,18,"#91a5af",800);
+  const ms=a.muscles.slice(0,8);
+  ms.forEach((m,i)=>{
+    const col=i<4?0:1,row=i%4,x=55+col*510,y=830+row*58;
+    exText(ctx,m.label,x,y+16,14,"#dce8ec",730);
+    exRoundRect(ctx,x+145,y+3,290,16,8,"#112934");
+    exRoundRect(ctx,x+145,y+3,290*Math.min(1,m.share/35),16,8,i<3?"#55dda0":"#4ca6ed");
+    exText(ctx,`${m.share.toFixed(0)}%`,x+485,y+16,12,"#8fa2ac",750,"right");
+  });
+
+  exText(ctx,"IMPROVEMENT MAP",55,1090,18,"#91a5af",800);
+  const body=(cx,cy,flip=false)=>{
+    ctx.save();ctx.translate(cx,cy);
+    const base="#22333d",edge="#314955";ctx.fillStyle=base;ctx.strokeStyle=edge;ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(0,-105,25,0,Math.PI*2);ctx.fill();ctx.stroke();
+    exRoundRect(ctx,-35,-75,70,115,22,base,edge);
+    exRoundRect(ctx,-60,-65,22,110,10,base,edge);exRoundRect(ctx,38,-65,22,110,10,base,edge);
+    exRoundRect(ctx,-32,38,27,120,12,base,edge);exRoundRect(ctx,5,38,27,120,12,base,edge);
+    // report emphasis glow bands based on top muscles: torso/arms/legs approximation
+    const labels=ms.slice(0,5).map(x=>x.label.toLowerCase()).join(" ");
+    ctx.globalAlpha=.85;
+    if(/chest|lat|back|trap|shoulder/.test(labels)){ctx.fillStyle="#55dda0";ctx.fillRect(-29,-60,58,47)}
+    if(/bicep|tricep|delt|arm/.test(labels)){ctx.fillStyle="#55aaff";ctx.fillRect(-57,-57,16,65);ctx.fillRect(41,-57,16,65)}
+    if(/quad|hamstring|glute|calf/.test(labels)){ctx.fillStyle="#a45cf2";ctx.fillRect(-29,50,22,78);ctx.fillRect(7,50,22,78)}
+    ctx.restore();
+  };
+  body(335,1255);body(745,1255,true);
+  exText(ctx,"FRONT",335,1410,11,"#6f8793",750,"center");exText(ctx,"BACK",745,1410,11,"#6f8793",750,"center");
+  exText(ctx,"Training performance reflects load, reps, sets and logged exercise emphasis — not measured muscle growth.",540,1433,11,"#5f7784",550,"center");
+  return c;
+}
+function exBase64FromArray(u8){
+  let s="",chunk=0x8000;for(let i=0;i<u8.length;i+=chunk)s+=String.fromCharCode(...u8.subarray(i,Math.min(i+chunk,u8.length)));
+  return btoa(s);
+}
+async function exShareBytes(base64,name,mime){
+  const fs=exPlugin("Filesystem"),share=exPlugin("Share");
+  if(exIsNative()&&fs&&share){
+    const written=await fs.writeFile({path:name,data:base64,directory:"CACHE",recursive:true});
+    const uri=written.uri||(await fs.getUri({path:name,directory:"CACHE"})).uri;
+    await share.share({title:"M/ARC Training Export",text:"M/ARC workout progress export",files:[uri],dialogTitle:"Save or share export"});
+    return "Share sheet opened.";
   }
-},true);
+  const raw=atob(base64),u8=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)u8[i]=raw.charCodeAt(i);
+  const blob=new Blob([u8],{type:mime}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1200);
+  return "Download started.";
+}
+async function exGenerate(format,start,end){
+  const rec=exRecords(start,end),analysis=exAnalyze(rec);
+  if(!rec.length)throw new Error("No workout records found in this date range.");
+  const safe=`${start}_to_${end}`;
+  if(format==="xlsx"){
+    const wb=exWorkbook(analysis,start,end);
+    const b64=XLSX.write(wb,{bookType:"xlsx",type:"base64",compression:true});
+    return exShareBytes(b64,`MARC_Training_${safe}.xlsx`,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  }
+  const canvas=exVisualCanvas(analysis,start,end);
+  const data=canvas.toDataURL("image/png",1).split(",")[1];
+  return exShareBytes(data,`MARC_Visual_Progress_${safe}.png`,"image/png");
+}
 
-setTimeout(()=>{
-  if(document.getElementById("dtReminderModal")?.classList.contains("show"))n13Inject();
-},900);
+/* ---------- UI ---------- */
+function exDefaultRange(days=90){
+  const e=new Date(),s=new Date();s.setDate(e.getDate()-days);
+  return {start:exDate(s),end:exDate(e)}
+}
+function exEnsureModal(){
+  if(document.getElementById("dtExportModal"))return;
+  const m=document.createElement("div");m.id="dtExportModal";
+  m.innerHTML=`<section class="dt-ex-sheet"><div class="dt-ex-head"><div><div class="dt-ex-kicker">Export progress</div><div class="dt-ex-title">Your training, outside M/ARC</div><div class="dt-ex-copy">Choose a period, then export the raw workout data to Excel or generate a shareable visual progress report.</div></div><button class="dt-ex-close" type="button">×</button></div><div id="dtExportBody"></div></section>`;
+  m.onclick=e=>{if(e.target===m)m.classList.remove("show")};m.querySelector(".dt-ex-close").onclick=()=>m.classList.remove("show");document.body.appendChild(m);
+}
+function exRender(){
+  const body=document.getElementById("dtExportBody"),r=exDefaultRange(90);if(!body)return;
+  body.innerHTML=`<div class="dt-ex-section"><div class="dt-ex-label">Period<small>Select a quick range or choose exact start and end dates.</small></div>
+    <div class="dt-ex-presets">${[[30,"30D"],[90,"3M"],[180,"6M"],[365,"1Y"]].map(([d,l])=>`<button type="button" data-ex-days="${d}" class="${d===90?"active":""}">${l}</button>`).join("")}</div>
+    <div class="dt-ex-dates"><div class="dt-ex-date"><label>Start</label><input id="dtExportStart" type="date" value="${r.start}"></div><div class="dt-ex-date"><label>End</label><input id="dtExportEnd" type="date" value="${r.end}"></div></div>
+  </div>
+  <div class="dt-ex-section"><div class="dt-ex-label">Export format<small>Excel keeps the detailed data. Visual Report summarizes progress as a shareable image.</small></div>
+    <div class="dt-ex-formats"><button class="dt-ex-format active" data-ex-format="visual"><b>Visual Report</b><small>PNG · trends, muscle emphasis and improvement map</small></button><button class="dt-ex-format" data-ex-format="xlsx"><b>Excel</b><small>XLSX · summary, sets, exercise progress and muscle trends</small></button></div>
+    <div class="dt-ex-sample">This testing build includes about 3 months of sample workout history so you can evaluate both export types immediately. Sample records are tagged separately from your own logs.</div>
+    <div id="dtExportSummary" class="dt-ex-summary"></div>
+  </div>
+  <div class="dt-ex-actions"><button class="dt-ex-cancel" type="button">Cancel</button><button class="dt-ex-generate" type="button">Generate & share</button></div><div class="dt-ex-result"></div>`;
+  body.querySelectorAll("[data-ex-days]").forEach(b=>b.onclick=()=>{
+    body.querySelectorAll("[data-ex-days]").forEach(x=>x.classList.remove("active"));b.classList.add("active");
+    const rr=exDefaultRange(+b.dataset.exDays);body.querySelector("#dtExportStart").value=rr.start;body.querySelector("#dtExportEnd").value=rr.end;exRefreshSummary();
+  });
+  body.querySelectorAll("[data-ex-format]").forEach(b=>b.onclick=()=>{body.querySelectorAll("[data-ex-format]").forEach(x=>x.classList.remove("active"));b.classList.add("active")});
+  body.querySelectorAll("input[type=date]").forEach(i=>i.onchange=exRefreshSummary);
+  body.querySelector(".dt-ex-cancel").onclick=()=>document.getElementById("dtExportModal").classList.remove("show");
+  body.querySelector(".dt-ex-generate").onclick=async()=>{
+    const btn=body.querySelector(".dt-ex-generate"),res=body.querySelector(".dt-ex-result");
+    const start=body.querySelector("#dtExportStart").value,end=body.querySelector("#dtExportEnd").value,format=body.querySelector("[data-ex-format].active")?.dataset.exFormat||"visual";
+    if(!start||!end||start>end){res.className="dt-ex-result bad";res.textContent="Choose a valid date range.";return}
+    btn.disabled=true;btn.textContent="Generating…";res.className="dt-ex-result";res.textContent=format==="xlsx"?"Building Excel workbook…":"Rendering visual report…";
+    try{const msg=await exGenerate(format,start,end);res.className="dt-ex-result good";res.textContent=msg}
+    catch(e){res.className="dt-ex-result bad";res.textContent=e?.message||String(e)}
+    finally{btn.disabled=false;btn.textContent="Generate & share"}
+  };
+  exRefreshSummary();
+}
+function exRefreshSummary(){
+  const body=document.getElementById("dtExportBody");if(!body)return;
+  const start=body.querySelector("#dtExportStart")?.value,end=body.querySelector("#dtExportEnd")?.value;if(!start||!end)return;
+  const a=exAnalyze(exRecords(start,end)),h=body.querySelector("#dtExportSummary");
+  h.innerHTML=`<div><small>Workouts</small><b>${a.workouts}</b></div><div><small>Sets</small><b>${a.sets}</b></div><div><small>Volume</small><b>${Math.round(a.volume).toLocaleString()}</b></div>`;
+}
+function exOpen(){exEnsureModal();exRender();document.getElementById("dtExportModal").classList.add("show")}
+function exAddEntry(){
+  const grid=document.querySelector("#dtV10MoreModal .dt-more-grid");if(grid&&!grid.querySelector('[data-more="export"]')){
+    const b=document.createElement("button");b.className="dt-more-item";b.dataset.more="export";b.innerHTML="<b>Export progress</b><small>Excel data or a visual training report.</small>";
+    const stats=grid.querySelector('[data-more="stats"]');stats?stats.insertAdjacentElement("afterend",b):grid.prepend(b);
+    b.onclick=()=>{document.getElementById("dtV10MoreModal")?.classList.remove("show");exOpen()};
+  }
+  const history=document.getElementById("history");
+  if(history&&!document.getElementById("dtHistoryExportBtn")){
+    const h=history.querySelector("h1");if(h){const b=document.createElement("button");b.id="dtHistoryExportBtn";b.type="button";b.textContent="Export";b.style.cssText="float:right;margin-top:-39px;border:1px solid #25414e;border-radius:11px;background:#081821;color:#72aee0;padding:7px 11px;font:800 9px system-ui";b.onclick=exOpen;h.insertAdjacentElement("afterend",b)}
+  }
+}
+function exBoot(){exSeedSampleData();exEnsureModal();exAddEntry()}
+document.readyState==="loading"?document.addEventListener("DOMContentLoaded",exBoot):exBoot();
+setTimeout(exAddEntry,900);
 
-window.dtNotificationDiagnostics=n13Status;
-window.dtSendTestNotification=n13SendTest;
-window.DT_NATIVE_NOTIFICATION_REPAIR_VERSION=DT_V13;
+window.dtOpenExportProgress=exOpen;
+window.dtRemoveExportSampleData=exRemoveSampleData;
+window.DT_EXPORT_PROGRESS_VERSION=DT_V14;
 })();
 </script>
 </body>
