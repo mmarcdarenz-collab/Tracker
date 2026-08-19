@@ -30,13 +30,30 @@ jobs:
           echo "Installing M/ARC Capacitor dependencies..."
           node -e "console.log(require('./package.json').dependencies)"
           npm install
-          npm ls @capacitor/local-notifications @capacitor/filesystem @capacitor/share xlsx
+          npm ls @capacitor/local-notifications @capacitor/filesystem @capacitor/share body-muscles
+          node -p "require('./node_modules/xlsx/package.json').version" 
 
       - name: Copy offline Excel engine into web app
         run: |
-          test -f node_modules/xlsx/dist/xlsx.full.min.js
+          echo "Installed SheetJS package:"
+          node -p "require('./node_modules/xlsx/package.json').version"
+          echo "SheetJS dist contents:"
+          ls -lah node_modules/xlsx/dist
+          test -s node_modules/xlsx/dist/xlsx.full.min.js
           cp node_modules/xlsx/dist/xlsx.full.min.js www/xlsx.full.min.js
           test -s www/xlsx.full.min.js
+          echo "Bundled xlsx.full.min.js:"
+          wc -c www/xlsx.full.min.js
+
+      - name: Copy offline SVG muscle engine for export
+        run: |
+          echo "Installed body-muscles package:"
+          node -p "require('./node_modules/body-muscles/package.json').version"
+          test -s node_modules/body-muscles/dist/umd/body-muscles.umd.min.js
+          cp node_modules/body-muscles/dist/umd/body-muscles.umd.min.js www/body-muscles.umd.min.js
+          test -s www/body-muscles.umd.min.js
+          echo "Bundled body-muscles.umd.min.js:"
+          wc -c www/body-muscles.umd.min.js
 
       - name: Verify permanent Local Notifications dependency
         run: |
@@ -147,6 +164,8 @@ jobs:
           grep -q "SharePlugin" android/app/src/main/assets/capacitor.plugins.json
           echo "Checking offline Excel engine copied into Android web assets..."
           test -s android/app/src/main/assets/public/xlsx.full.min.js
+          echo "Checking offline SVG muscle engine copied into Android web assets..."
+          test -s android/app/src/main/assets/public/body-muscles.umd.min.js
           echo "Checking Android 13+ notification permission in merged source manifests..."
           grep -R "android.permission.POST_NOTIFICATIONS" node_modules/@capacitor/local-notifications/android/src/main/AndroidManifest.xml
           echo "Local Notifications native integration verified."
