@@ -195,7 +195,7 @@ nav button.active{color:var(--green);background:#10231a}
 
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center;z-index:100}
 .modal.show{display:flex}
-.sheet{width:min(560px,100%);background:#0d1720;border:1px solid var(--line);border-radius:25px 25px 0 0;padding:21px 18px calc(24px + env(safe-area-inset-bottom))}
+.sheet{width:min(560px,100%);background:#0d1720;border:1px solid var(--line);border-radius:25px 25px 0 0;padding:21px 18px calc(24px + env(safe-area-inset-bottom));max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .sheet h3{margin:0 0 14px}
 .sheet input{width:100%;padding:14px 15px;margin-bottom:10px;border-radius:14px;border:1px solid var(--line);background:#071018;color:white}
 .sheet-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -2826,6 +2826,7 @@ function switchView(viewName){
       renderToday();
       renderHealth();
       renderTodayDashboardExtras();
+      if(typeof window.dtRenderBodyCard==="function")window.dtRenderBodyCard();
     }
 
     target.animate(
@@ -3106,7 +3107,7 @@ function renderWorkout(){
       <button class="exercise-chevron" aria-label="Expand activity">⌄</button>
     </div>
     <div class="exbody">
-      <div class="sethead"><span>SET</span><span>PREVIOUS</span><span>${window.dtWeightUnitLabel?.()||"KG"}</span><span>REPS</span><span>EFFORT</span></div>
+      <div class="sethead"><span>SET</span><span>PREVIOUS</span><span>${window.dtWeightUnitLabel?.()||"KG"}</span><span>${window.dtIsDurationBased?.(e)?"SEC":"REPS"}</span><span>EFFORT</span></div>
       <div class="rows"></div>
       <button class="addset">＋ Add Set</button>
     </div>`;
@@ -3123,11 +3124,12 @@ function renderWorkout(){
     const rows=box.querySelector('.rows');
     d[ei].sets.forEach((x,si)=>{
       const old=prev(ei,si),pln=e[3][si]||[null,''];
+      const smartKg=!old?window.dtSuggestStartWeight?.(e[0])?.kg:null;
       const row=document.createElement('div');row.className='setrow';
       row.innerHTML=`<b style="text-align:center">${si+1}</b>
         <div class="prevval">${old?window.dtFormatLift?.(old.kg,old.reps)||((old.kg||'–')+' × '+(old.reps||'–')):window.dtFormatLift?.(pln[0],pln[1])||((pln[0]??'–')+' × '+(pln[1]||''))}<br><span style="opacity:.5">${old?'previous':'plan'}</span></div>
-        <input class="loginput kg" type="number" step="${window.dtWeightUnit?.()==='lb'?'1':'.5'}" value="${window.dtWeightDisplayValue?.(x.kg)??x.kg}" placeholder="${window.dtWeightDisplayValue?.(old?.kg??pln[0])??old?.kg??pln[0]??window.dtWeightUnitLabel?.()??'KG'}">
-        <input class="loginput reps" type="number" value="${x.reps}" placeholder="${old?.reps??'Reps'}">
+        <input class="loginput kg" type="number" step="${window.dtWeightUnit?.()==='lb'?'1':'.5'}" value="${window.dtWeightDisplayValue?.(x.kg)??x.kg}" placeholder="${window.dtWeightDisplayValue?.(old?.kg??smartKg)??old?.kg??smartKg??window.dtWeightUnitLabel?.()??'KG'}">
+        <input class="loginput reps" type="number" value="${x.reps}" placeholder="${old?.reps??(window.dtIsDurationBased?.(e)?'Sec':'Reps')}">
         <button class="effort ${x.effort}"></button>`;
       row.querySelector('.kg').oninput=z=>{x.kg=window.dtWeightInputToKg?window.dtWeightInputToKg(z.target.value):z.target.value;save();updateFinishWorkoutButton()};
       row.querySelector('.reps').oninput=z=>{x.reps=z.target.value;save();updateFinishWorkoutButton()};
@@ -3785,6 +3787,23 @@ function dtIsAccessory(e){
   const t=((e?.[0]||"")+" "+(e?.[1]||"")+" "+(e?.[2]||"")).toLowerCase();
   return /(curl|fly|raise|extension|pushdown|abs|calf|rear delt|shrug)/.test(t);
 }
+function dtParseTargetUnit(text){
+  const t=String(text||"").toLowerCase();
+  if(/\bsec(s|onds)?\b/.test(t))return "sec";
+  if(/\bmin(s|utes)?\b/.test(t))return "min";
+  return null;
+}
+function dtParseTargetRange(text){
+  const m=String(text||"").match(/(\d+)\s*[-–]\s*(\d+)/);
+  if(!m)return null;
+  return [parseInt(m[1],10),parseInt(m[2],10)];
+}
+const DT_DURATION_EXERCISE_NAMES=new Set(["plank","side plank","farmer's carry","farmers carry","wall sit"]);
+function dtIsDurationBased(e){
+  const sets=e?.[3]||[];
+  for(const s of sets){ if(dtParseTargetUnit(s?.[1]))return true; }
+  return DT_DURATION_EXERCISE_NAMES.has(String(e?.[0]||"").toLowerCase().trim());
+}
 function dtTrainingRange(e){
   const p=trainingPrograms[state.workouts.trainingProgram]||trainingPrograms.lean;
   if(state.workouts.trainingProgram==="strength_muscle" && dtIsAccessory(e))return p.accessoryRange;
@@ -3820,22 +3839,34 @@ function dtNextLoad(e,currentKg){
 }
 function smartRecommendation(e,ei){
   const prev=dtPreviousExercise(e,ei);
-  const sets=(prev?.sets||[]).filter(s=>Number(s.kg)>0&&Number(s.reps)>0);
-  const [low,high]=dtTrainingRange(e);
+  const durationBased=dtIsDurationBased(e);
+  const unit=durationBased?"sec":"reps";
+  const sets=(prev?.sets||[]).filter(s=>Number.isFinite(Number(s.kg))&&Number(s.reps)>0);
+  const ownTargetText=e?.[3]?.[0]?.[1];
+  const ownUnit=dtParseTargetUnit(ownTargetText);
+  const ownRange=dtParseTargetRange(ownTargetText);
+  // The generic program range (e.g. 6-12) is calibrated for rep counts; it's
+  // meaningless applied to seconds, so duration-based exercises use their own
+  // authored range when available, falling back to a generic seconds range
+  // only if no per-exercise target text exists at all.
+  const [low,high]=(durationBased&&ownRange)?ownRange:(durationBased?[20,60]:dtTrainingRange(e));
   if(!sets.length){
     const start=e?.[3]?.[0]?.[0];
-    return {text:start?`${start} kg • ${low}–${high} reps`:`${low}–${high} reps`,reason:"Starting target"};
+    if(ownUnit)return {text:start?`${start} kg • ${ownTargetText}`:`${ownTargetText}`,reason:"Starting target"};
+    return {text:start?`${start} kg • ${low}–${high} ${unit}`:`${low}–${high} ${unit}`,reason:"Starting target"};
   }
   const last=sets[sets.length-1],kg=Number(last.kg),reps=Number(last.reps),effort=last.effort||"";
+  const kgPart=kg>0?`${kg} kg • `:"";
   if(effort==="max"){
-    return {text:`${kg} kg • ${Math.max(low,Math.min(high,reps))} reps`,reason:"Repeat — last set was max effort"};
+    return {text:`${kgPart}${Math.max(low,Math.min(high,reps))} ${unit}`,reason:"Repeat — last set was max effort"};
   }
   if(reps>=high){
-    return {text:`${dtNextLoad(e,kg)} kg • ${low}–${Math.min(high,low+2)} reps`,reason:"Top of range — add weight"};
+    const nextKgPart=kg>0?`${dtNextLoad(e,kg)} kg • `:"";
+    return {text:`${nextKgPart}${low}–${Math.min(high,low+2)} ${unit}`,reason:durationBased?"Top of range — hold longer":"Top of range — add weight"};
   }
   const add=effort==="easy"?2:1;
   const target=Math.min(high,reps+add);
-  return {text:`${kg} kg • ${target}${target<high?"–"+Math.min(high,target+1):""} reps`,reason:effort==="easy"?"3+ reps left — add reps":effort==="ideal"?"Ideal effort — add a rep":"Build reps before weight"};
+  return {text:`${kgPart}${target}${target<high?"–"+Math.min(high,target+1):""} ${unit}`,reason:effort==="easy"?`Plenty left — add ${unit==="sec"?"time":"reps"}`:effort==="ideal"?`Ideal effort — add ${unit==="sec"?"a few seconds":"a rep"}`:`Build ${unit} before weight`};
 }
 function renderTrainingGoal(){
   const key=state.workouts.trainingProgram||"lean",p=trainingPrograms[key]||trainingPrograms.lean;
@@ -4190,7 +4221,7 @@ renderTrainingGoal();
             <div class="smart-next-copy"><small>SMART NEXT SESSION</small><b>${smartRecommendation(e,ei).text}</b></div>
             <div class="smart-next-reason">${smartRecommendation(e,ei).reason}</div>
           </div>
-          <div class="sethead"><span>SET</span><span>PREVIOUS</span><span>${window.dtWeightUnitLabel?.()||"KG"}</span><span>REPS</span><span>EFFORT</span></div>
+          <div class="sethead"><span>SET</span><span>PREVIOUS</span><span>${window.dtWeightUnitLabel?.()||"KG"}</span><span>${window.dtIsDurationBased?.(e)?"SEC":"REPS"}</span><span>EFFORT</span></div>
           <div class="rows"></div>
           <button class="addset" type="button">＋ Add Set</button>
           <button class="exercise-done-btn" type="button">✓ Done with ${e[0]}</button>
@@ -4213,13 +4244,14 @@ renderTrainingGoal();
       (d[ei]?.sets || []).forEach((x,si) => {
         const old = prev(ei,si);
         const pln = e[3]?.[si] || [null,""];
+        const smartKg = !old?window.dtSuggestStartWeight?.(e[0])?.kg:null;
         const row = document.createElement("div");
         row.className = "setrow";
         row.innerHTML = `
           <b style="text-align:center">${si+1}</b>
           <div class="prevval">${old?(window.dtFormatLift?.(old.kg,old.reps)||((old.kg||"–")+" × "+(old.reps||"–"))):(window.dtFormatLift?.(pln[0],pln[1])||((pln[0]??"–")+" × "+(pln[1]||"")))}<br><span style="opacity:.5">${old?"previous":"plan"}</span></div>
-          <input class="loginput kg" inputmode="decimal" type="number" step="${window.dtWeightUnit?.()==='lb'?'1':'.5'}" value="${window.dtWeightDisplayValue?.(x.kg)??x.kg??""}" placeholder="${window.dtWeightDisplayValue?.(old?.kg??pln[0])??old?.kg??pln[0]??window.dtWeightUnitLabel?.()??"KG"}">
-          <input class="loginput reps" inputmode="numeric" type="number" value="${x.reps ?? ""}" placeholder="${old?.reps ?? "Reps"}">
+          <input class="loginput kg" inputmode="decimal" type="number" step="${window.dtWeightUnit?.()==='lb'?'1':'.5'}" value="${window.dtWeightDisplayValue?.(x.kg)??x.kg??""}" placeholder="${window.dtWeightDisplayValue?.(old?.kg??smartKg)??old?.kg??smartKg??window.dtWeightUnitLabel?.()??"KG"}">
+          <input class="loginput reps" inputmode="numeric" type="number" value="${x.reps ?? ""}" placeholder="${old?.reps ?? (window.dtIsDurationBased?.(e)?"Sec":"Reps")}">
           <button class="effort ${x.effort || ""}" type="button"></button>`;
 
         const kg = row.querySelector(".kg");
@@ -5171,6 +5203,25 @@ renderTrainingGoal();
   window.dtOpenWorkoutSummary=dtOpenWorkoutSummary;
   window.dtRenderTodayWorkoutResult=dtRenderTodayWorkoutResult;
   window.DT_WORKOUT_PROGRESS_VERSION="2.0";
+
+  /* Exposed so the Training Body module (heat map / leveling / time-lapse)
+     can reuse the same exercise→muscle classifier and body-chart renderer
+     instead of duplicating the exercise map. Read-only reuse, nothing here
+     changes existing behavior. */
+  window.dtInferMeta=dtInferMeta;
+  window.dtSummaryLabel=dtSummaryLabel;
+  window.dtIntegerPercentages=dtIntegerPercentages;
+  window.dtBarColor=dtBarColor;
+  window.dtSummaryMatch=dtSummaryMatch;
+  window.dtFindDefs=dtFindDefs;
+  window.dtStyleSummaryBody=dtStyleSummaryBody;
+  window.dtRenderSummaryBodies=dtRenderSummaryBodies;
+  window.dtEnsureBodyMusclesSummary=dtEnsureBodyMusclesSummary;
+  window.DT_ROLE_COLORS=DT_ROLE_COLORS;
+  window.DT_ROLE_GLOWS=DT_ROLE_GLOWS;
+  window.DT_ROLE_WEIGHTS=DT_ROLE_WEIGHTS;
+  window.DT_EFFORT_MULT=DT_EFFORT_MULT;
+  window.DT_SUMMARY_LABELS=DT_SUMMARY_LABELS;
 })();
 </script>
 
@@ -5833,6 +5884,7 @@ window.DT_PROGRESS_ANALYTICS_VERSION=DT_V5;
 .dt-wp-days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.dt-wp-day{text-align:center}.dt-wp-day i{display:block;width:100%;aspect-ratio:1;border-radius:10px;background:#10232e;border:1px solid #1d3846;margin-bottom:5px}.dt-wp-day.on i{background:rgba(84,221,158,.16);border-color:rgba(84,221,158,.48);box-shadow:inset 0 0 0 3px rgba(84,221,158,.04)}.dt-wp-day span{color:#667e8b;font:700 8px system-ui}.dt-wp-day.on span{color:#8fb9a5}
 .dt-wp-muscles{display:grid;gap:9px}.dt-wp-muscle-line{display:grid;grid-template-columns:92px 1fr 30px;gap:8px;align-items:center}.dt-wp-muscle-line b{font:750 10px system-ui;color:#cbdbe2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dt-wp-muscle-line strong{font:800 9px system-ui;color:#8199a5;text-align:right}.dt-wp-track{height:8px;display:grid;grid-template-columns:repeat(10,1fr);gap:2px}.dt-wp-track i{background:#132a35;clip-path:polygon(12% 0,88% 0,100% 50%,88% 100%,12% 100%,0 50%)}.dt-wp-track i.on{background:#55dca0}
 .dt-wp-prs{display:grid;gap:2px}.dt-wp-pr{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #132a36}.dt-wp-pr:last-child{border:0}.dt-wp-pr b{font:750 11px system-ui;color:#e3edf1}.dt-wp-pr span{font:650 9px system-ui;color:#758d99}.dt-wp-pr strong{font:800 10px system-ui;color:#e8bd55;white-space:nowrap}
+.dt-wp-streak-count{font:900 22px system-ui;color:#ff9d5c;margin-bottom:10px}
 .dt-wp-insight{display:flex;gap:11px;align-items:flex-start}.dt-wp-insight-icon{width:37px;height:37px;border-radius:12px;background:#102630;color:#60dda0;display:grid;place-items:center;font:900 18px system-ui;flex:none}.dt-wp-insight b{display:block;color:#e9f2f5;font:800 12px system-ui}.dt-wp-insight span{display:block;color:#78919e;font:550 10px/1.5 system-ui;margin-top:3px}.dt-wp-foot{font:500 9px/1.45 system-ui;color:#607985;margin-top:11px}
 @media(max-width:420px){.dt-wp-grid{grid-template-columns:repeat(2,1fr)}.dt-wp-muscle-line{grid-template-columns:78px 1fr 28px}}
 </style>
@@ -5849,6 +5901,8 @@ function validSets(x){return (x.sets||[]).filter(s=>(+s.kg||0)>0&&(+s.reps||0)>0
 function e1rm(s){return (+s.kg||0)*(1+Math.min(+s.reps||0,30)/30)}
 function sessionIds(rows){const ids=new Set();rows.forEach(x=>ids.add(`${x.dayKey||String(x.finalizedAt||'').slice(0,10)}|${x.day||''}`));return ids.size}
 function muscleName(raw){return String(raw||'Other').split('/')[0].split(',')[0].trim()||'Other'}
+function allDayKeys(){const set=new Set();(state.workouts?.completedExercises||[]).forEach(x=>{const k=String(x.dayKey||x.finalizedAt||'').slice(0,10);if(k)set.add(k)});return set}
+function currentStreak(){const days=allDayKeys();if(!days.size)return 0;const today=new Date();today.setHours(12,0,0,0);let cursor=new Date(today);if(!days.has(dateKey(cursor)))cursor=new Date(cursor.getTime()-DAY);let streak=0;while(days.has(dateKey(cursor))){streak++;cursor=new Date(cursor.getTime()-DAY)}return streak}
 function muscleTotals(rows){const m={};rows.forEach(x=>{const sets=validSets(x).length;if(!sets)return;const parts=String(x.muscle||'Other').split(/[/,]/).map(s=>s.trim()).filter(Boolean);const share=sets/Math.max(parts.length,1);parts.forEach(p=>m[p]=(m[p]||0)+share)});return Object.entries(m).sort((a,b)=>b[1]-a[1])}
 function prList(rows,w){
  const before=(state.workouts?.completedExercises||[]).filter(x=>String(x.dayKey||x.finalizedAt||'').slice(0,10)<w.keys[0]);
@@ -5857,11 +5911,11 @@ function prList(rows,w){
 }
 function ensure(){if(document.getElementById('dtWeeklyPerformanceModal'))return;const m=document.createElement('div');m.id='dtWeeklyPerformanceModal';m.innerHTML='<section class="dt-wp-sheet"><div id="dtWpContent"></div></section>';m.onclick=e=>{if(e.target===m)m.classList.remove('show')};document.body.appendChild(m)}
 function fmtRange(w){const f=d=>new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric'}).format(d);return `${f(w.start)} – ${f(w.end)}`}
-function insight(rows,muscles,prs,sessions){if(!rows.length)return ['•','Build the week','Complete your first workout this week and this dashboard will start comparing consistency, working sets and progression.'];if(prs.length)return ['↑',`${prs.length} new PR${prs.length===1?'':'s'}`,`Performance moved forward this week. Keep progression conservative and preserve good reps rather than forcing a load increase every session.`];if(sessions>=3)return ['✓','Consistent week',`You logged ${sessions} workout sessions. ${muscles[0]?`${muscles[0][0]} received the most logged set emphasis.`:''}`];return ['→','Keep building',`You have ${sessions} completed workout${sessions===1?'':'s'} this week. The dashboard will become more useful as completed sessions accumulate.`]}
-function openWeekly(){ensure();const w=weekBounds(),rows=completedInWeek(w),sessions=sessionIds(rows),sets=rows.reduce((n,x)=>n+validSets(x).length,0),volume=Math.round(rows.reduce((n,x)=>n+validSets(x).reduce((a,s)=>a+(+s.kg)*(+s.reps),0),0)),muscles=muscleTotals(rows),prs=prList(rows,w),totalM=muscles.reduce((a,x)=>a+x[1],0)||1,active=new Set(rows.map(x=>String(x.dayKey||x.finalizedAt||'').slice(0,10))),ins=insight(rows,muscles,prs,sessions);
+function insight(rows,muscles,prs,sessions,streak){if(!rows.length)return ['•','Build the week','Complete your first workout this week and this dashboard will start comparing your streak, working sets and progression.'];if(prs.length)return ['↑',`${prs.length} new PR${prs.length===1?'':'s'}`,`Performance moved forward this week. Keep progression conservative and preserve good reps rather than forcing a load increase every session.`];if(sessions>=3)return ['🔥',`${streak}-day streak`,`You logged ${sessions} workout sessions. ${muscles[0]?`${muscles[0][0]} received the most logged set emphasis.`:''}`];return ['→','Keep building',`You have ${sessions} completed workout${sessions===1?'':'s'} this week. The dashboard will become more useful as completed sessions accumulate.`]}
+function openWeekly(){ensure();const w=weekBounds(),rows=completedInWeek(w),sessions=sessionIds(rows),sets=rows.reduce((n,x)=>n+validSets(x).length,0),volume=Math.round(rows.reduce((n,x)=>n+validSets(x).reduce((a,s)=>a+(+s.kg)*(+s.reps),0),0)),muscles=muscleTotals(rows),prs=prList(rows,w),totalM=muscles.reduce((a,x)=>a+x[1],0)||1,active=new Set(rows.map(x=>String(x.dayKey||x.finalizedAt||'').slice(0,10))),streak=currentStreak(),ins=insight(rows,muscles,prs,sessions,streak);
  const muscleHtml=muscles.length?muscles.slice(0,6).map(([name,v])=>{const pct=Math.round(v/totalM*100),on=Math.max(1,Math.round(pct/10));return `<div class="dt-wp-muscle-line"><b>${name}</b><div class="dt-wp-track">${Array.from({length:10},(_,i)=>`<i class="${i<on?'on':''}"></i>`).join('')}</div><strong>${pct}%</strong></div>`}).join(''):'<div class="dt-wp-sub">Muscle emphasis appears after completed workout sets.</div>';
  const prHtml=prs.length?prs.slice(0,5).map(p=>`<div class="dt-wp-pr"><div><b>${p.name}</b><span>${p.date}</span></div><strong>🏆 ${p.kg} × ${p.reps}</strong></div>`).join(''):'<div class="dt-wp-sub">No new performance records detected this week.</div>';
- document.getElementById('dtWpContent').innerHTML=`<div class="dt-wp-head"><div><div class="dt-wp-kicker">Weekly Performance</div><div class="dt-wp-title">Your training week</div><div class="dt-wp-sub">${fmtRange(w)}</div></div><button class="dt-wp-close" onclick="document.getElementById('dtWeeklyPerformanceModal').classList.remove('show')">×</button></div><div class="dt-wp-grid"><div class="dt-wp-stat"><small>Workouts</small><strong>${sessions}</strong><em>completed</em></div><div class="dt-wp-stat"><small>Working sets</small><strong>${sets}</strong><em>logged sets</em></div><div class="dt-wp-stat"><small>Volume load</small><strong>${volume?volume.toLocaleString():'—'}</strong><em>${volume?'kg logged':'no data'}</em></div><div class="dt-wp-stat"><small>PRs</small><strong>${prs.length}</strong><em>this week</em></div></div><div class="dt-wp-card"><h4>Consistency</h4><div class="dt-wp-days">${w.keys.map((k,i)=>`<div class="dt-wp-day ${active.has(k)?'on':''}"><i></i><span>${['M','T','W','T','F','S','S'][i]}</span></div>`).join('')}</div></div><div class="dt-wp-card"><h4>Logged set emphasis</h4><div class="dt-wp-muscles">${muscleHtml}</div><div class="dt-wp-foot">Relative share of your logged working sets this week.</div></div><div class="dt-wp-card"><h4>Performance records</h4><div class="dt-wp-prs">${prHtml}</div></div><div class="dt-wp-card"><h4>Weekly insight</h4><div class="dt-wp-insight"><div class="dt-wp-insight-icon">${ins[0]}</div><div><b>${ins[1]}</b><span>${ins[2]}</span></div></div></div>`;document.getElementById('dtWeeklyPerformanceModal').classList.add('show')}
+ document.getElementById('dtWpContent').innerHTML=`<div class="dt-wp-head"><div><div class="dt-wp-kicker">Weekly Performance</div><div class="dt-wp-title">Your training week</div><div class="dt-wp-sub">${fmtRange(w)}</div></div><button class="dt-wp-close" onclick="document.getElementById('dtWeeklyPerformanceModal').classList.remove('show')">×</button></div><div class="dt-wp-grid"><div class="dt-wp-stat"><small>Workouts</small><strong>${sessions}</strong><em>completed</em></div><div class="dt-wp-stat"><small>Working sets</small><strong>${sets}</strong><em>logged sets</em></div><div class="dt-wp-stat"><small>Volume load</small><strong>${volume?volume.toLocaleString():'—'}</strong><em>${volume?'kg logged':'no data'}</em></div><div class="dt-wp-stat"><small>PRs</small><strong>${prs.length}</strong><em>this week</em></div></div><div class="dt-wp-card"><h4>🔥 Streak</h4><div class="dt-wp-streak-count">${streak} day${streak===1?'':'s'}</div><div class="dt-wp-days">${w.keys.map((k,i)=>`<div class="dt-wp-day ${active.has(k)?'on':''}"><i></i><span>${['M','T','W','T','F','S','S'][i]}</span></div>`).join('')}</div></div><div class="dt-wp-card"><h4>Logged set emphasis</h4><div class="dt-wp-muscles">${muscleHtml}</div><div class="dt-wp-foot">Relative share of your logged working sets this week.</div></div><div class="dt-wp-card"><h4>Performance records</h4><div class="dt-wp-prs">${prHtml}</div></div><div class="dt-wp-card"><h4>Weekly insight</h4><div class="dt-wp-insight"><div class="dt-wp-insight-icon">${ins[0]}</div><div><b>${ins[1]}</b><span>${ins[2]}</span></div></div></div>`;document.getElementById('dtWeeklyPerformanceModal').classList.add('show')}
 function addButton(){if(document.getElementById('dtWeeklyPerformanceBtn'))return;const tabs=document.querySelector('.workout-tabs');if(!tabs)return;const b=document.createElement('button');b.id='dtWeeklyPerformanceBtn';b.type='button';b.innerHTML='<span>Weekly Performance</span><small>Trends · sets · PRs ›</small>';b.onclick=openWeekly;tabs.parentNode.insertBefore(b,tabs);}
 const boot=()=>{ensure();addButton()};document.readyState==='loading'?document.addEventListener('DOMContentLoaded',boot):boot();setTimeout(addButton,400);window.dtOpenWeeklyPerformance=openWeekly;window.DT_WEEKLY_PERFORMANCE_VERSION=DT_V6;
 })();
@@ -9951,5 +10005,1169 @@ window.dtRemoveWorkoutSet=removeSet;
   window.DT_WEIGHT_TOGGLE_VERSION="21.0";
 })();
 </script>
+
+<!-- TRAINING_BODY_V23 :: Live heat map + persistent leveling + weekly time-lapse -->
+<style>
+.dt-tb-card{padding:20px;margin-bottom:18px}
+.dt-tb-head{margin-bottom:14px}
+.dt-tb-head h2{font-size:19px;margin-top:4px}
+.dt-tb-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.dt-tb-stat{background:#0a1620;border:1px solid var(--line);border-radius:14px;padding:10px 8px;text-align:center;min-width:0}
+.dt-tb-stat b{display:block;font-size:19px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dt-tb-stat span{display:block;font-size:9px;letter-spacing:.08em;color:var(--muted);margin-top:3px;font-weight:800;text-transform:uppercase}
+.dt-tb-tabs{display:flex;gap:6px;margin-bottom:12px;background:#0a1620;border:1px solid var(--line);border-radius:14px;padding:4px}
+.dt-tb-tab{flex:1;background:transparent;border:0;color:var(--muted);font-size:11px;font-weight:800;padding:9px 4px;border-radius:11px;letter-spacing:.02em}
+.dt-tb-tab.active{background:linear-gradient(180deg,#173049,#0f2436);color:#eaf4ff;box-shadow:0 4px 10px rgba(0,0,0,.25)}
+.dt-tb-timelapse-controls{display:flex;align-items:center;gap:10px;margin-bottom:12px;background:#0a1620;border:1px solid var(--line);border-radius:14px;padding:9px 12px}
+.dt-tb-tl-btn{background:var(--blue);border:0;color:#04131f;width:30px;height:30px;border-radius:50%;font-size:12px;display:grid;place-items:center;flex-shrink:0}
+.dt-tb-timelapse-controls input[type=range]{flex:1;accent-color:var(--blue);min-width:0}
+.dt-tb-tl-label{font-size:10px;color:var(--muted);font-weight:700;white-space:nowrap}
+.dt-tb-bodies{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+.dt-tb-body-col{text-align:center;min-width:0}
+.dt-tb-body-col>span{display:block;color:#8298a6;font-size:9px;letter-spacing:.12em;font-weight:900;margin-bottom:3px}
+.dt-tb-body{height:230px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.dt-tb-body .body-chart-container{padding:0!important;width:100%!important}
+.dt-tb-body .body-chart-svg{height:220px!important;max-width:100%!important;width:auto!important;filter:drop-shadow(0 8px 18px rgba(0,0,0,.28)) saturate(.94)!important}
+.dt-tb-legend{display:flex;justify-content:center;gap:14px;margin:6px 0 12px;flex-wrap:wrap}
+.dt-tb-legend span{display:flex;align-items:center;gap:5px;font-size:9px;color:var(--muted);font-weight:800;letter-spacing:.04em}
+.dt-tb-legend i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.dt-tb-note{text-align:center;color:var(--muted);font-size:11px;margin-bottom:12px;line-height:1.4}
+.dt-tb-list{display:flex;flex-direction:column;gap:7px}
+.dt-tb-row{display:grid;grid-template-columns:82px 1fr 32px 44px;gap:8px;align-items:center}
+.dt-tb-row-name{font-size:11px;color:var(--text);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dt-tb-row-track{height:7px;background:#0e1c27;border-radius:99px;overflow:hidden}
+.dt-tb-row-fill{height:100%;border-radius:99px;transition:width .3s ease}
+.dt-tb-row-pct{font-size:10px;color:var(--muted);font-weight:800;text-align:right}
+.dt-tb-lvl{font-size:9px;font-weight:900;text-align:center;padding:3px 0;border-radius:8px;color:#0a141c}
+.dt-tb-lvl-low{background:#5b6b78;color:#dbe6ec}
+.dt-tb-lvl-mid{background:var(--blue)}
+.dt-tb-lvl-high{background:var(--green)}
+.dt-tb-lvl-max{background:var(--yellow)}
+.dt-tb-row-empty{text-align:center;color:var(--muted);font-size:11px;padding:8px 0}
+.dt-tb-empty{text-align:center;color:var(--muted);font-size:13px;padding:30px 10px;line-height:1.5}
+.dt-tb-footnote{margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06);color:#5c7381;font-size:9px;line-height:1.5;text-align:center}
+@media(max-width:380px){
+  .dt-tb-row{grid-template-columns:66px 1fr 30px 40px}
+  .dt-tb-body{height:200px}.dt-tb-body .body-chart-svg{height:190px!important}
+}
+</style>
+<script>
+(() => {
+  "use strict";
+
+  /* ---------- leveling thresholds ----------
+     "score" = cumulative role-weighted, effort-weighted set volume for a
+     muscle across ALL logged history (same units dtBuildWorkoutSummary /
+     exAnalyze already use for a single day/period, just never reset).
+     Thresholds are a relative training-emphasis estimate for gamification,
+     not a biological or medical measurement. */
+  const DT_TB_LEVELS=[
+    {level:1,name:"New",min:0},
+    {level:2,name:"Beginner",min:15},
+    {level:3,name:"Developing",min:40},
+    {level:4,name:"Established",min:90},
+    {level:5,name:"Advanced",min:180},
+    {level:6,name:"Elite",min:320},
+    {level:7,name:"Master",min:520}
+  ];
+
+  let dtTBMode="recent"; // 'recent' | 'alltime' | 'timelapse'
+  let dtTBWeeks=[];
+  let dtTBWeekIdx=0;
+  let dtTBPlayTimer=null;
+
+  function dtTBAllRecords(){
+    try{ return (state.workouts && state.workouts.completedExercises) || []; }
+    catch(e){ return []; }
+  }
+
+  function dtTBRecordsInRange(startKey,endKey){
+    return dtTBAllRecords().filter(x=>{
+      const d=String(x.dayKey||x.finalizedAt||"").slice(0,10);
+      return d && d>=startKey && d<=endKey;
+    });
+  }
+
+  function dtTBTodayKey(){ return new Date().toISOString().slice(0,10); }
+
+  function dtTBAddDays(dateStr,n){
+    const d=new Date(dateStr+"T00:00:00Z");
+    d.setUTCDate(d.getUTCDate()+n);
+    return d.toISOString().slice(0,10);
+  }
+
+  function dtTBISOWeekKey(dateStr){
+    const d=new Date(dateStr+"T00:00:00Z");
+    const day=(d.getUTCDay()+6)%7; // Monday=0 .. Sunday=6
+    d.setUTCDate(d.getUTCDate()-day);
+    return d.toISOString().slice(0,10);
+  }
+
+  function dtTBWeekList(){
+    const weeks=new Set();
+    dtTBAllRecords().forEach(r=>{
+      const d=String(r.dayKey||r.finalizedAt||"").slice(0,10);
+      if(d) weeks.add(dtTBISOWeekKey(d));
+    });
+    return [...weeks].sort();
+  }
+
+  function dtTBWeekRecords(weekStartKey){
+    return dtTBRecordsInRange(weekStartKey,dtTBAddDays(weekStartKey,6));
+  }
+
+  function dtTBWeekLabel(weekStartKey){
+    try{
+      const start=new Date(weekStartKey+"T00:00:00Z");
+      const end=new Date(dtTBAddDays(weekStartKey,6)+"T00:00:00Z");
+      const fmt=d=>d.toLocaleDateString(undefined,{month:"short",day:"numeric"});
+      return `${fmt(start)} – ${fmt(end)}, ${start.getUTCFullYear()}`;
+    }catch(e){ return weekStartKey; }
+  }
+
+  /* Core aggregator — mirrors dtBuildWorkoutSummary's math (same role
+     weights / effort multipliers / rounding), generalized to any record
+     set instead of just "today". Reuses the shared classifier so results
+     stay identical to the per-workout summary the app already shows. */
+  function dtTBAggregate(records){
+    const muscleMap={};
+    let workingSets=0;
+    const sessionSet=new Set();
+    const weights=window.DT_ROLE_WEIGHTS||{primary:1,secondary:.55,stabilizer:.25};
+    const effortMult=window.DT_EFFORT_MULT||{easy:.9,ideal:1,max:1.1};
+
+    const addRole=(keys,role,setFactor)=>{
+      const unique=[...new Set(keys||[])];
+      if(!unique.length)return;
+      const share=(weights[role]*setFactor)/unique.length;
+      unique.forEach(key=>{
+        if(!muscleMap[key])muscleMap[key]={key,score:0,roleScores:{primary:0,secondary:0,stabilizer:0}};
+        muscleMap[key].score+=share;
+        muscleMap[key].roleScores[role]+=share;
+      });
+    };
+
+    (records||[]).forEach(rec=>{
+      sessionSet.add(`${rec.dayKey}|${rec.day}`);
+      const meta=(typeof window.dtInferMeta==="function")
+        ? window.dtInferMeta(rec.name,rec.muscle)
+        : {primaryMuscles:[],secondaryMuscles:[],stabilizerMuscles:[]};
+      const sets=(rec.sets||[]).filter(s=>
+        String(s?.kg??"").trim()!==""||String(s?.reps??"").trim()!==""||String(s?.effort??"").trim()!==""
+      );
+      workingSets+=sets.length;
+      sets.forEach(set=>{
+        const factor=effortMult[set.effort]??1;
+        addRole(meta.primaryMuscles,"primary",factor);
+        addRole(meta.secondaryMuscles,"secondary",factor);
+        addRole(meta.stabilizerMuscles,"stabilizer",factor);
+      });
+    });
+
+    let muscles=Object.values(muscleMap).sort((a,b)=>b.score-a.score);
+    if(typeof window.dtIntegerPercentages==="function"){
+      muscles=window.dtIntegerPercentages(muscles);
+    }else{
+      const total=muscles.reduce((a,x)=>a+x.score,0)||1;
+      muscles=muscles.map(m=>({...m,pct:Math.round(m.score/total*100)}));
+    }
+    const roleOrder={primary:0,secondary:1,stabilizer:2};
+    muscles=muscles.map(m=>{
+      const role=Object.entries(m.roleScores)
+        .sort((a,b)=>b[1]-a[1]||(roleOrder[a[0]]-roleOrder[b[0]]))[0]?.[0]||"primary";
+      const label=(typeof window.dtSummaryLabel==="function")?window.dtSummaryLabel(m.key):String(m.key).replace(/_/g," ");
+      return {...m,label,role};
+    }).sort((a,b)=>b.pct-a.pct||b.score-a.score);
+
+    return {workouts:sessionSet.size, workingSets, muscles};
+  }
+
+  function dtTBLevelFor(score){
+    score=+score||0;
+    let cur=DT_TB_LEVELS[0];
+    for(const l of DT_TB_LEVELS){ if(score>=l.min) cur=l; else break; }
+    const idx=DT_TB_LEVELS.indexOf(cur);
+    const next=DT_TB_LEVELS[idx+1]||null;
+    const progress=next?Math.max(0,Math.min(1,(score-cur.min)/(next.min-cur.min))):1;
+    return {level:cur.level, levelName:cur.name, levelScore:score, levelNext:next, levelProgress:progress};
+  }
+
+  function dtTBLevelTier(level){
+    if(level>=7)return "max";
+    if(level>=5)return "high";
+    if(level>=3)return "mid";
+    return "low";
+  }
+
+  function dtTBCurrentAggregate(){
+    const all=dtTBAllRecords();
+    if(dtTBMode==="alltime") return dtTBAggregate(all);
+    if(dtTBMode==="timelapse"){
+      /* Always refresh the week list here rather than trusting a caller to
+         have done it first — keeps this function correct on its own,
+         regardless of call order. */
+      dtTBWeeks=dtTBWeekList();
+      if(!dtTBWeeks.length) return dtTBAggregate([]);
+      if(dtTBWeekIdx>dtTBWeeks.length-1) dtTBWeekIdx=dtTBWeeks.length-1;
+      if(dtTBWeekIdx<0) dtTBWeekIdx=0;
+      return dtTBAggregate(dtTBWeekRecords(dtTBWeeks[dtTBWeekIdx]));
+    }
+    const end=dtTBTodayKey();
+    const start=dtTBAddDays(end,-29);
+    return dtTBAggregate(dtTBRecordsInRange(start,end));
+  }
+
+  function dtTBBuildRows(agg,allTimeScores){
+    const activeKeys=new Set(agg.muscles.map(m=>m.key));
+    const rows=agg.muscles.filter(m=>m.pct>0).map(m=>({
+      key:m.key, label:m.label, pct:m.pct, role:m.role,
+      ...dtTBLevelFor(allTimeScores[m.key]||0)
+    }));
+    Object.keys(allTimeScores).forEach(key=>{
+      if(activeKeys.has(key))return;
+      const info=dtTBLevelFor(allTimeScores[key]);
+      if(info.level>1){
+        const label=(typeof window.dtSummaryLabel==="function")?window.dtSummaryLabel(key):String(key).replace(/_/g," ");
+        rows.push({key,label,pct:0,role:"primary",...info});
+      }
+    });
+    rows.sort((a,b)=>b.pct-a.pct||b.levelScore-a.levelScore);
+    return rows.slice(0,12);
+  }
+
+  function dtTBRowHTML(row){
+    const color=(typeof window.dtBarColor==="function")?window.dtBarColor(row.role):"#50dfa0";
+    const tier=dtTBLevelTier(row.level);
+    return `<div class="dt-tb-row">
+      <span class="dt-tb-row-name">${row.label}</span>
+      <div class="dt-tb-row-track"><div class="dt-tb-row-fill" style="width:${row.pct}%;background:${color}"></div></div>
+      <span class="dt-tb-row-pct">${row.pct}%</span>
+      <span class="dt-tb-lvl dt-tb-lvl-${tier}" title="${row.levelName} · ${Math.round(row.levelScore)} pts">Lv ${row.level}</span>
+    </div>`;
+  }
+
+  function dtTBStopPlay(){
+    if(dtTBPlayTimer){ clearInterval(dtTBPlayTimer); dtTBPlayTimer=null; }
+    const btn=document.getElementById("dtTBTlPlay");
+    if(btn)btn.textContent="▶";
+  }
+
+  function dtTBEnsureCard(){
+    let card=document.getElementById("dtTBCard");
+    if(card)return card;
+    card=document.createElement("div");
+    card.className="card dt-tb-card";
+    card.id="dtTBCard";
+    const primaryColor=(window.DT_ROLE_COLORS&&window.DT_ROLE_COLORS.primary)||"#50dfa0";
+    const secondaryColor=(window.DT_ROLE_COLORS&&window.DT_ROLE_COLORS.secondary)||"#43a7ff";
+    const stabilizerColor=(window.DT_ROLE_COLORS&&window.DT_ROLE_COLORS.stabilizer)||"#a55cff";
+    card.innerHTML=`
+      <div class="dt-tb-head">
+        <div class="label">TRAINING BODY</div>
+        <h2>Your body, built from your training</h2>
+      </div>
+      <div class="dt-tb-stats">
+        <div class="dt-tb-stat"><b id="dtTBStatWorkouts">0</b><span>Workouts</span></div>
+        <div class="dt-tb-stat"><b id="dtTBStatDays">0</b><span>Days Tracked</span></div>
+        <div class="dt-tb-stat"><b id="dtTBStatTop">—</b><span>Top Focus</span></div>
+      </div>
+      <div class="dt-tb-tabs" id="dtTBTabs">
+        <button class="dt-tb-tab active" type="button" data-mode="recent">Last 30 Days</button>
+        <button class="dt-tb-tab" type="button" data-mode="alltime">All-Time</button>
+        <button class="dt-tb-tab" type="button" data-mode="timelapse">Time-Lapse</button>
+      </div>
+      <div id="dtTBMain">
+        <div class="dt-tb-timelapse-controls" id="dtTBTimelapseControls" style="display:none">
+          <button class="dt-tb-tl-btn" type="button" id="dtTBTlPlay">▶</button>
+          <input type="range" id="dtTBTlSlider" min="0" max="0" value="0" step="1">
+          <span class="dt-tb-tl-label" id="dtTBTlLabel">—</span>
+        </div>
+        <div class="dt-tb-bodies">
+          <div class="dt-tb-body-col"><span>FRONT</span><div class="dt-tb-body" id="dtTBFront"></div></div>
+          <div class="dt-tb-body-col"><span>BACK</span><div class="dt-tb-body" id="dtTBBack"></div></div>
+        </div>
+        <div class="dt-tb-legend">
+          <span><i style="background:${primaryColor}"></i>Primary</span>
+          <span><i style="background:${secondaryColor}"></i>Secondary</span>
+          <span><i style="background:${stabilizerColor}"></i>Stabilizer</span>
+        </div>
+        <div class="dt-tb-note" id="dtTBNote"></div>
+        <div class="dt-tb-list" id="dtTBList"></div>
+      </div>
+      <div class="dt-tb-empty" id="dtTBEmpty" style="display:none">Log your first workout and this body will start filling in — muscle by muscle, week by week.</div>
+      <div class="dt-tb-footnote">Levels are a relative training-emphasis estimate from your logged sets — not a biological or medical measurement.</div>`;
+
+    const grid=document.querySelector("#today .today-clean-grid");
+    if(grid && grid.parentNode) grid.parentNode.insertBefore(card,grid);
+    else { const today=document.getElementById("today"); if(today) today.appendChild(card); }
+
+    card.querySelectorAll(".dt-tb-tab").forEach(btn=>{
+      btn.addEventListener("click",()=>{
+        const mode=btn.dataset.mode;
+        if(mode===dtTBMode)return;
+        dtTBStopPlay();
+        dtTBMode=mode;
+        card.querySelectorAll(".dt-tb-tab").forEach(b=>b.classList.toggle("active",b===btn));
+        if(mode==="timelapse" && dtTBWeeks.length) dtTBWeekIdx=dtTBWeeks.length-1;
+        dtTBRenderCard();
+      });
+    });
+    const slider=card.querySelector("#dtTBTlSlider");
+    if(slider) slider.addEventListener("input",()=>{
+      dtTBStopPlay();
+      dtTBWeekIdx=Math.max(0,Math.min(dtTBWeeks.length-1,parseInt(slider.value,10)||0));
+      dtTBRenderCard();
+    });
+    const playBtn=card.querySelector("#dtTBTlPlay");
+    if(playBtn) playBtn.addEventListener("click",()=>{
+      if(dtTBPlayTimer){ dtTBStopPlay(); return; }
+      if(!dtTBWeeks.length)return;
+      playBtn.textContent="⏸";
+      dtTBPlayTimer=setInterval(()=>{
+        dtTBWeekIdx=(dtTBWeekIdx+1)>=dtTBWeeks.length?0:dtTBWeekIdx+1;
+        dtTBRenderCard();
+      },1100);
+    });
+    return card;
+  }
+
+  function dtTBRenderCard(){
+    try{
+      const card=dtTBEnsureCard();
+      if(!card)return;
+
+      const all=dtTBAllRecords();
+      dtTBWeeks=dtTBWeekList();
+      if(dtTBMode==="timelapse"){
+        if(!dtTBWeeks.length){ dtTBMode="recent"; card.querySelectorAll(".dt-tb-tab").forEach(b=>b.classList.toggle("active",b.dataset.mode==="recent")); }
+        else if(dtTBWeekIdx>dtTBWeeks.length-1) dtTBWeekIdx=dtTBWeeks.length-1;
+      }
+
+      const empty=all.length===0;
+      const emptyEl=document.getElementById("dtTBEmpty"), mainEl=document.getElementById("dtTBMain");
+      if(emptyEl)emptyEl.style.display=empty?"":"none";
+      if(mainEl)mainEl.style.display=empty?"none":"";
+      if(empty)return;
+
+      const agg=dtTBCurrentAggregate();
+      const allAgg=dtTBAggregate(all);
+      const allTimeScores={};
+      allAgg.muscles.forEach(m=>{ allTimeScores[m.key]=m.score; });
+      const rows=dtTBBuildRows(agg,allTimeScores);
+
+      const setText=(id,val)=>{ const el=document.getElementById(id); if(el)el.textContent=val; };
+      setText("dtTBStatWorkouts",allAgg.workouts);
+      const days=new Set(all.map(r=>String(r.dayKey||"").slice(0,10)).filter(Boolean)).size;
+      setText("dtTBStatDays",days);
+      setText("dtTBStatTop",allAgg.muscles[0]?allAgg.muscles[0].label:"—");
+
+      const listEl=document.getElementById("dtTBList");
+      if(listEl){
+        listEl.innerHTML = rows.length
+          ? rows.map(dtTBRowHTML).join("")
+          : `<div class="dt-tb-row-empty">No emphasis recorded ${dtTBMode==="timelapse"?"for this week":"yet"}.</div>`;
+      }
+
+      const noteEl=document.getElementById("dtTBNote");
+      if(noteEl){
+        const topShare=agg.muscles[0]?agg.muscles[0].pct:0;
+        const balanced=topShare<30;
+        noteEl.textContent = agg.muscles.length
+          ? (balanced?"Your training is well balanced across muscle groups.":`Training is concentrated on ${agg.muscles[0].label}. Consider adding volume elsewhere.`)
+          : (dtTBMode==="timelapse"?"No sets logged this week.":"No sets logged in this window yet.");
+      }
+
+      const tl=document.getElementById("dtTBTimelapseControls");
+      if(tl){
+        tl.style.display = dtTBMode==="timelapse"?"":"none";
+        if(dtTBMode==="timelapse" && dtTBWeeks.length){
+          const slider=document.getElementById("dtTBTlSlider"), label=document.getElementById("dtTBTlLabel");
+          if(slider){ slider.min="0"; slider.max=String(dtTBWeeks.length-1); slider.value=String(dtTBWeekIdx); }
+          if(label) label.textContent=`${dtTBWeekLabel(dtTBWeeks[dtTBWeekIdx])} · Week ${dtTBWeekIdx+1} of ${dtTBWeeks.length}`;
+        }
+      }
+
+      if(typeof window.dtRenderSummaryBodies==="function"){
+        window.dtRenderSummaryBodies(agg,"dtTB",false);
+      }
+    }catch(e){ console.warn("Training Body render failed",e); }
+  }
+
+  function dtTBBoot(){
+    try{ dtTBEnsureCard(); dtTBRenderCard(); }
+    catch(e){ console.warn("Training Body init failed",e); }
+
+    const orig=window.dtRenderTodayWorkoutResult;
+    if(typeof orig==="function"){
+      window.dtRenderTodayWorkoutResult=function(){
+        let r;
+        try{ r=orig.apply(this,arguments); }
+        finally{ try{ dtTBRenderCard(); }catch(e){ console.warn("Training Body refresh failed",e); } }
+        return r;
+      };
+    }
+    window.dtRenderBodyCard=dtTBRenderCard;
+    window.DT_TRAINING_BODY_VERSION="1.0";
+  }
+
+  document.readyState==="loading"?document.addEventListener("DOMContentLoaded",dtTBBoot):dtTBBoot();
+})();
+</script>
+
+
+<style id="dt-v24-ui-shell-css">
+/* =========================================================
+   M/ARC V24 — UI SHELL ONLY
+   Deliberately does not alter Export or Training Body logic.
+   ========================================================= */
+
+/* Stats is now a top-level destination; bottom navigation remains visible. */
+#stats.dt-v24-stats-view{
+  padding-bottom:calc(104px + env(safe-area-inset-bottom));
+}
+.dt-v24-stats-header{
+  margin-bottom:14px;
+}
+.dt-v24-stats-header h1{
+  margin:0 0 4px;
+}
+.dt-v24-stats-header .subtitle{
+  margin:0;
+}
+#dtV24StatsHost{
+  display:grid;
+  gap:12px;
+}
+#dtV24StatsHost .dt-wp-card{
+  margin:0!important;
+}
+#dtV24StatsHost .dt-wp-sheet{
+  width:100%!important;
+  max-width:none!important;
+  min-height:0!important;
+  height:auto!important;
+  max-height:none!important;
+  overflow:visible!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+#dtV24StatsHost .dt-wp-head{
+  display:none!important;
+}
+
+/* Glass treatment for temporary surfaces only.
+   Export is intentionally excluded. */
+.modal:not(#dtExportModal),
+#dtV10MoreModal,
+#dtGoalsModal,
+#dtSplitModal,
+#dtTrainingScheduleModal,
+#dtHistoryDayModal,
+#dtWorkoutResetModal,
+#dtReminderModal{
+  background:rgba(1,9,14,.52)!important;
+  -webkit-backdrop-filter:blur(11px) saturate(112%)!important;
+  backdrop-filter:blur(11px) saturate(112%)!important;
+}
+.modal:not(#dtExportModal) .sheet,
+#dtV10MoreModal .dt-more-sheet,
+#dtGoalsModal .dt-g-sheet,
+#dtSplitModal .dt-split-sheet,
+#dtTrainingScheduleModal .dt-sched-sheet,
+#dtHistoryDayModal .dt-history-day-sheet,
+#dtWorkoutResetModal .dt-data-sheet,
+#dtReminderModal .dt-rem-sheet{
+  background:linear-gradient(180deg,rgba(7,25,34,.89),rgba(6,20,28,.84))!important;
+  box-shadow:0 -18px 58px rgba(0,0,0,.32),0 0 0 1px rgba(115,180,210,.05)!important;
+}
+
+/* More returns to a true temporary glass sheet. Stats is the persistent page. */
+#dtV10MoreModal{align-items:flex-end!important;justify-content:center!important}
+#dtV10MoreModal .dt-more-sheet{
+  width:min(560px,100%)!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:82dvh!important;
+  border:1px solid #284858!important;
+  border-bottom:0!important;
+  border-radius:24px 24px 0 0!important;
+  padding:20px 18px calc(22px + env(safe-area-inset-bottom))!important;
+  background:linear-gradient(180deg,rgba(7,25,34,.87),rgba(6,20,28,.82))!important;
+}
+#dtV10MoreModal .dt-more-head{
+  position:static!important;top:auto!important;z-index:auto!important;
+  background:transparent!important;padding-top:0!important;padding-bottom:12px!important;
+}
+
+/* Important actions get one restrained halo. */
+nav.dt-v10-nav .dt-log,
+#saveWorkout.ready,
+#saveEditExercise,
+#dtCreateSplit,
+.dt-sched-save,
+.dt-g-save,
+#dtWorkoutResetConfirm{
+  box-shadow:
+    0 0 0 1px rgba(85,221,160,.19),
+    0 0 18px rgba(85,221,160,.12)!important;
+}
+nav.dt-v10-nav .dt-log{
+  box-shadow:
+    0 7px 24px rgba(24,124,232,.28),
+    0 0 18px rgba(85,170,255,.17)!important;
+}
+#saveWorkout.ready{
+  animation:dtV24ActionGlow 2.6s ease-in-out infinite;
+}
+@keyframes dtV24ActionGlow{
+  0%,100%{filter:brightness(1);box-shadow:0 0 0 1px rgba(85,221,160,.16),0 0 12px rgba(85,221,160,.08)}
+  50%{filter:brightness(1.035);box-shadow:0 0 0 1px rgba(85,221,160,.25),0 0 22px rgba(85,221,160,.16)}
+}
+@media(prefers-reduced-motion:reduce){
+  #saveWorkout.ready{animation:none!important}
+}
+
+/* Swipe feedback for dismissible temporary sheets. */
+.dt-v24-swipe-sheet{
+  will-change:transform;
+  transition:transform .18s cubic-bezier(.2,.75,.2,1),opacity .18s ease;
+  touch-action:pan-y;
+}
+.dt-v24-swipe-sheet.dt-v24-dragging{
+  transition:none!important;
+}
+.dt-v24-swipe-sheet.dt-v24-dismiss{
+  transform:translateY(105%)!important;
+  opacity:.35!important;
+}
+.dt-v24-grab{
+  width:38px;height:4px;border-radius:999px;
+  background:rgba(158,183,195,.28);
+  margin:0 auto 10px;
+}
+
+/* Keep the persistent nav above normal content, below temporary surfaces. */
+nav.dt-v10-nav{
+  z-index:9300!important;
+}
+</style>
+
+<script id="dt-v24-ui-shell-js">
+(()=>{
+  "use strict";
+  const V="24.0-ui-shell";
+
+  /* ---------------------------
+     Stats as a real destination
+     --------------------------- */
+  function ensureStatsView(){
+    let view=document.getElementById("stats");
+    if(view)return view;
+    view=document.createElement("section");
+    view.id="stats";
+    view.className="view dt-v24-stats-view";
+    view.innerHTML=`
+      <div class="dt-v24-stats-header">
+        <h1>Stats</h1>
+        <div class="subtitle">Weekly performance, consistency, muscle emphasis and PRs.</div>
+      </div>
+      <div id="dtV24StatsHost"></div>`;
+    const main=document.querySelector(".container")||document.querySelector("main")||document.body;
+    const settings=document.getElementById("settings");
+    if(settings?.parentNode)settings.parentNode.insertBefore(view,settings);
+    else main.appendChild(view);
+    return view;
+  }
+
+  function renderStatsDestination(){
+    ensureStatsView();
+    const host=document.getElementById("dtV24StatsHost");
+    if(!host)return;
+
+    /* Reuse the existing V23 weekly-performance renderer rather than
+       reimplementing its data logic. */
+    try{
+      window.dtOpenWeeklyPerformance?.();
+      const modal=document.getElementById("dtWeeklyPerformanceModal");
+      const sheet=modal?.querySelector(".dt-wp-sheet");
+      if(sheet){
+        const clone=sheet.cloneNode(true);
+        clone.querySelector(".dt-wp-close")?.remove();
+        host.replaceChildren(clone);
+        modal.classList.remove("show");
+      }else{
+        host.innerHTML='<div class="card"><div class="subtitle">No performance data yet.</div></div>';
+      }
+    }catch(e){
+      console.warn("Stats destination render failed",e);
+      host.innerHTML='<div class="card"><div class="subtitle">No performance data yet.</div></div>';
+    }
+  }
+
+  function openStatsDestination(){
+    ensureStatsView();
+    switchView("stats");
+    setTimeout(()=>{
+      renderStatsDestination();
+      updateStatsNavState();
+    },80);
+  }
+
+  function updateStatsNavState(){
+    const nav=document.querySelector("nav.dt-v10-nav");
+    if(!nav)return;
+    const active=document.querySelector(".view.active")?.id;
+    if(active!=="stats")return;
+    nav.querySelectorAll("button").forEach(b=>b.classList.remove("active"));
+    nav.querySelector('[data-v10="stats"]')?.classList.add("active");
+  }
+
+  function bindStatsNavigation(){
+    ensureStatsView();
+    const nav=document.querySelector("nav.dt-v10-nav");
+    const btn=nav?.querySelector('[data-v10="stats"]');
+    if(btn && btn.dataset.v24Stats!=="1"){
+      btn.dataset.v24Stats="1";
+      btn.onclick=openStatsDestination;
+    }
+
+    const more=document.getElementById("dtV10MoreModal");
+    const moreStats=more?.querySelector('[data-more="stats"]');
+    if(moreStats && moreStats.dataset.v24Stats!=="1"){
+      moreStats.dataset.v24Stats="1";
+      moreStats.onclick=()=>{
+        more.classList.remove("show");
+        openStatsDestination();
+      };
+    }
+  }
+
+  /* Refresh stats whenever a saved workout can change the underlying numbers. */
+  const statsObserver=new MutationObserver(()=>{
+    bindStatsNavigation();
+    updateStatsNavState();
+  });
+  document.querySelectorAll(".view").forEach(v=>statsObserver.observe(v,{attributes:true,attributeFilter:["class"]}));
+
+  /* ---------------------------
+     Swipe-to-dismiss sheets
+     --------------------------- */
+  const SWIPE_TARGETS=[
+    ["#dtV10MoreModal",".dt-more-sheet"],
+    ["#dtGoalsModal",".dt-g-sheet"],
+    ["#dtSplitModal",".dt-split-sheet"],
+    ["#dtTrainingScheduleModal",".dt-sched-sheet"],
+    ["#dtHistoryDayModal",".dt-history-day-sheet"],
+    ["#dtWorkoutResetModal",".dt-data-sheet"],
+    ["#dtReminderModal",".dt-rem-sheet"],
+    ["#exerciseModal",".sheet"],
+    ["#editExerciseModal",".sheet"],
+    ["#effortModal",".sheet"],
+    ["#muscleDetailModal",".sheet"]
+  ];
+
+  function dismissOverlay(overlay,sheet){
+    sheet.classList.add("dt-v24-dismiss");
+    setTimeout(()=>{
+      overlay.classList.remove("show");
+      sheet.classList.remove("dt-v24-dismiss");
+      sheet.style.transform="";
+      sheet.style.opacity="";
+    },175);
+  }
+
+  function bindSwipe(overlaySelector,sheetSelector){
+    const overlay=document.querySelector(overlaySelector);
+    const sheet=overlay?.querySelector(sheetSelector);
+    if(!overlay||!sheet||sheet.dataset.v24Swipe==="1")return;
+    sheet.dataset.v24Swipe="1";
+    sheet.classList.add("dt-v24-swipe-sheet");
+
+    if(!sheet.querySelector(":scope > .dt-v24-grab")){
+      const grab=document.createElement("div");
+      grab.className="dt-v24-grab";
+      grab.setAttribute("aria-hidden","true");
+      sheet.insertBefore(grab,sheet.firstChild);
+    }
+
+    let sy=0,dy=0,drag=false,startedAt=0;
+    sheet.addEventListener("touchstart",e=>{
+      const scroller=sheet.scrollTop||0;
+      if(scroller>1)return;
+      const t=e.changedTouches?.[0];if(!t)return;
+      sy=t.clientY;dy=0;drag=true;startedAt=performance.now();
+    },{passive:true});
+
+    sheet.addEventListener("touchmove",e=>{
+      if(!drag)return;
+      const t=e.changedTouches?.[0];if(!t)return;
+      dy=Math.max(0,t.clientY-sy);
+      if(dy<4)return;
+      sheet.classList.add("dt-v24-dragging");
+      sheet.style.transform=`translateY(${Math.min(170,dy)}px)`;
+      sheet.style.opacity=String(Math.max(.62,1-dy/520));
+    },{passive:true});
+
+    sheet.addEventListener("touchend",()=>{
+      if(!drag)return;
+      drag=false;
+      sheet.classList.remove("dt-v24-dragging");
+      const velocity=dy/Math.max(1,performance.now()-startedAt);
+      if(dy>=82||velocity>.62){
+        dismissOverlay(overlay,sheet);
+      }else{
+        sheet.style.transform="";
+        sheet.style.opacity="";
+      }
+    },{passive:true});
+  }
+
+  function bindTemporarySurfaces(){
+    SWIPE_TARGETS.forEach(args=>bindSwipe(...args));
+  }
+
+  const overlayObserver=new MutationObserver(()=>{
+    clearTimeout(overlayObserver._t);
+    overlayObserver._t=setTimeout(()=>{
+      bindStatsNavigation();
+      bindTemporarySurfaces();
+    },40);
+  });
+  overlayObserver.observe(document.body,{childList:true,subtree:true});
+
+  function boot(){
+    ensureStatsView();
+    bindStatsNavigation();
+    bindTemporarySurfaces();
+    updateStatsNavState();
+  }
+  document.readyState==="loading"?document.addEventListener("DOMContentLoaded",boot):boot();
+  setTimeout(boot,450);
+  setTimeout(boot,1200);
+
+  window.dtOpenStatsDestination=openStatsDestination;
+  window.DT_UI_SHELL_VERSION=V;
+})();
+</script>
+
+<script id="dt-v25-smart-coach-js">
+(()=>{
+  "use strict";
+  const V="25.0-smart-coach";
+
+  /* ---------------------------------------------------------
+     Smart starting-weight suggestion.
+     Used only when the user has never logged the exact exercise
+     before — does not alter behavior once real history exists.
+     Reuses the existing DT_EXERCISE_LIBRARY; adds nothing to it.
+     --------------------------------------------------------- */
+  function dtNormEx(name){return String(name||"").toLowerCase().replace(/[^a-z0-9]+/g," ").replace(/\s+/g," ").trim()}
+
+  function dtFindLibraryEntry(name){
+    const lib=(window.DT_EXERCISE_LIBRARY||(typeof DT_EXERCISE_LIBRARY!=="undefined"?DT_EXERCISE_LIBRARY:null));
+    if(!lib)return null;
+    const norm=dtNormEx(name);
+    if(!norm)return null;
+    let hit=lib.find(x=>dtNormEx(x.name)===norm);
+    if(hit)return hit;
+    hit=lib.find(x=>(x.aliases||[]).some(a=>dtNormEx(a)===norm));
+    if(hit)return hit;
+    hit=lib.find(x=>norm.includes(dtNormEx(x.name))&&dtNormEx(x.name).length>3);
+    if(hit)return hit;
+    hit=lib.find(x=>(x.aliases||[]).some(a=>norm.includes(dtNormEx(a))&&dtNormEx(a).length>3));
+    return hit||null;
+  }
+
+  function dtEquipKey(equipStr){
+    const first=String(equipStr||"").split("/")[0].trim();
+    return first||"default";
+  }
+
+  const DT_EQUIP_START_KG={
+    "Barbell":20,"Dumbbells":5,"Dumbbell":5,"EZ Bar":10,"Machine":15,"Cable":10,
+    "Smith Machine":20,"Plate-Loaded":20,"Bodyweight":0,"Kettlebell":8,
+    "Leg Press":40,"Landmine":10,"T-Bar":15,"Sled":10,"Trap Bar":20,"Ab Wheel":0,"Weight":5,"Dip Station":0
+  };
+  function dtDefaultStartKg(equipStr){
+    const key=dtEquipKey(equipStr);
+    return DT_EQUIP_START_KG[key]!=null?DT_EQUIP_START_KG[key]:10;
+  }
+
+  function dtRecentWeightFor(exerciseName){
+    const nname=dtNormEx(exerciseName);
+    const rows=(state.workouts?.completedExercises||[]).filter(x=>dtNormEx(x.name)===nname);
+    if(!rows.length)return null;
+    rows.sort((a,b)=>String(b.finalizedAt||b.dayKey||"").localeCompare(String(a.finalizedAt||a.dayKey||"")));
+    for(const r of rows){
+      const sets=(r.sets||[]).filter(s=>(+s.kg||0)>0&&(+s.reps||0)>0);
+      if(sets.length){
+        const best=sets.reduce((a,b)=>(+a.kg||0)>=(+b.kg||0)?a:b);
+        return {kg:+best.kg,reps:+best.reps,date:String(r.finalizedAt||r.dayKey||"").slice(0,10)};
+      }
+    }
+    return null;
+  }
+
+  function dtSuggestStartWeight(exerciseName){
+    try{
+      const entry=dtFindLibraryEntry(exerciseName);
+      if(!entry)return {kg:null,confidence:"unknown",label:""};
+      const targetEquip=dtEquipKey(entry.equipment);
+      const targetMuscles=entry.primaryMuscles||[];
+      const trainedNames=new Set();
+      (state.workouts?.completedExercises||[]).forEach(x=>{if(x.name)trainedNames.add(x.name)});
+
+      let best=null,bestScore=-1,bestSameEquip=false;
+      trainedNames.forEach(tn=>{
+        if(dtNormEx(tn)===dtNormEx(exerciseName))return;
+        const libE=dtFindLibraryEntry(tn);
+        if(!libE)return;
+        let score=0;
+        const sameEquip=dtEquipKey(libE.equipment)===targetEquip;
+        if(libE.movementPattern&&libE.movementPattern===entry.movementPattern)score+=3;
+        const overlap=(libE.primaryMuscles||[]).filter(m=>targetMuscles.includes(m)).length;
+        score+=overlap*2;
+        if(sameEquip)score+=1;
+        if(score>bestScore&&score>0){
+          const recent=dtRecentWeightFor(tn);
+          if(recent){bestScore=score;best=recent;best.name=tn;bestSameEquip=sameEquip}
+        }
+      });
+
+      if(best&&bestScore>0){
+        const factor=bestSameEquip?1:0.7;
+        const kg=Math.round(best.kg*factor*2)/2;
+        return {kg,confidence:bestSameEquip?"similar-same-equip":"similar-diff-equip",label:`rough estimate based on your ${best.name}`};
+      }
+      const def=dtDefaultStartKg(entry.equipment);
+      return {kg:def>0?def:null,confidence:"default",label:def>0?`general starting point for ${targetEquip}`:"bodyweight — no added load needed"};
+    }catch(e){console.warn("Smart weight suggestion failed",e);return {kg:null,confidence:"unknown",label:""}}
+  }
+
+  window.dtSuggestStartWeight=dtSuggestStartWeight;
+  window.DT_SMART_COACH_VERSION=V;
+})();
+</script>
+
+
+<style id="dt-v25-recovery-css">
+.dt-recovery-strip{margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)}
+.dt-recovery-title{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#6f8896;margin-bottom:8px}
+.dt-recovery-chips{display:flex;flex-wrap:wrap;gap:6px}
+.dt-recovery-chip{display:flex;align-items:center;gap:5px;padding:6px 10px;border-radius:999px;background:#0b1a23;border:1px solid #1c3543;font-size:10px;color:#a9bcc6}
+.dt-recovery-chip b{color:#e4edf2;font-weight:800}
+.dt-recovery-dot{width:6px;height:6px;border-radius:50%;flex:none}
+.dt-recovery-ready{text-align:center;color:#5ddc9d;font-size:11px;padding:2px 0}
+</style>
+
+<script id="dt-v25-recovery-js">
+(()=>{
+  "use strict";
+  const V="25.0-recovery";
+
+  /* ---------------------------------------------------------
+     Per-muscle recovery / readiness estimate.
+     Reads state + already-exposed Training Body globals
+     (dtInferMeta, DT_EFFORT_MULT, DT_ROLE_WEIGHTS, dtSummaryLabel)
+     read-only. Renders its own strip after the existing card;
+     never edits Training Body's own markup or logic.
+     --------------------------------------------------------- */
+
+  function dtRecoveryBaseHours(effortMult){
+    const t=Math.max(0,Math.min(1,(effortMult-0.9)/0.2));
+    return 24+t*48;
+  }
+
+  function dtMuscleLastTrained(){
+    const inferMeta=window.dtInferMeta;
+    const effortMultTable=window.DT_EFFORT_MULT||{easy:.9,ideal:1,max:1.1};
+    const roleWeights=window.DT_ROLE_WEIGHTS||{primary:1,secondary:.55,stabilizer:.25};
+    const byMuscle={};
+    (state.workouts?.completedExercises||[]).forEach(rec=>{
+      const meta=(typeof inferMeta==="function")?inferMeta(rec.name,rec.muscle):null;
+      if(!meta)return;
+      const date=rec.finalizedAt||rec.dayKey;
+      if(!date)return;
+      const sets=(rec.sets||[]).filter(s=>(+s.reps||0)>0);
+      if(!sets.length)return;
+      const roles={primary:meta.primaryMuscles||[],secondary:meta.secondaryMuscles||[],stabilizer:meta.stabilizerMuscles||[]};
+      Object.entries(roles).forEach(([role,muscles])=>{
+        (muscles||[]).forEach(mKey=>{
+          if(!byMuscle[mKey])byMuscle[mKey]=[];
+          sets.forEach(s=>{
+            const em=effortMultTable[s.effort]||1;
+            const w=roleWeights[role]||0.5;
+            byMuscle[mKey].push({date,effortMult:em,weight:w});
+          });
+        });
+      });
+    });
+    const out={};
+    Object.keys(byMuscle).forEach(mKey=>{
+      const entries=byMuscle[mKey];
+      entries.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+      const mostRecentDate=entries[0].date;
+      const sameDay=entries.filter(e=>String(e.date).slice(0,10)===String(mostRecentDate).slice(0,10));
+      const wSum=sameDay.reduce((a,e)=>a+e.weight,0)||1;
+      const effMult=sameDay.reduce((a,e)=>a+e.effortMult*e.weight,0)/wSum;
+      out[mKey]={date:mostRecentDate,effortMult:effMult};
+    });
+    return out;
+  }
+
+  function dtMuscleRecoveryStatus(){
+    const now=Date.now();
+    const last=dtMuscleLastTrained();
+    const out={};
+    Object.keys(last).forEach(mKey=>{
+      const {date,effortMult}=last[mKey];
+      const trainedTime=new Date(date).getTime();
+      if(!isFinite(trainedTime))return;
+      const hoursSince=(now-trainedTime)/3600000;
+      const totalHours=dtRecoveryBaseHours(effortMult);
+      const pct=Math.max(0,Math.min(100,Math.round((hoursSince/totalHours)*100)));
+      const hoursLeft=Math.max(0,totalHours-hoursSince);
+      out[mKey]={pct,hoursLeft,recovering:pct<100};
+    });
+    return out;
+  }
+
+  function fmtHoursLeft(h){
+    if(h<1)return "<1h";
+    if(h<24)return `~${Math.round(h)}h`;
+    const d=h/24;
+    return `~${d.toFixed(d<2?1:0)}d`;
+  }
+
+  function renderRecoveryStrip(){
+    try{
+      const card=document.getElementById("dtTBCard");
+      if(!card)return;
+      const mode=card.querySelector(".dt-tb-tab.active")?.dataset.mode||"recent";
+      let strip=document.getElementById("dtRecoveryStrip");
+      if(mode!=="recent"){
+        if(strip)strip.style.display="none";
+        return;
+      }
+      const status=dtMuscleRecoveryStatus();
+      const keys=Object.keys(status);
+      if(!keys.length){
+        if(strip)strip.style.display="none";
+        return;
+      }
+      if(!strip){
+        strip=document.createElement("div");
+        strip.className="dt-recovery-strip";
+        strip.id="dtRecoveryStrip";
+        const list=document.getElementById("dtTBList");
+        if(list&&list.parentNode)list.parentNode.insertBefore(strip,list.nextSibling);
+        else return;
+      }
+      strip.style.display="";
+      const recovering=keys.filter(k=>status[k].recovering).sort((a,b)=>status[a].pct-status[b].pct);
+      const label=(k)=>(typeof window.dtSummaryLabel==="function")?window.dtSummaryLabel(k):String(k).replace(/_/g," ");
+      if(!recovering.length){
+        strip.innerHTML=`<div class="dt-recovery-title">Recovery</div><div class="dt-recovery-ready">💪 All recently-trained muscles are fully recovered</div>`;
+        return;
+      }
+      const chips=recovering.slice(0,8).map(k=>{
+        const s=status[k];
+        const color=s.pct<40?"#ef725c":s.pct<75?"#f1c65b":"#5ddc9d";
+        return `<div class="dt-recovery-chip"><span class="dt-recovery-dot" style="background:${color}"></span>${label(k)} <b>${s.pct}%</b> · ${fmtHoursLeft(s.hoursLeft)}</div>`;
+      }).join("");
+      strip.innerHTML=`<div class="dt-recovery-title">Recovery (estimate)</div><div class="dt-recovery-chips">${chips}</div>`;
+    }catch(e){console.warn("Recovery strip render failed",e)}
+  }
+
+  let patched=false;
+  function tryPatch(){
+    if(patched)return;
+    const fn=window.dtRenderBodyCard;
+    if(typeof fn!=="function")return;
+    patched=true;
+    window.dtRenderBodyCard=function(){
+      fn();
+      renderRecoveryStrip();
+    };
+  }
+  document.readyState==="loading"?document.addEventListener("DOMContentLoaded",tryPatch):tryPatch();
+  setTimeout(tryPatch,400);
+  setTimeout(tryPatch,1000);
+  setTimeout(tryPatch,2000);
+  // Also refresh on tab clicks inside the Training Body card, and shortly after initial boot.
+  document.addEventListener("click",e=>{
+    if(e.target.closest && e.target.closest(".dt-tb-tab")) setTimeout(renderRecoveryStrip,30);
+  });
+  setTimeout(renderRecoveryStrip,600);
+  setTimeout(renderRecoveryStrip,1500);
+  setTimeout(renderRecoveryStrip,2500);
+
+  window.dtMuscleRecoveryStatus=dtMuscleRecoveryStatus;
+  window.DT_RECOVERY_VERSION=V;
+})();
+</script>
+
+
+<style id="dt-v25-bodyfat-css">
+.dt-bf-card{margin-top:12px}
+.dt-bf-head{margin-bottom:12px}
+.dt-bf-head h2{font-size:18px;margin:2px 0 0}
+.dt-bf-togglerow{display:flex;gap:8px;margin-bottom:10px}
+.dt-bf-toggle-btn{flex:1;padding:9px 6px;border-radius:12px;border:1px solid #27404e;background:#0b1a24;color:#8199a5;font:750 11px system-ui}
+.dt-bf-toggle-btn.active{color:#5ee0a4;border-color:#2e9f6f;background:rgba(50,133,82,.16)}
+.dt-bf-inputs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.dt-bf-inputs label{font:700 9px system-ui;color:#708894;text-transform:uppercase;letter-spacing:.06em}
+.dt-bf-inputs input{width:100%;box-sizing:border-box;margin-top:5px;border:1px solid #27404e;border-radius:12px;padding:10px 11px;background:#0b1a24;color:#e8f0f3;font:750 12px system-ui;outline:none}
+.dt-bf-calc-btn{width:100%;padding:12px;border:0;border-radius:14px;background:linear-gradient(90deg,#226bd5,#3285ff);color:#fff;font-weight:900;font-size:12px}
+.dt-bf-result{margin-top:14px;padding:14px;border-radius:14px;background:#0a1b25;border:1px solid #1c3543;text-align:center}
+.dt-bf-result strong{display:block;font:900 26px system-ui;color:#eff6f8}
+.dt-bf-result span{display:block;margin-top:4px;font:650 10px system-ui;color:#8199a5}
+.dt-bf-note{margin-top:11px;font:500 9px/1.5 system-ui;color:#5c7381;text-align:center}
+</style>
+
+<script id="dt-v25-bodyfat-js">
+(()=>{
+  "use strict";
+  const V="25.0-bodyfat";
+
+  /* ---------------------------------------------------------
+     Offline body-fat % estimate (US Navy / Hodgdon-Beckett
+     circumference method). Formula verified against the
+     published Navy Health Research Center coefficients.
+     Renders its own card into the V24 Stats page; does not
+     touch Weekly Performance, Training Body, or Export.
+     --------------------------------------------------------- */
+
+  function dtCmToIn(cm){ return cm/2.54; }
+
+  function dtBodyFatPercent({sex,heightIn,neckIn,waistIn,hipIn}){
+    if(!(heightIn>0)||!(neckIn>0)||!(waistIn>0))return null;
+    if(sex==="female"){
+      if(!(hipIn>0))return null;
+      const cv=waistIn+hipIn-neckIn;
+      if(cv<=0)return null;
+      const denom=1.29579-0.35004*Math.log10(cv)+0.22100*Math.log10(heightIn);
+      if(denom<=0)return null;
+      return 495/denom-450;
+    }
+    const cv=waistIn-neckIn;
+    if(cv<=0)return null;
+    const denom=1.0324-0.19077*Math.log10(cv)+0.15456*Math.log10(heightIn);
+    if(denom<=0)return null;
+    return 495/denom-450;
+  }
+
+  function dtBodyFatFromInputs({sex,unit,height,neck,waist,hip}){
+    const conv=unit==="in"?(v)=>v:dtCmToIn;
+    const heightIn=conv(height),neckIn=conv(neck),waistIn=conv(waist),hipIn=(hip!=null&&hip!=="")?conv(hip):null;
+    const pct=dtBodyFatPercent({sex,heightIn,neckIn,waistIn,hipIn});
+    return pct==null?null:Math.round(pct*10)/10;
+  }
+
+  function loadSaved(){
+    return (state.bodyComp)||{sex:"male",unit:"cm",height:"",neck:"",waist:"",hip:""};
+  }
+  function persist(data){
+    try{ state.bodyComp={...loadSaved(),...data}; save(); }catch(e){console.warn("Could not save body composition inputs",e)}
+  }
+
+  function cardHTML(saved){
+    return `
+      <div class="dt-bf-head">
+        <div class="label">BODY COMPOSITION</div>
+        <h2>Estimate your body fat %</h2>
+      </div>
+      <div class="dt-bf-togglerow" id="dtBfSexRow">
+        <button type="button" class="dt-bf-toggle-btn${saved.sex==="male"?" active":""}" data-sex="male">Male</button>
+        <button type="button" class="dt-bf-toggle-btn${saved.sex==="female"?" active":""}" data-sex="female">Female</button>
+      </div>
+      <div class="dt-bf-togglerow" id="dtBfUnitRow">
+        <button type="button" class="dt-bf-toggle-btn${saved.unit!=="in"?" active":""}" data-unit="cm">cm</button>
+        <button type="button" class="dt-bf-toggle-btn${saved.unit==="in"?" active":""}" data-unit="in">in</button>
+      </div>
+      <div class="dt-bf-inputs">
+        <label>Height<input id="dtBfHeight" type="number" inputmode="decimal" value="${saved.height||""}"></label>
+        <label>Neck<input id="dtBfNeck" type="number" inputmode="decimal" value="${saved.neck||""}"></label>
+        <label>Waist<input id="dtBfWaist" type="number" inputmode="decimal" value="${saved.waist||""}"></label>
+        <label id="dtBfHipLabel" style="display:${saved.sex==="female"?"":"none"}">Hip<input id="dtBfHip" type="number" inputmode="decimal" value="${saved.hip||""}"></label>
+      </div>
+      <button type="button" class="dt-bf-calc-btn" id="dtBfCalc">Calculate</button>
+      <div class="dt-bf-result" id="dtBfResult" style="display:none">
+        <strong id="dtBfPct">—</strong>
+        <span>estimated body fat</span>
+      </div>
+      <div class="dt-bf-note">Estimate only, using the US Navy circumference method — typically within ±3–4% of lab measurement methods. Not a medical diagnosis; track the trend over time rather than any single reading.</div>`;
+  }
+
+  function bindCard(card){
+    const saved=loadSaved();
+    let sex=saved.sex||"male", unit=saved.unit||"cm";
+
+    card.querySelectorAll("#dtBfSexRow .dt-bf-toggle-btn").forEach(btn=>{
+      btn.onclick=()=>{
+        sex=btn.dataset.sex;
+        card.querySelectorAll("#dtBfSexRow .dt-bf-toggle-btn").forEach(b=>b.classList.toggle("active",b===btn));
+        const hipLabel=card.querySelector("#dtBfHipLabel");
+        if(hipLabel)hipLabel.style.display=sex==="female"?"":"none";
+        persist({sex});
+      };
+    });
+    card.querySelectorAll("#dtBfUnitRow .dt-bf-toggle-btn").forEach(btn=>{
+      btn.onclick=()=>{
+        unit=btn.dataset.unit;
+        card.querySelectorAll("#dtBfUnitRow .dt-bf-toggle-btn").forEach(b=>b.classList.toggle("active",b===btn));
+        persist({unit});
+      };
+    });
+    ["Height","Neck","Waist","Hip"].forEach(key=>{
+      const input=card.querySelector(`#dtBf${key}`);
+      if(input)input.addEventListener("input",()=>persist({[key.toLowerCase()]:input.value}));
+    });
+    const calcBtn=card.querySelector("#dtBfCalc");
+    if(calcBtn)calcBtn.onclick=()=>{
+      const height=parseFloat(card.querySelector("#dtBfHeight")?.value);
+      const neck=parseFloat(card.querySelector("#dtBfNeck")?.value);
+      const waist=parseFloat(card.querySelector("#dtBfWaist")?.value);
+      const hip=sex==="female"?parseFloat(card.querySelector("#dtBfHip")?.value):null;
+      const pct=dtBodyFatFromInputs({sex,unit,height,neck,waist,hip});
+      const resultEl=card.querySelector("#dtBfResult"), pctEl=card.querySelector("#dtBfPct");
+      if(pct==null){
+        if(pctEl)pctEl.textContent="—";
+        if(resultEl){resultEl.style.display="";resultEl.querySelector("span").textContent="Check your measurements and try again";}
+        return;
+      }
+      if(pctEl)pctEl.textContent=`${pct}%`;
+      if(resultEl){resultEl.style.display="";resultEl.querySelector("span").textContent="estimated body fat";}
+    };
+  }
+
+  function ensureBodyFatCard(){
+    try{
+      const host=document.getElementById("dtV24StatsHost");
+      if(!host)return;
+      let card=document.getElementById("dtBodyFatCard");
+      if(card&&host.contains(card))return;
+      card=document.createElement("div");
+      card.className="card dt-bf-card";
+      card.id="dtBodyFatCard";
+      card.innerHTML=cardHTML(loadSaved());
+      host.appendChild(card);
+      bindCard(card);
+    }catch(e){console.warn("Body fat card render failed",e)}
+  }
+
+  new MutationObserver(()=>{ ensureBodyFatCard(); }).observe(document.body,{childList:true,subtree:true});
+  setTimeout(ensureBodyFatCard,500);
+  setTimeout(ensureBodyFatCard,1400);
+  setTimeout(ensureBodyFatCard,2600);
+
+  window.dtBodyFatFromInputs=dtBodyFatFromInputs;
+  window.DT_BODYFAT_VERSION=V;
+})();
+</script>
+
 </body>
 </html>
