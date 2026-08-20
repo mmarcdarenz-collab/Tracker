@@ -2305,7 +2305,11 @@ let calendarDate=new Date();
 let currentAction=null;
 let transferDirection="toSavings";
 
-const todayKey=()=>new Date().toISOString().slice(0,10);
+const todayKey=()=>{
+  const d=new Date();
+  const p=n=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+};
 const convertMoney=n=>{
   const c=state.money.currency||"AUD";
   const rate=(state.money.fx&&state.money.fx.rates&&state.money.fx.rates[c])||1;
@@ -2597,7 +2601,7 @@ function renderToday(){
   if(pr) pr.style.setProperty("--p",res.pct);
   const msg=document.getElementById("todayCompleteText");
   if(msg) msg.textContent=res.pct===100?"✓ All tasks completed!":res.pct>=80?"Daily goal reached ✓":"Keep going.";
-  document.getElementById("streakToday").textContent=(typeof currentStreak==="function"?currentStreak():streakCount())+" days";
+  document.getElementById("streakToday").textContent=(typeof window.dtCurrentWorkoutStreak==="function"?window.dtCurrentWorkoutStreak():streakCount())+" days";
   if(res.pct===100 && old<100 && pr){
     pr.animate([{transform:"scale(1)"},{transform:"scale(1.06)",filter:"drop-shadow(0 0 18px rgba(84,224,151,.8))"},{transform:"scale(1)"}],{duration:700,easing:"ease"});
   }
@@ -2630,17 +2634,29 @@ function renderSpark(){
 
 function renderCalendar(){
   const y=calendarDate.getFullYear(),m=calendarDate.getMonth();
+  const pad=n=>String(n).padStart(2,"0");
+  const localKeyFromDate=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const recordKey=x=>{
+    const raw=x?.finalizedAt||x?.date||x?.startedAt||"";
+    if(raw){
+      const dt=new Date(raw);
+      if(Number.isFinite(dt.getTime()))return localKeyFromDate(dt);
+    }
+    return String(x?.dayKey||"").slice(0,10);
+  };
+
   document.getElementById("monthTitle").textContent=calendarDate.toLocaleDateString("en-AU",{month:"long",year:"numeric"});
   const cal=document.getElementById("cal");cal.innerHTML="";
   const first=new Date(y,m,1).getDay(),count=new Date(y,m+1,0).getDate();
   for(let i=0;i<first;i++){const e=document.createElement("button");e.className="day empty";cal.appendChild(e)}
   for(let d=1;d<=count;d++){
-    const dt=new Date(y,m,d),key=dt.toISOString().slice(0,10),r=state.days[key];
-    const sessions=(state.workouts?.sessions||[]).filter(s=>String(s.date||"").slice(0,10)===key);
+    const key=`${y}-${pad(m+1)}-${pad(d)}`,r=state.days[key];
+    const sessions=(state.workouts?.sessions||[]).filter(s=>recordKey(s)===key);
+    const activities=(state.workouts?.completedExercises||[]).filter(x=>recordKey(x)===key);
     const b=document.createElement("button");b.className="day";b.textContent=d;
     b.dataset.date=key;
     if(key===todayKey())b.classList.add("today");
-    if(sessions.length)b.classList.add("has-workout");
+    if(sessions.length||activities.length)b.classList.add("has-workout");
     if(r){const p=r.percent??getPct(r).pct;b.classList.add(p>=80?"done":p>0?"partial":"missed")}
     b.onclick=()=>window.dtOpenHistoryDay?.(key);
     cal.appendChild(b);
@@ -2658,13 +2674,15 @@ function renderRecent(){
 }
 function last7(){
   let arr=[],now=new Date();
-  for(let i=6;i>=0;i--){let d=new Date(now);d.setDate(now.getDate()-i);let k=d.toISOString().slice(0,10);arr.push({d,k,r:state.days[k]})}
+  const p=n=>String(n).padStart(2,"0");
+  const key=d=>`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+  for(let i=6;i>=0;i--){let d=new Date(now);d.setDate(now.getDate()-i);let k=key(d);arr.push({d,k,r:state.days[k]})}
   return arr;
 }
 function renderWeekly(){
   const days=last7(),scores=days.map(x=>x.r?.percent||0),avg=Math.round(scores.reduce((a,b)=>a+b,0)/7);
   document.getElementById("weeklyScore").textContent=avg+"%";document.getElementById("geoFill").style.width=avg+"%";
-  document.getElementById("weeklyStreak").textContent=(typeof currentStreak==="function"?currentStreak():streakCount())+" day streak";
+  document.getElementById("weeklyStreak").textContent=(typeof window.dtCurrentWorkoutStreak==="function"?window.dtCurrentWorkoutStreak():streakCount())+" day streak";
   const row=document.getElementById("hexRow");row.innerHTML="";
   days.forEach(x=>{
     const p=x.r?.percent||0,w=document.createElement("div");w.className="hexwrap";
@@ -2980,7 +2998,7 @@ function renderWorkoutHistory(){
   const sessions=(state.workouts?.sessions||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
   list.innerHTML="";
   if(!sessions.length){
-    list.innerHTML='<div class="workout-history-empty">No saved workouts yet.</div>';
+    list.innerHTML='<div class="workout-history-empty">No completed workout sessions yet.</div>';
     return;
   }
 
@@ -4052,7 +4070,11 @@ renderTrainingGoal();
 
     persistNow();
     if(typeof renderWorkoutHistory === "function") renderWorkoutHistory();
+    if(typeof renderHistory === "function") renderHistory();
+    if(typeof renderToday === "function") renderToday();
     if(typeof renderTodayDashboardExtras === "function") renderTodayDashboardExtras();
+    if(typeof window.dtRenderBodyCard === "function") window.dtRenderBodyCard();
+    if(document.querySelector(".view.active")?.id==="stats" && typeof window.dtOpenStatsDestination==="function")window.dtOpenStatsDestination();
     if(typeof renderWorkout === "function") renderWorkout();
   }
 
@@ -5906,16 +5928,28 @@ window.DT_PROGRESS_ANALYTICS_VERSION=DT_V5;
 'use strict';
 const DT_V6='6.0-weekly-performance';
 const DAY=86400000;
-function dateKey(d){return d.toISOString().slice(0,10)}
+function dateKey(d){
+  const p=n=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
 function weekBounds(offset=0){const now=new Date();now.setHours(12,0,0,0);const day=(now.getDay()+6)%7;const start=new Date(now.getTime()-day*DAY+offset*7*DAY);const end=new Date(start.getTime()+6*DAY);return {start,end,keys:Array.from({length:7},(_,i)=>dateKey(new Date(start.getTime()+i*DAY)))}}
 function sessionsInWeek(w){return (state.workouts?.sessions||[]).filter(s=>{const k=String(s.date||s.dayKey||'').slice(0,10);return w.keys.includes(k)})}
-function completedInWeek(w){return (state.workouts?.completedExercises||[]).filter(x=>w.keys.includes(String(x.dayKey||x.finalizedAt||'').slice(0,10)))}
-function validSets(x){return (x.sets||[]).filter(s=>(+s.kg||0)>0&&(+s.reps||0)>0)}
+function completedInWeek(w){return (state.workouts?.completedExercises||[]).filter(x=>w.keys.includes(workoutRecordDayKey(x)))}
+function validSets(x){return (x.sets||[]).filter(s=>Number.isFinite(Number(s.kg))&&Number(s.reps)>0)}
 function e1rm(s){return (+s.kg||0)*(1+Math.min(+s.reps||0,30)/30)}
 function sessionIds(rows){const ids=new Set();rows.forEach(x=>ids.add(`${x.dayKey||String(x.finalizedAt||'').slice(0,10)}|${x.day||''}`));return ids.size}
 function muscleName(raw){return String(raw||'Other').split('/')[0].split(',')[0].trim()||'Other'}
-function allDayKeys(){const set=new Set();(state.workouts?.completedExercises||[]).forEach(x=>{const k=String(x.dayKey||x.finalizedAt||'').slice(0,10);if(k)set.add(k)});return set}
+function workoutRecordDayKey(x){
+  const raw=x?.finalizedAt||x?.startedAt||"";
+  if(raw){
+    const d=new Date(raw);
+    if(Number.isFinite(d.getTime()))return dateKey(d);
+  }
+  return String(x?.dayKey||"").slice(0,10);
+}
+function allDayKeys(){const set=new Set();(state.workouts?.completedExercises||[]).forEach(x=>{const k=workoutRecordDayKey(x);if(k)set.add(k)});return set}
 function currentStreak(){const days=allDayKeys();if(!days.size)return 0;const today=new Date();today.setHours(12,0,0,0);let cursor=new Date(today);if(!days.has(dateKey(cursor)))cursor=new Date(cursor.getTime()-DAY);let streak=0;while(days.has(dateKey(cursor))){streak++;cursor=new Date(cursor.getTime()-DAY)}return streak}
+window.dtCurrentWorkoutStreak=currentStreak;
 function muscleTotals(rows){const m={};rows.forEach(x=>{const sets=validSets(x).length;if(!sets)return;const parts=String(x.muscle||'Other').split(/[/,]/).map(s=>s.trim()).filter(Boolean);const share=sets/Math.max(parts.length,1);parts.forEach(p=>m[p]=(m[p]||0)+share)});return Object.entries(m).sort((a,b)=>b[1]-a[1])}
 function prList(rows,w){
  const before=(state.workouts?.completedExercises||[]).filter(x=>String(x.dayKey||x.finalizedAt||'').slice(0,10)<w.keys[0]);
@@ -5925,7 +5959,7 @@ function prList(rows,w){
 function ensure(){if(document.getElementById('dtWeeklyPerformanceModal'))return;const m=document.createElement('div');m.id='dtWeeklyPerformanceModal';m.innerHTML='<section class="dt-wp-sheet"><div id="dtWpContent"></div></section>';m.onclick=e=>{if(e.target===m)m.classList.remove('show')};document.body.appendChild(m)}
 function fmtRange(w){const f=d=>new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric'}).format(d);return `${f(w.start)} – ${f(w.end)}`}
 function insight(rows,muscles,prs,sessions,streak){if(!rows.length)return ['•','Build the week','Complete your first workout this week and this dashboard will start comparing your streak, working sets and progression.'];if(prs.length)return ['↑',`${prs.length} new PR${prs.length===1?'':'s'}`,`Performance moved forward this week. Keep progression conservative and preserve good reps rather than forcing a load increase every session.`];if(sessions>=3)return ['🔥',`${streak}-day streak`,`You logged ${sessions} workout sessions. ${muscles[0]?`${muscles[0][0]} received the most logged set emphasis.`:''}`];return ['→','Keep building',`You have ${sessions} completed workout${sessions===1?'':'s'} this week. The dashboard will become more useful as completed sessions accumulate.`]}
-function openWeekly(){ensure();const w=weekBounds(),rows=completedInWeek(w),sessions=sessionIds(rows),sets=rows.reduce((n,x)=>n+validSets(x).length,0),volume=Math.round(rows.reduce((n,x)=>n+validSets(x).reduce((a,s)=>a+(+s.kg)*(+s.reps),0),0)),muscles=muscleTotals(rows),prs=prList(rows,w),totalM=muscles.reduce((a,x)=>a+x[1],0)||1,active=new Set(rows.map(x=>String(x.dayKey||x.finalizedAt||'').slice(0,10))),streak=currentStreak(),ins=insight(rows,muscles,prs,sessions,streak);
+function openWeekly(){ensure();const w=weekBounds(),rows=completedInWeek(w),sessions=sessionIds(rows),sets=rows.reduce((n,x)=>n+validSets(x).length,0),volume=Math.round(rows.reduce((n,x)=>n+validSets(x).reduce((a,s)=>a+(+s.kg)*(+s.reps),0),0)),muscles=muscleTotals(rows),prs=prList(rows,w),totalM=muscles.reduce((a,x)=>a+x[1],0)||1,active=new Set(rows.map(x=>workoutRecordDayKey(x))),streak=currentStreak(),ins=insight(rows,muscles,prs,sessions,streak);
  const muscleHtml=muscles.length?muscles.slice(0,6).map(([name,v])=>{const pct=Math.round(v/totalM*100),on=Math.max(1,Math.round(pct/10));return `<div class="dt-wp-muscle-line"><b>${name}</b><div class="dt-wp-track">${Array.from({length:10},(_,i)=>`<i class="${i<on?'on':''}"></i>`).join('')}</div><strong>${pct}%</strong></div>`}).join(''):'<div class="dt-wp-sub">Muscle emphasis appears after completed workout sets.</div>';
  const prHtml=prs.length?prs.slice(0,5).map(p=>`<div class="dt-wp-pr"><div><b>${p.name}</b><span>${p.date}</span></div><strong>🏆 ${p.kg} × ${p.reps}</strong></div>`).join(''):'<div class="dt-wp-sub">No new performance records detected this week.</div>';
  document.getElementById('dtWpContent').innerHTML=`<div class="dt-wp-head"><div><div class="dt-wp-kicker">Weekly Performance</div><div class="dt-wp-title">Your training week</div><div class="dt-wp-sub">${fmtRange(w)}</div></div><button class="dt-wp-close" onclick="document.getElementById('dtWeeklyPerformanceModal').classList.remove('show')">×</button></div><div class="dt-wp-grid"><div class="dt-wp-stat"><small>Workouts</small><strong>${sessions}</strong><em>completed</em></div><div class="dt-wp-stat"><small>Working sets</small><strong>${sets}</strong><em>logged sets</em></div><div class="dt-wp-stat"><small>Volume load</small><strong>${volume?volume.toLocaleString():'—'}</strong><em>${volume?'kg logged':'no data'}</em></div><div class="dt-wp-stat"><small>PRs</small><strong>${prs.length}</strong><em>this week</em></div></div><div class="dt-wp-card"><h4>🔥 Streak</h4><div class="dt-wp-streak-count">${streak} day${streak===1?'':'s'}</div><div class="dt-wp-days">${w.keys.map((k,i)=>`<div class="dt-wp-day ${active.has(k)?'on':''}"><i></i><span>${['M','T','W','T','F','S','S'][i]}</span></div>`).join('')}</div></div><div class="dt-wp-card"><h4>Logged set emphasis</h4><div class="dt-wp-muscles">${muscleHtml}</div><div class="dt-wp-foot">Relative share of your logged working sets this week.</div></div><div class="dt-wp-card"><h4>Performance records</h4><div class="dt-wp-prs">${prHtml}</div></div><div class="dt-wp-card"><h4>Weekly insight</h4><div class="dt-wp-insight"><div class="dt-wp-insight-icon">${ins[0]}</div><div><b>${ins[1]}</b><span>${ins[2]}</span></div></div></div>`;document.getElementById('dtWeeklyPerformanceModal').classList.add('show')}
@@ -6445,9 +6479,12 @@ function resetWorkoutData(){
   try{
     if(typeof save==="function")save();
     if(typeof renderWorkoutHistory==="function")renderWorkoutHistory();
+    if(typeof renderHistory==="function")renderHistory();
     if(typeof renderToday==="function")renderToday();
     if(typeof renderWorkout==="function")renderWorkout();
     if(typeof dtRenderTodayWorkoutResult==="function")dtRenderTodayWorkoutResult();
+    if(typeof window.dtRenderBodyCard==="function")window.dtRenderBodyCard();
+    if(document.querySelector(".view.active")?.id==="stats" && typeof window.dtOpenStatsDestination==="function")window.dtOpenStatsDestination();
   }catch(e){console.warn("Workout reset render failed",e)}
 }
 function loadDemoData(){
@@ -9967,38 +10004,74 @@ window.dtRemoveWorkoutSet=removeSet;
   function sessionExercises(s){
     try{return workoutSessionExercises(s)}catch(_){return s.snapshot||[]}
   }
-  function daySessions(key){
+  function localHistoryKey(value,fallback=""){
+    if(value){
+      const d=new Date(value);
+      if(Number.isFinite(d.getTime())){
+        const p=n=>String(n).padStart(2,"0");
+        return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+      }
+    }
+    return String(fallback||"").slice(0,10);
+  }
+function daySessions(key){
     return (state.workouts?.sessions||[])
-      .filter(s=>String(s.date||"").slice(0,10)===key)
+      .filter(s=>localHistoryKey(s.date,s.dayKey)===key)
       .sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  }
+  function dayActivities(key){
+    return (state.workouts?.completedExercises||[])
+      .filter(x=>localHistoryKey(x.finalizedAt||x.startedAt,x.dayKey)===key)
+      .sort((a,b)=>String(a.finalizedAt||a.startedAt).localeCompare(String(b.finalizedAt||b.startedAt)));
   }
   function openDay(key){
     const m=ensureDayModal(),body=m.querySelector("#dtHistoryDayBody");
     const date=new Date(key+"T12:00:00");
     m.querySelector("#dtHistoryDayTitle").textContent=date.toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short",year:"numeric"});
     const sessions=daySessions(key);
+    const activities=dayActivities(key);
 
-    if(!sessions.length){
-      body.innerHTML=`<div class="dt-hd-empty"><b>No workout sessions this day</b><span>Once a workout is finished and saved, it will appear here.</span></div>`;
-    }else{
-      body.innerHTML=sessions.map(s=>{
-        const when=new Date(s.date);
-        const title=typeof workoutDayLabel==="function"?workoutDayLabel(s.day):(s.day||"Workout");
-        const time=when.toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit",hour12:true});
-        const ex=sessionExercises(s);
-        const details=ex.map(e=>{
-          const logged=(e.sets||[]).filter(x=>x.kg||x.reps||x.effort);
-          const top=logged.slice(0,3).map(x=>formatLift(x.kg,x.reps)).join(" · ");
-          return logged.length?`<div class="dt-hd-ex"><b>${e.name}</b><span>${top}${logged.length>3?" …":""}</span></div>`:"";
-        }).join("");
-        return `<article class="dt-hd-session">
-          <div class="dt-hd-session-top">
-            <div class="dt-hd-session-title"><b>${title}</b><small>${time}</small></div>
-            <div class="dt-hd-setcount">${sessionSets(s)} sets</div>
-          </div>
-          <div class="dt-hd-exercises">${details||'<div class="dt-hd-ex"><b>No detailed set data</b></div>'}</div>
-        </article>`;
+    const sessionHtml=sessions.map(s=>{
+      const when=new Date(s.date);
+      const title=typeof workoutDayLabel==="function"?workoutDayLabel(s.day):(s.day||"Workout");
+      const time=when.toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit",hour12:true});
+      const ex=sessionExercises(s);
+      const details=ex.map(e=>{
+        const logged=(e.sets||[]).filter(x=>x.kg||x.reps||x.effort);
+        const top=logged.slice(0,3).map(x=>formatLift(x.kg,x.reps)).join(" · ");
+        return logged.length?`<div class="dt-hd-ex"><b>${e.name}</b><span>${top}${logged.length>3?" …":""}</span></div>`:"";
       }).join("");
+      return `<article class="dt-hd-session">
+        <div class="dt-hd-session-top">
+          <div class="dt-hd-session-title"><b>${title}</b><small>${time}</small></div>
+          <div class="dt-hd-setcount">${sessionSets(s)} sets</div>
+        </div>
+        <div class="dt-hd-exercises">${details||'<div class="dt-hd-ex"><b>No detailed set data</b></div>'}</div>
+      </article>`;
+    }).join("");
+
+    /* Full workout sessions already contain their component exercises.
+       Only show individual activity records separately when there is no
+       completed session for the date, avoiding duplicate history. */
+    const activityHtml=!sessions.length?activities.map(rec=>{
+      const when=new Date(rec.finalizedAt||rec.startedAt);
+      const time=when.toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit",hour12:true});
+      const logged=(rec.sets||[]).filter(x=>x.kg||x.reps||x.effort);
+      const details=logged.map(x=>formatLift(x.kg,x.reps)).join(" · ");
+      const title=typeof workoutDayLabel==="function"?workoutDayLabel(rec.day):(rec.day||"Workout");
+      return `<article class="dt-hd-session">
+        <div class="dt-hd-session-top">
+          <div class="dt-hd-session-title"><b>${rec.name||"Saved activity"}</b><small>${title} · ${time}</small></div>
+          <div class="dt-hd-setcount">${logged.length} set${logged.length===1?"":"s"}</div>
+        </div>
+        <div class="dt-hd-exercises"><div class="dt-hd-ex"><b>${rec.muscle||"Logged activity"}</b><span>${details||"No set details"}</span></div></div>
+      </article>`;
+    }).join(""):"";
+
+    if(!sessionHtml&&!activityHtml){
+      body.innerHTML=`<div class="dt-hd-empty"><b>No workout activity this day</b><span>Completed workouts and individually saved activities will appear here.</span></div>`;
+    }else{
+      body.innerHTML=sessionHtml+activityHtml;
     }
     m.classList.add("show");
   }
@@ -10601,15 +10674,21 @@ nav.dt-v10-nav{
     const host=document.getElementById("dtV24StatsHost");
     if(!host)return;
 
-    /* Reuse the existing V23 weekly-performance renderer rather than
-       reimplementing its data logic. */
+    /*
+      Reuse the existing Weekly Performance renderer without cloning live IDs.
+      V24 previously cloned #dtWpContent into Stats, creating duplicate IDs.
+      Subsequent refreshes then updated the stale Stats clone instead of the
+      hidden source modal, which is why Stats only became correct after restart.
+    */
     try{
+      host.replaceChildren();
       window.dtOpenWeeklyPerformance?.();
       const modal=document.getElementById("dtWeeklyPerformanceModal");
       const sheet=modal?.querySelector(".dt-wp-sheet");
       if(sheet){
         const clone=sheet.cloneNode(true);
         clone.querySelector(".dt-wp-close")?.remove();
+        clone.querySelectorAll("[id]").forEach(el=>el.removeAttribute("id"));
         host.replaceChildren(clone);
         modal.classList.remove("show");
       }else{
@@ -11185,47 +11264,70 @@ nav.dt-v10-nav{
 
 
 <style id="dt-v25-swipe-hide-css">
-.exercise-head{background:#0b151e;position:relative;z-index:2;touch-action:pan-y}
+#workout .exercise[data-exkey]{
+  --dt-card-swipe-x:0px;
+  position:relative!important;isolation:isolate;overflow:hidden!important;touch-action:pan-y;
+  background:linear-gradient(180deg,rgba(8,26,35,.17),rgba(6,20,28,.07))!important;
+  border:1px solid rgba(87,132,153,.17)!important;border-radius:16px!important;margin:8px 0!important;
+  box-shadow:inset 0 0 0 1px rgba(120,188,215,.018),0 0 14px rgba(46,127,153,.028)!important;
+  transition:border-color .18s ease,box-shadow .18s ease,opacity .16s ease!important;
+}
+#workout .exercise[data-exkey]:last-child{border-bottom:1px solid rgba(87,132,153,.17)!important}
+#workout .exercise[data-exkey].open{
+  border-color:rgba(73,166,201,.31)!important;
+  box-shadow:inset 0 0 0 1px rgba(85,221,160,.04),0 0 19px rgba(71,188,151,.07)!important;
+}
+#workout .exercise[data-exkey].dt-swipe-armed{border-color:rgba(85,221,160,.42)!important;box-shadow:0 0 21px rgba(85,221,160,.09)!important}
+#workout .exercise[data-exkey].dt-swipe-remove-armed{border-color:rgba(235,101,101,.40)!important;box-shadow:0 0 21px rgba(220,83,83,.08)!important}
+#workout .exercise[data-exkey] > .exercise-head,
+#workout .exercise[data-exkey] > .exbody{
+  position:relative;z-index:2;background:transparent!important;
+  transform:translate3d(var(--dt-card-swipe-x),0,0);
+}
+#workout .exercise[data-exkey] > .exercise-head{transition:transform .19s cubic-bezier(.2,.78,.22,1)!important}
+#workout .exercise[data-exkey] > .exbody{
+  transition:max-height .34s cubic-bezier(.4,0,.2,1),opacity .22s ease,transform .19s cubic-bezier(.2,.78,.22,1)!important;
+}
+#workout .exercise[data-exkey].dt-swipe-dragging > .exercise-head,
+#workout .exercise[data-exkey].dt-swipe-dragging > .exbody{transition:none!important}
+#workout .exercise[data-exkey].dt-swipe-commit{opacity:.52!important}
+
 .dt-swipe-bg{
-  position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;
-  padding:0 22px;border-radius:17px;pointer-events:none;opacity:0;transition:opacity .12s ease;
+  position:absolute;inset:0;z-index:0;display:flex;align-items:center;justify-content:space-between;
+  padding:0 18px;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .10s ease,background .13s ease;
 }
 .dt-swipe-bg.show{opacity:1}
-.dt-swipe-bg .hide-hint{color:#fff;font-size:20px;transform:scale(.7);transition:transform .15s ease}
-.dt-swipe-bg .delete-hint{color:#fff;font-size:20px;transform:scale(.7);transition:transform .15s ease;margin-left:auto}
-.dt-swipe-bg.armed .hide-hint,.dt-swipe-bg.armed .delete-hint{transform:scale(1.08)}
+.dt-swipe-bg.to-hide{background:linear-gradient(90deg,rgba(42,151,103,.24),rgba(42,151,103,.04) 52%,transparent 72%)}
+.dt-swipe-bg.to-remove{background:linear-gradient(270deg,rgba(215,76,76,.24),rgba(215,76,76,.04) 52%,transparent 72%)}
+.dt-swipe-hint{
+  display:flex;align-items:center;gap:6px;color:#91a8b3;font-size:8px;font-weight:950;letter-spacing:.12em;
+  transform:scale(.91);opacity:.78;transition:transform .13s ease,opacity .13s ease,color .13s ease;
+}
+.dt-swipe-hint svg{width:17px;height:17px}.dt-swipe-bg.to-hide .hide-hint{color:#62dca4}.dt-swipe-bg.to-remove .delete-hint{color:#ea7777}
+.dt-swipe-bg.armed .dt-swipe-hint{transform:scale(1);opacity:1}
 
 .dt-hidden-toggle{
-  display:flex;align-items:center;justify-content:space-between;width:100%;
-  margin-top:10px;padding:12px 14px;border:1px dashed #2a4152;border-radius:15px;
-  background:transparent;color:#7f97a3;font-weight:800;font-size:12px;
+  display:flex;align-items:center;justify-content:space-between;width:100%;margin-top:10px;padding:12px 14px;
+  border:1px dashed rgba(83,132,154,.30);border-radius:15px;background:rgba(8,25,34,.10);color:#7f97a3;font-weight:800;font-size:12px;
 }
-.dt-hidden-toggle svg{width:13px;height:13px;transition:transform .28s cubic-bezier(.4,0,.2,1)}
-.dt-hidden-toggle.open svg{transform:rotate(180deg)}
+.dt-hidden-toggle svg{width:13px;height:13px;transition:transform .28s cubic-bezier(.4,0,.2,1)}.dt-hidden-toggle.open svg{transform:rotate(180deg)}
 .dt-hidden-list{max-height:0;overflow:hidden;transition:max-height .32s cubic-bezier(.4,0,.2,1),opacity .22s ease;opacity:0}
 .dt-hidden-toggle.open+.dt-hidden-list{max-height:1400px;opacity:1;margin-top:8px}
-.dt-hidden-row{
-  display:flex;align-items:center;justify-content:space-between;gap:10px;
-  padding:11px 13px;border:1px solid var(--line);border-radius:13px;background:#0b151e;margin-top:7px;
-}
+.dt-hidden-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;border:1px solid rgba(87,132,153,.17);border-radius:13px;background:rgba(8,25,34,.11);margin-top:7px;box-shadow:0 0 12px rgba(65,165,139,.025)}
 .dt-hidden-row .name{font-weight:800;font-size:13px;color:#c4d1d8;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dt-hidden-row button{border:1px solid #2c5f4a;background:rgba(60,173,116,.14);color:#6ae3aa;font-weight:800;font-size:11px;padding:8px 12px;border-radius:10px;flex:none}
-
-#dtConfirmRemoveSheet{position:fixed;inset:0;z-index:10500;display:none;align-items:flex-end;justify-content:center;background:rgba(1,7,12,.72);backdrop-filter:blur(6px)}
+.dt-hidden-row button{border:1px solid #2c5f4a;background:rgba(60,173,116,.12);color:#6ae3aa;font-weight:800;font-size:11px;padding:8px 12px;border-radius:10px;flex:none}
+#dtConfirmRemoveSheet{position:fixed;inset:0;z-index:10500;display:none;align-items:flex-end;justify-content:center;background:rgba(1,7,12,.60);backdrop-filter:blur(9px)}
 #dtConfirmRemoveSheet.show{display:flex}
-.dt-confirm-sheet{width:min(480px,100%);background:#0d1720;border:1px solid var(--line);border-radius:22px 22px 0 0;padding:22px 20px calc(22px + env(safe-area-inset-bottom));text-align:center}
-.dt-confirm-sheet h3{margin:0 0 8px;font-size:17px}
-.dt-confirm-sheet p{margin:0 0 18px;color:var(--muted);font-size:13px;line-height:1.5}
-.dt-confirm-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.dt-confirm-actions button{padding:14px;border-radius:14px;font-weight:900;border:0}
-.dt-confirm-no{background:#182833;color:#e7eef3}
-.dt-confirm-yes{background:linear-gradient(90deg,#e5564f,#c8433d);color:#fff}
+.dt-confirm-sheet{width:min(480px,100%);background:rgba(8,24,33,.97);border:1px solid #294553;border-radius:22px 22px 0 0;padding:22px 20px calc(22px + env(safe-area-inset-bottom));text-align:center;box-shadow:0 -18px 50px rgba(0,0,0,.28)}
+.dt-confirm-sheet h3{margin:0 0 8px;font-size:17px}.dt-confirm-sheet p{margin:0 0 18px;color:var(--muted);font-size:13px;line-height:1.5}
+.dt-confirm-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.dt-confirm-actions button{padding:14px;border-radius:14px;font-weight:900;border:0}
+.dt-confirm-no{background:#182833;color:#e7eef3}.dt-confirm-yes{background:linear-gradient(90deg,#d95753,#c64642);color:#fff}
 </style>
 
 <script id="dt-v25-swipe-hide-js">
 (()=>{
   "use strict";
-  const V="25.0-swipe-hide";
+  const V="25.4-full-card-swipe";
 
   /* ---------------------------------------------------------
      Swipe-to-remove / swipe-to-hide for exercise cards.
@@ -11282,56 +11384,79 @@ nav.dt-v10-nav{
     sheet.classList.add("show");
   }
 
-  const SWIPE_THRESHOLD=78;
+  const SWIPE_THRESHOLD=54;
+  const FLICK_DISTANCE=32;
+  const FLICK_VELOCITY=.46;
+
   function bindCardSwipe(box){
-    const head=box.querySelector(".exercise-head");
-    if(!head||head.dataset.swipeBound==="1")return;
-    head.dataset.swipeBound="1";
+    if(!box||box.dataset.swipeBound==="1")return;
+    box.dataset.swipeBound="1";
+    if(!box.querySelector(".exercise-head"))return;
 
-    const bg=document.createElement("div");
-    bg.className="dt-swipe-bg";
-    bg.innerHTML=`<span class="hide-hint">🙈</span><span class="delete-hint">🗑️</span>`;
-    box.insertBefore(bg,head);
-    box.style.position="relative";
+    let bg=box.querySelector(":scope > .dt-swipe-bg");
+    if(!bg){
+      bg=document.createElement("div");bg.className="dt-swipe-bg";
+      bg.innerHTML=`<span class="dt-swipe-hint hide-hint"><svg viewBox="0 0 24 24" fill="none"><path d="M3.5 12s3.2-5 8.5-5 8.5 5 8.5 5-3.2 5-8.5 5-8.5-5-8.5-5Z" stroke="currentColor" stroke-width="1.8"/><path d="m4 4 16 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><b>HIDE</b></span><span class="dt-swipe-hint delete-hint"><b>REMOVE</b><svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+      box.insertBefore(bg,box.firstChild);
+    }
 
-    let sx=0,sy=0,dx=0,on=false;
-    head.addEventListener("touchstart",e=>{
-      if(e.target.closest("button,input,select,textarea"))return;
-      const t=e.changedTouches?.[0]; if(!t)return;
-      sx=t.clientX; sy=t.clientY; dx=0; on=true;
-    },{passive:true});
-    head.addEventListener("touchmove",e=>{
-      if(!on)return;
-      const t=e.changedTouches?.[0]; if(!t)return;
-      dx=t.clientX-sx; const dy=t.clientY-sy;
-      if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>6){
-        const clamped=Math.max(-120,Math.min(120,dx));
-        head.style.transform=`translateX(${clamped}px)`;
-        bg.classList.add("show");
-        bg.classList.toggle("armed",Math.abs(clamped)>=SWIPE_THRESHOLD);
+    let pid=null,sx=0,sy=0,dx=0,dy=0,started=0,axis=null,active=false,raf=0,suppressUntil=0;
+    const offset=px=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>box.style.setProperty("--dt-card-swipe-x",`${px}px`))};
+    const clear=()=>{box.classList.remove("dt-swipe-dragging","dt-swipe-armed","dt-swipe-remove-armed","dt-swipe-commit");bg.classList.remove("show","armed","to-hide","to-remove");offset(0)};
+    const direction=x=>{
+      const right=x>0,armed=Math.abs(x)>=SWIPE_THRESHOLD;
+      bg.classList.add("show");bg.classList.toggle("to-hide",right);bg.classList.toggle("to-remove",!right);bg.classList.toggle("armed",armed);
+      box.classList.toggle("dt-swipe-armed",armed&&right);box.classList.toggle("dt-swipe-remove-armed",armed&&!right);
+    };
+    const label=()=>box.querySelector(".exname b")?.childNodes?.[0]?.textContent?.trim()||box.querySelector(".exname b")?.textContent?.trim()||"this activity";
+
+    box.addEventListener("click",e=>{if(Date.now()<suppressUntil){e.preventDefault();e.stopImmediatePropagation()}},true);
+    box.addEventListener("pointerdown",e=>{
+      if(e.isPrimary===false||(e.pointerType==="mouse"&&e.button!==0))return;
+      pid=e.pointerId;sx=e.clientX;sy=e.clientY;dx=dy=0;axis=null;active=true;started=performance.now();
+    });
+    box.addEventListener("pointermove",e=>{
+      if(!active||e.pointerId!==pid)return;
+      dx=e.clientX-sx;dy=e.clientY-sy;
+      if(!axis){
+        const ax=Math.abs(dx),ay=Math.abs(dy);
+        if(Math.max(ax,ay)<7)return;
+        if(ax>ay*1.12)axis="x";
+        else if(ay>ax*1.06){axis="y";active=false;return}
+        else return;
       }
-    },{passive:true});
-    head.addEventListener("touchend",()=>{
-      if(!on)return; on=false;
-      const key=box.dataset.exkey;
-      if(dx<=-SWIPE_THRESHOLD){
-        head.style.transform="";
-        bg.classList.remove("show","armed");
-        const name=box.querySelector(".exname b")?.textContent?.trim()||"this activity";
-        showConfirm(`Remove ${name}?`,"This can't be undone.",()=>{
+      if(axis!=="x")return;
+      if(e.cancelable)e.preventDefault();
+      try{if(!box.hasPointerCapture?.(e.pointerId))box.setPointerCapture?.(e.pointerId)}catch(_){}
+      box.classList.add("dt-swipe-dragging");
+      const ax=Math.abs(dx),damped=Math.sign(dx)*(ax<=104?ax:104+(ax-104)*.22),x=Math.max(-132,Math.min(132,damped));
+      offset(x);direction(x);
+    });
+    const finish=(e,cancelled=false)=>{
+      if(pid!=null&&e?.pointerId!=null&&e.pointerId!==pid)return;
+      const horizontal=axis==="x";active=false;
+      try{if(pid!=null&&box.hasPointerCapture?.(pid))box.releasePointerCapture?.(pid)}catch(_){}
+      if(!horizontal||cancelled){clear();axis=null;pid=null;return}
+      if(Math.abs(dx)>9)suppressUntil=Date.now()+420;
+      const velocity=dx/Math.max(1,performance.now()-started);
+      const commit=Math.abs(dx)>=SWIPE_THRESHOLD||(Math.abs(dx)>=FLICK_DISTANCE&&Math.abs(velocity)>=FLICK_VELOCITY);
+      const key=box.dataset.exkey;box.classList.remove("dt-swipe-dragging");
+
+      if(commit&&dx>0&&key){
+        box.classList.add("dt-swipe-commit","dt-swipe-armed");offset(148);
+        setTimeout(()=>{clear();hideExercise(wday,key)},115);
+      }else if(commit&&dx<0&&key){
+        box.classList.add("dt-swipe-commit","dt-swipe-remove-armed");offset(-92);
+        setTimeout(()=>{clear();showConfirm(`Remove ${label()}?`,"This can't be undone.",()=>{
           const exercises=typeof effectiveExercises==="function"?effectiveExercises(wday):[];
-          const e=exercises.find(x=>exerciseKey(x)===key);
-          if(e&&typeof removeExercise==="function")removeExercise(e,-1,true);
-        });
-      }else if(dx>=SWIPE_THRESHOLD){
-        head.style.transform="";
-        bg.classList.remove("show","armed");
-        if(key)hideExercise(wday,key);
-      }else{
-        head.style.transform="";
-        bg.classList.remove("show","armed");
-      }
-    },{passive:true});
+          const ex=exercises.find(x=>exerciseKey(x)===key);
+          if(ex&&typeof removeExercise==="function")removeExercise(ex,-1,true);
+        })},105);
+      }else clear();
+      axis=null;pid=null;
+    };
+    box.addEventListener("pointerup",e=>finish(e,false));
+    box.addEventListener("pointercancel",e=>finish(e,true));
   }
 
   function ensureHiddenSection(){
@@ -11416,5 +11541,8 @@ nav.dt-v10-nav{
 })();
 </script>
 
+
+<style id="dt-v25-4-stabilized-css">#history .day.has-workout::after{background:#55dda0!important;width:6px!important;height:6px!important;bottom:5px!important;box-shadow:0 0 8px rgba(85,221,160,.60)!important}</style>
+<script>window.DT_V25_4_EXERCISE_UX_STABILIZED="25.4";</script>
 </body>
 </html>
