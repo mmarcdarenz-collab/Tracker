@@ -212,7 +212,11 @@ nav button.active{color:var(--green);background:#10231a}
   .money-actions,.savings-actions{grid-template-columns:1fr}
   h1{font-size:35px}
 }
-.workout-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:15px}.workout-tab{padding:13px 6px;border:1px solid var(--line);border-radius:15px;background:#0d1822;color:var(--muted);font-weight:800}.workout-tab.active{color:var(--blue);border-color:var(--blue);background:#0d1b29}.workout-card{padding:18px}.exercise{border:1px solid var(--line);border-radius:17px;background:#0b151e;margin-top:10px;overflow:hidden}.exercise-head{display:flex;align-items:center;gap:10px;width:100%;padding:13px;border:0;background:transparent;color:#fff;text-align:left}.exnum{width:35px;height:35px;border-radius:9px;border:1px solid #28588b;background:#0c1c2b;color:var(--blue);display:grid;place-items:center;font-weight:900}.exname{flex:1}.exname small{display:block;color:var(--blue);margin-top:3px}.exsum{font-size:11px;color:var(--muted)}.exbody{display:none;padding:0 12px 12px}.exercise.open .exbody{display:block}.sethead,.setrow{display:grid;grid-template-columns:32px 1fr .8fr .8fr 44px;gap:7px;align-items:center}.sethead{padding:8px 0;color:var(--muted);font-size:9px}.setrow{padding:8px 0;border-top:1px solid rgba(255,255,255,.06)}.prevval{font-size:10px;color:#687784}.loginput{width:100%;min-width:0;padding:10px 5px;border:1px solid #263846;border-radius:10px;background:#07111a;color:#fff;text-align:center}.loginput::placeholder{color:#4f5b65}.effort{width:32px;height:32px;border-radius:50%;border:2px solid #9aa5af;background:transparent}.effort.easy{border-color:#32c6b1;background:#32c6b1;box-shadow:inset 0 0 0 7px #173c37}.effort.ideal{border-color:#f1c65b;background:#f1c65b;box-shadow:inset 0 0 0 7px #443b23}.effort.max{border-color:#ef725c;background:#ef725c;box-shadow:inset 0 0 0 7px #462b26}.addset{width:100%;margin-top:8px;padding:10px;border:1px dashed #31506a;border-radius:11px;background:transparent;color:var(--blue)}.workout-save{width:100%;margin-top:14px;padding:14px;border:0;border-radius:15px;background:linear-gradient(90deg,#226bd5,#3285ff);color:white;font-weight:900}.effort-options{display:grid;gap:10px}.effopt{padding:15px;border-radius:16px;color:#fff;text-align:left}.effopt small{display:block;margin-top:3px}.effopt.easy{border:1px solid #2e9f8f;background:#173c37}.effopt.ideal{border:1px solid #c7a758;background:#4a4230}.effopt.max{border:1px solid #bd5b4c;background:#4c342f}
+.workout-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:15px}.workout-tab{padding:13px 6px;border:1px solid var(--line);border-radius:15px;background:#0d1822;color:var(--muted);font-weight:800}.workout-tab.active{color:var(--blue);border-color:var(--blue);background:#0d1b29}.workout-card{padding:18px}.exercise{border:1px solid var(--line);border-radius:17px;background:#0b151e;margin-top:10px;overflow:hidden}.exercise-head{display:flex;align-items:center;gap:10px;width:100%;padding:13px;border:0;background:transparent;color:#fff;text-align:left}.exnum{width:35px;height:35px;border-radius:9px;border:1px solid #28588b;background:#0c1c2b;color:var(--blue);display:grid;place-items:center;font-weight:900}.exname{flex:1}.exname small{display:block;color:var(--blue);margin-top:3px}.exsum{font-size:11px;color:var(--muted)}.exbody{max-height:0;overflow:hidden;opacity:0;transition:max-height .34s cubic-bezier(.4,0,.2,1),opacity .22s ease;padding:0 12px}
+.exercise.open .exbody{max-height:2400px;opacity:1;padding:0 12px 12px}
+.exercise-chevron svg{width:15px;height:15px;transition:stroke .2s ease;color:var(--blue)}.sethead,.setrow{display:grid;grid-template-columns:32px 1fr .8fr .8fr 44px;gap:7px;align-items:center}
+.sethead.duration-mode,.setrow.duration-mode{grid-template-columns:32px 1fr 1.7fr 44px}
+.setrow.duration-mode .kg,.sethead.duration-mode .kg-label{display:none}.sethead{padding:8px 0;color:var(--muted);font-size:9px}.setrow{padding:8px 0;border-top:1px solid rgba(255,255,255,.06)}.prevval{font-size:10px;color:#687784}.loginput{width:100%;min-width:0;padding:10px 5px;border:1px solid #263846;border-radius:10px;background:#07111a;color:#fff;text-align:center}.loginput::placeholder{color:#4f5b65}.effort{width:32px;height:32px;border-radius:50%;border:2px solid #9aa5af;background:transparent}.effort.easy{border-color:#32c6b1;background:#32c6b1;box-shadow:inset 0 0 0 7px #173c37}.effort.ideal{border-color:#f1c65b;background:#f1c65b;box-shadow:inset 0 0 0 7px #443b23}.effort.max{border-color:#ef725c;background:#ef725c;box-shadow:inset 0 0 0 7px #462b26}.addset{width:100%;margin-top:8px;padding:10px;border:1px dashed #31506a;border-radius:11px;background:transparent;color:var(--blue)}.workout-save{width:100%;margin-top:14px;padding:14px;border:0;border-radius:15px;background:linear-gradient(90deg,#226bd5,#3285ff);color:white;font-weight:900}.effort-options{display:grid;gap:10px}.effopt{padding:15px;border-radius:16px;color:#fff;text-align:left}.effopt small{display:block;margin-top:3px}.effopt.easy{border:1px solid #2e9f8f;background:#173c37}.effopt.ideal{border:1px solid #c7a758;background:#4a4230}.effopt.max{border:1px solid #bd5b4c;background:#4c342f}
 .currency-select{background:#0b151e;color:var(--text);border:1px solid var(--line);border-radius:12px;padding:9px 12px;font-weight:800;outline:none}
 .currency-select:focus{border-color:var(--blue)}
 
@@ -1314,7 +1318,7 @@ nav button.active{color:var(--green);background:#10231a}
 
 <div class="exercise-menu" id="exerciseContextMenu">
   <button id="editExerciseMenu">✏️ <span style="flex:1;margin-left:10px">Edit activity</span><span>›</span></button>
-  <button id="removeExerciseMenu" class="remove">🗑️ <span style="flex:1;margin-left:10px">Remove activity</span><span>›</span></button>
+  <button id="hideExerciseMenu">🙈 <span style="flex:1;margin-left:10px">Hide activity</span><span>›</span></button>
 </div>
 
 <div class="modal" id="editExerciseModal">
@@ -3073,8 +3077,8 @@ function draft(){
   return state.workouts.drafts[key];
 }
 function prev(ei,si){return latest(wday)?.exercises?.[ei]?.sets?.[si]||null}
-function removeExercise(e,ei){
-  if(!confirm(`Remove "${e[0]}" from ${wday.toUpperCase()} Day?`))return;
+function removeExercise(e,ei,skipConfirm){
+  if(!skipConfirm && !confirm(`Remove "${e[0]}" from ${wday.toUpperCase()} Day?`))return;
   const baseExists=plans[wday].ex.some(x=>exerciseKey(x)===exerciseKey(e));
   if(baseExists){
     if(!state.workouts.removed[wday].includes(exerciseKey(e)))state.workouts.removed[wday].push(exerciseKey(e));
@@ -3095,6 +3099,7 @@ function renderWorkout(){
   exercises.forEach((e,ei)=>{
     const box=document.createElement('div');
     box.className='exercise'+(ei===0?' open':'');
+    box.dataset.exkey=exerciseKey(e);
     const pv=prev(ei,0),pl=e[3][0]||[null,''];
     box.innerHTML=`<div class="exercise-head">
       <span class="exnum">${ei+1}</span>
@@ -3104,10 +3109,10 @@ function renderWorkout(){
       </button>
       <span class="exsum">${pv?(pv.kg||'–')+' × '+(pv.reps||'–'):(pl[0]??'–')+' × '+(pl[1]||'')}</span>
       <button class="exercise-menu-btn" aria-label="Activity menu">⋯</button>
-      <button class="exercise-chevron" aria-label="Expand activity">⌄</button>
+      <button class="exercise-chevron" aria-label="Expand activity"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </div>
     <div class="exbody">
-      <div class="sethead"><span>SET</span><span>PREVIOUS</span><span>${window.dtWeightUnitLabel?.()||"KG"}</span><span>${window.dtIsDurationBased?.(e)?"SEC":"REPS"}</span><span>EFFORT</span></div>
+      <div class="sethead${window.dtIsDurationBased?.(e)?" duration-mode":""}"><span>SET</span><span>PREVIOUS</span><span class="kg-label">${window.dtWeightUnitLabel?.()||"KG"}</span><span>${window.dtIsDurationBased?.(e)?"SEC":"REPS"}</span><span>EFFORT</span></div>
       <div class="rows"></div>
       <button class="addset">＋ Add Set</button>
     </div>`;
@@ -3125,7 +3130,7 @@ function renderWorkout(){
     d[ei].sets.forEach((x,si)=>{
       const old=prev(ei,si),pln=e[3][si]||[null,''];
       const smartKg=!old?window.dtSuggestStartWeight?.(e[0])?.kg:null;
-      const row=document.createElement('div');row.className='setrow';
+      const row=document.createElement('div');row.className='setrow'+(window.dtIsDurationBased?.(e)?' duration-mode':'');
       row.innerHTML=`<b style="text-align:center">${si+1}</b>
         <div class="prevval">${old?window.dtFormatLift?.(old.kg,old.reps)||((old.kg||'–')+' × '+(old.reps||'–')):window.dtFormatLift?.(pln[0],pln[1])||((pln[0]??'–')+' × '+(pln[1]||''))}<br><span style="opacity:.5">${old?'previous':'plan'}</span></div>
         <input class="loginput kg" type="number" step="${window.dtWeightUnit?.()==='lb'?'1':'.5'}" value="${window.dtWeightDisplayValue?.(x.kg)??x.kg}" placeholder="${window.dtWeightDisplayValue?.(old?.kg??smartKg)??old?.kg??smartKg??window.dtWeightUnitLabel?.()??'KG'}">
@@ -3171,11 +3176,11 @@ document.addEventListener("click",ev=>{
   const menu=document.getElementById("exerciseContextMenu");
   if(menu?.classList.contains("show") && !menu.contains(ev.target) && !ev.target.closest(".exercise-menu-btn")) closeExerciseMenu();
 });
-document.getElementById("removeExerciseMenu").onclick=()=>{
+document.getElementById("hideExerciseMenu").onclick=()=>{
   if(!exerciseMenuTarget)return;
   const {e,ei}=exerciseMenuTarget;
   closeExerciseMenu();
-  removeExercise(e,ei);
+  window.dtHideExercise?.(wday,exerciseKey(e));
 };
 document.getElementById("editExerciseMenu").onclick=()=>{
   if(!exerciseMenuTarget)return;
@@ -4202,6 +4207,7 @@ renderTrainingGoal();
       const box = document.createElement("div");
       box.className = "exercise"; // all collapsed by default
       box.dataset.exerciseKey = stableKey;
+      box.dataset.exkey = exerciseKey(e);
 
       const pv = prev(ei,0);
       const pl = e[3]?.[0] || [null,""];
@@ -4214,14 +4220,14 @@ renderTrainingGoal();
           </button>
           <span class="exsum">${pv?(window.dtFormatLift?.(pv.kg,pv.reps)||((pv.kg||"–")+" × "+(pv.reps||"–"))):(window.dtFormatLift?.(pl[0],pl[1])||((pl[0]??"–")+" × "+(pl[1]||"")))}</span>
           <button class="exercise-menu-btn" type="button" aria-label="Activity menu">⋯</button>
-          <button class="exercise-chevron" type="button" aria-label="Expand activity">⌄</button>
+          <button class="exercise-chevron" type="button" aria-label="Expand activity"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
         <div class="exbody">
           <div class="smart-next">
             <div class="smart-next-copy"><small>SMART NEXT SESSION</small><b>${smartRecommendation(e,ei).text}</b></div>
             <div class="smart-next-reason">${smartRecommendation(e,ei).reason}</div>
           </div>
-          <div class="sethead"><span>SET</span><span>PREVIOUS</span><span>${window.dtWeightUnitLabel?.()||"KG"}</span><span>${window.dtIsDurationBased?.(e)?"SEC":"REPS"}</span><span>EFFORT</span></div>
+          <div class="sethead${window.dtIsDurationBased?.(e)?" duration-mode":""}"><span>SET</span><span>PREVIOUS</span><span class="kg-label">${window.dtWeightUnitLabel?.()||"KG"}</span><span>${window.dtIsDurationBased?.(e)?"SEC":"REPS"}</span><span>EFFORT</span></div>
           <div class="rows"></div>
           <button class="addset" type="button">＋ Add Set</button>
           <button class="exercise-done-btn" type="button">✓ Done with ${e[0]}</button>
@@ -4246,7 +4252,7 @@ renderTrainingGoal();
         const pln = e[3]?.[si] || [null,""];
         const smartKg = !old?window.dtSuggestStartWeight?.(e[0])?.kg:null;
         const row = document.createElement("div");
-        row.className = "setrow";
+        row.className = "setrow" + (window.dtIsDurationBased?.(e) ? " duration-mode" : "");
         row.innerHTML = `
           <b style="text-align:center">${si+1}</b>
           <div class="prevval">${old?(window.dtFormatLift?.(old.kg,old.reps)||((old.kg||"–")+" × "+(old.reps||"–"))):(window.dtFormatLift?.(pln[0],pln[1])||((pln[0]??"–")+" × "+(pln[1]||"")))}<br><span style="opacity:.5">${old?"previous":"plan"}</span></div>
@@ -9854,8 +9860,9 @@ window.dtRemoveWorkoutSet=removeSet;
 .dt-hd-ex span{font-size:9px;color:#78909b;text-align:right}
 
 /* Minimal kg / lb dashboard switch */
+#workout{position:relative}
 .dt-workout-unit-wrap{
-  display:flex;justify-content:flex-end;margin:-3px 0 9px;
+  position:absolute;top:4px;right:0;margin:0;z-index:5;
 }
 #dtWeightToggle{
   height:34px;min-width:80px;padding:3px;border:1px solid #274553;border-radius:12px;
@@ -9915,14 +9922,14 @@ window.dtRemoveWorkoutSet=removeSet;
   function ensureToggle(){
     let btn=document.getElementById("dtWeightToggle");
     if(btn)return btn;
-    const goal=document.getElementById("trainingGoalCard");
-    if(!goal)return null;
+    const host=document.getElementById("workout");
+    if(!host)return null;
     const row=document.createElement("div");row.className="dt-workout-unit-wrap";
     btn=document.createElement("button");btn.id="dtWeightToggle";btn.type="button";
     btn.setAttribute("aria-label","Switch weight unit");
     btn.innerHTML='<span class="kg">kg</span><span class="lb">lb</span>';
     row.appendChild(btn);
-    goal.insertAdjacentElement("afterend",row);
+    host.insertBefore(row,host.firstChild);
     btn.onclick=()=>{
       ensureUnits();
       state.preferences.units.weight=unit()==="kg"?"lb":"kg";
@@ -11173,6 +11180,239 @@ nav.dt-v10-nav{
 
   window.dtBodyFatFromInputs=dtBodyFatFromInputs;
   window.DT_BODYFAT_VERSION=V;
+})();
+</script>
+
+
+<style id="dt-v25-swipe-hide-css">
+.exercise-head{background:#0b151e;position:relative;z-index:2;touch-action:pan-y}
+.dt-swipe-bg{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;
+  padding:0 22px;border-radius:17px;pointer-events:none;opacity:0;transition:opacity .12s ease;
+}
+.dt-swipe-bg.show{opacity:1}
+.dt-swipe-bg .hide-hint{color:#fff;font-size:20px;transform:scale(.7);transition:transform .15s ease}
+.dt-swipe-bg .delete-hint{color:#fff;font-size:20px;transform:scale(.7);transition:transform .15s ease;margin-left:auto}
+.dt-swipe-bg.armed .hide-hint,.dt-swipe-bg.armed .delete-hint{transform:scale(1.08)}
+
+.dt-hidden-toggle{
+  display:flex;align-items:center;justify-content:space-between;width:100%;
+  margin-top:10px;padding:12px 14px;border:1px dashed #2a4152;border-radius:15px;
+  background:transparent;color:#7f97a3;font-weight:800;font-size:12px;
+}
+.dt-hidden-toggle svg{width:13px;height:13px;transition:transform .28s cubic-bezier(.4,0,.2,1)}
+.dt-hidden-toggle.open svg{transform:rotate(180deg)}
+.dt-hidden-list{max-height:0;overflow:hidden;transition:max-height .32s cubic-bezier(.4,0,.2,1),opacity .22s ease;opacity:0}
+.dt-hidden-toggle.open+.dt-hidden-list{max-height:1400px;opacity:1;margin-top:8px}
+.dt-hidden-row{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:11px 13px;border:1px solid var(--line);border-radius:13px;background:#0b151e;margin-top:7px;
+}
+.dt-hidden-row .name{font-weight:800;font-size:13px;color:#c4d1d8;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dt-hidden-row button{border:1px solid #2c5f4a;background:rgba(60,173,116,.14);color:#6ae3aa;font-weight:800;font-size:11px;padding:8px 12px;border-radius:10px;flex:none}
+
+#dtConfirmRemoveSheet{position:fixed;inset:0;z-index:10500;display:none;align-items:flex-end;justify-content:center;background:rgba(1,7,12,.72);backdrop-filter:blur(6px)}
+#dtConfirmRemoveSheet.show{display:flex}
+.dt-confirm-sheet{width:min(480px,100%);background:#0d1720;border:1px solid var(--line);border-radius:22px 22px 0 0;padding:22px 20px calc(22px + env(safe-area-inset-bottom));text-align:center}
+.dt-confirm-sheet h3{margin:0 0 8px;font-size:17px}
+.dt-confirm-sheet p{margin:0 0 18px;color:var(--muted);font-size:13px;line-height:1.5}
+.dt-confirm-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dt-confirm-actions button{padding:14px;border-radius:14px;font-weight:900;border:0}
+.dt-confirm-no{background:#182833;color:#e7eef3}
+.dt-confirm-yes{background:linear-gradient(90deg,#e5564f,#c8433d);color:#fff}
+</style>
+
+<script id="dt-v25-swipe-hide-js">
+(()=>{
+  "use strict";
+  const V="25.0-swipe-hide";
+
+  /* ---------------------------------------------------------
+     Swipe-to-remove / swipe-to-hide for exercise cards.
+     Left swipe -> confirm-then-remove (reuses removeExercise's
+     own logic via its skipConfirm flag, so there's exactly one
+     removal code path). Right swipe -> hide immediately
+     (reversible via a collapsible "Hidden" section or the menu).
+     Reads exercises purely via the data-exkey attribute already
+     present on each card; does not alter renderWorkout itself.
+     --------------------------------------------------------- */
+
+  function hiddenList(day){
+    if(!state.workouts.hidden) state.workouts.hidden={};
+    if(!state.workouts.hidden[day]) state.workouts.hidden[day]=[];
+    return state.workouts.hidden[day];
+  }
+  function isHidden(day,key){ return hiddenList(day).includes(key); }
+  function hideExercise(day,key){
+    const list=hiddenList(day);
+    if(!list.includes(key))list.push(key);
+    save();
+    applyHiddenFiltering();
+  }
+  function unhideExercise(day,key){
+    const list=hiddenList(day);
+    const idx=list.indexOf(key);
+    if(idx>=0)list.splice(idx,1);
+    save();
+    applyHiddenFiltering();
+    try{renderWorkout();}catch(e){}
+  }
+
+  function showConfirm(title,subtitle,onYes){
+    let sheet=document.getElementById("dtConfirmRemoveSheet");
+    if(!sheet){
+      sheet=document.createElement("div");
+      sheet.id="dtConfirmRemoveSheet";
+      sheet.innerHTML=`<div class="dt-confirm-sheet">
+        <h3 id="dtConfirmTitle"></h3>
+        <p id="dtConfirmSub"></p>
+        <div class="dt-confirm-actions">
+          <button type="button" class="dt-confirm-no" id="dtConfirmNo">Cancel</button>
+          <button type="button" class="dt-confirm-yes" id="dtConfirmYes">Remove</button>
+        </div>
+      </div>`;
+      document.body.appendChild(sheet);
+      sheet.addEventListener("click",e=>{ if(e.target===sheet) sheet.classList.remove("show"); });
+      sheet.querySelector("#dtConfirmNo").onclick=()=>sheet.classList.remove("show");
+    }
+    sheet.querySelector("#dtConfirmTitle").textContent=title;
+    sheet.querySelector("#dtConfirmSub").textContent=subtitle;
+    const yesBtn=sheet.querySelector("#dtConfirmYes");
+    yesBtn.onclick=()=>{ sheet.classList.remove("show"); onYes(); };
+    sheet.classList.add("show");
+  }
+
+  const SWIPE_THRESHOLD=78;
+  function bindCardSwipe(box){
+    const head=box.querySelector(".exercise-head");
+    if(!head||head.dataset.swipeBound==="1")return;
+    head.dataset.swipeBound="1";
+
+    const bg=document.createElement("div");
+    bg.className="dt-swipe-bg";
+    bg.innerHTML=`<span class="hide-hint">🙈</span><span class="delete-hint">🗑️</span>`;
+    box.insertBefore(bg,head);
+    box.style.position="relative";
+
+    let sx=0,sy=0,dx=0,on=false;
+    head.addEventListener("touchstart",e=>{
+      if(e.target.closest("button,input,select,textarea"))return;
+      const t=e.changedTouches?.[0]; if(!t)return;
+      sx=t.clientX; sy=t.clientY; dx=0; on=true;
+    },{passive:true});
+    head.addEventListener("touchmove",e=>{
+      if(!on)return;
+      const t=e.changedTouches?.[0]; if(!t)return;
+      dx=t.clientX-sx; const dy=t.clientY-sy;
+      if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>6){
+        const clamped=Math.max(-120,Math.min(120,dx));
+        head.style.transform=`translateX(${clamped}px)`;
+        bg.classList.add("show");
+        bg.classList.toggle("armed",Math.abs(clamped)>=SWIPE_THRESHOLD);
+      }
+    },{passive:true});
+    head.addEventListener("touchend",()=>{
+      if(!on)return; on=false;
+      const key=box.dataset.exkey;
+      if(dx<=-SWIPE_THRESHOLD){
+        head.style.transform="";
+        bg.classList.remove("show","armed");
+        const name=box.querySelector(".exname b")?.textContent?.trim()||"this activity";
+        showConfirm(`Remove ${name}?`,"This can't be undone.",()=>{
+          const exercises=typeof effectiveExercises==="function"?effectiveExercises(wday):[];
+          const e=exercises.find(x=>exerciseKey(x)===key);
+          if(e&&typeof removeExercise==="function")removeExercise(e,-1,true);
+        });
+      }else if(dx>=SWIPE_THRESHOLD){
+        head.style.transform="";
+        bg.classList.remove("show","armed");
+        if(key)hideExercise(wday,key);
+      }else{
+        head.style.transform="";
+        bg.classList.remove("show","armed");
+      }
+    },{passive:true});
+  }
+
+  function ensureHiddenSection(){
+    let toggle=document.getElementById("dtHiddenToggle");
+    if(toggle)return toggle;
+    const list=document.getElementById("wlist");
+    if(!list||!list.parentNode)return null;
+    toggle=document.createElement("button");
+    toggle.type="button";
+    toggle.id="dtHiddenToggle";
+    toggle.className="dt-hidden-toggle";
+    toggle.innerHTML=`<span id="dtHiddenToggleLabel">Hidden (0)</span><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    const body=document.createElement("div");
+    body.className="dt-hidden-list";
+    body.id="dtHiddenList";
+    toggle.onclick=()=>toggle.classList.toggle("open");
+    list.parentNode.insertBefore(toggle,list.nextSibling);
+    toggle.parentNode.insertBefore(body,toggle.nextSibling);
+    return toggle;
+  }
+
+  let lastAppliedSignature=null;
+  function applyHiddenFiltering(){
+    try{
+      const list=document.getElementById("wlist");
+      if(!list)return;
+      const cards=[...list.querySelectorAll(":scope > .exercise[data-exkey]")];
+      cards.forEach(box=>{ bindCardSwipe(box); });
+
+      const hidden=hiddenList(wday);
+      const hiddenSet=new Set(hidden);
+      let hiddenCount=0;
+      cards.forEach(box=>{
+        const key=box.dataset.exkey;
+        const isHiddenNow=hiddenSet.has(key);
+        if(box.style.display!==(isHiddenNow?"none":""))box.style.display=isHiddenNow?"none":"";
+        if(isHiddenNow)hiddenCount++;
+      });
+
+      // Skip the DOM write below if nothing relevant has actually changed --
+      // writing innerHTML is itself a childList mutation, and this whole
+      // function runs from a MutationObserver callback, so an unconditional
+      // write here would re-trigger itself indefinitely.
+      const signature=wday+"|"+cards.map(b=>b.dataset.exkey).join(",")+"|"+[...hiddenSet].sort().join(",");
+      if(signature===lastAppliedSignature)return;
+      lastAppliedSignature=signature;
+
+      const toggle=ensureHiddenSection();
+      if(!toggle)return;
+      const label=document.getElementById("dtHiddenToggleLabel");
+      const body=document.getElementById("dtHiddenList");
+      if(hiddenCount===0){
+        toggle.style.display="none";
+        if(body)body.style.display="none";
+        return;
+      }
+      toggle.style.display="";
+      if(body)body.style.display="";
+      if(label)label.textContent=`Hidden (${hiddenCount})`;
+      if(body){
+        body.innerHTML=cards.filter(box=>hiddenSet.has(box.dataset.exkey)).map(box=>{
+          const name=box.querySelector(".exname b")?.childNodes?.[0]?.textContent?.trim()
+            || box.querySelector(".exname b")?.textContent?.trim() || "Activity";
+          const key=box.dataset.exkey;
+          return `<div class="dt-hidden-row"><span class="name">${name}</span><button type="button" data-unhide="${key}">Unhide</button></div>`;
+        }).join("");
+        body.querySelectorAll("[data-unhide]").forEach(btn=>{
+          btn.onclick=()=>unhideExercise(wday,btn.dataset.unhide);
+        });
+      }
+    }catch(e){ console.warn("Hidden-exercise filtering failed",e); }
+  }
+
+  new MutationObserver(()=>{ applyHiddenFiltering(); }).observe(document.body,{childList:true,subtree:true});
+  setTimeout(applyHiddenFiltering,500);
+  setTimeout(applyHiddenFiltering,1400);
+
+  window.dtHideExercise=hideExercise;
+  window.dtUnhideExercise=unhideExercise;
+  window.dtIsExerciseHidden=isHidden;
+  window.DT_SWIPE_HIDE_VERSION=V;
 })();
 </script>
 
