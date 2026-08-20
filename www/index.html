@@ -1122,8 +1122,6 @@ nav button.active{color:var(--green);background:#10231a}
       <div><div class="subtitle" style="margin:0 0 4px;font-size:13px">Weekly progress</div><div class="weekly-score" id="weeklyScore">0%</div></div>
       <div class="subtitle" style="margin:0;font-size:13px" id="weeklyStreak">0 day streak</div>
     </div>
-    <div class="hex-row" id="hexRow"></div>
-    <div class="geo"><div class="track"><div class="fill" id="geoFill"></div></div></div>
   </div>
 </section>
 
@@ -2681,14 +2679,8 @@ function last7(){
 }
 function renderWeekly(){
   const days=last7(),scores=days.map(x=>x.r?.percent||0),avg=Math.round(scores.reduce((a,b)=>a+b,0)/7);
-  document.getElementById("weeklyScore").textContent=avg+"%";document.getElementById("geoFill").style.width=avg+"%";
+  document.getElementById("weeklyScore").textContent=avg+"%";
   document.getElementById("weeklyStreak").textContent=(typeof window.dtCurrentWorkoutStreak==="function"?window.dtCurrentWorkoutStreak():streakCount())+" day streak";
-  const row=document.getElementById("hexRow");row.innerHTML="";
-  days.forEach(x=>{
-    const p=x.r?.percent||0,w=document.createElement("div");w.className="hexwrap";
-    const c=p>=80?"":p>0?"partial":"off",icon=p>=80?"✓":p>0?"–":"";
-    w.innerHTML=`<div class="hex ${c}">${icon}</div><small>${x.d.toLocaleDateString("en-AU",{weekday:"narrow"})}</small>`;row.appendChild(w)
-  })
 }
 function renderHistory(){renderCalendar();renderRecent();renderWeekly()}
 document.getElementById("prevMonth").onclick=()=>{calendarDate=new Date(calendarDate.getFullYear(),calendarDate.getMonth()-1,1);renderCalendar()}
@@ -3970,9 +3962,14 @@ renderTrainingGoal();
   display:flex;gap:10px;padding:12px 2px;border-top:1px solid rgba(255,255,255,.055)
 }
 .saved-activity-icon{
-  width:34px;height:34px;flex:none;border-radius:11px;
-  display:grid;place-items:center;background:#153b2a;color:var(--green);font-weight:900
+  width:40px;height:40px;flex:none;border-radius:12px;
+  display:grid;place-items:center;
+  background:linear-gradient(150deg,rgba(15,32,42,.62),rgba(9,20,27,.5));
+  border:1px solid rgba(115,165,185,.22);
+  box-shadow:0 0 10px rgba(80,223,160,.10),inset 0 0 0 1px rgba(255,255,255,.02);
+  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
 }
+.saved-activity-icon svg{display:block}
 .saved-activity-main{flex:1;min-width:0}
 .saved-activity-main b{display:block;font-size:13px}
 .saved-activity-main small{display:block;color:var(--muted);font-size:10px;margin-top:3px}
@@ -4386,7 +4383,7 @@ renderTrainingGoal();
         const row = document.createElement("div");
         row.className = "saved-activity-row";
         row.innerHTML = `
-          <div class="saved-activity-icon">✓</div>
+          <div class="saved-activity-icon">${window.dtMuscleIconHTML?.(rec.muscle)||"✓"}</div>
           <div class="saved-activity-main">
             <b>${rec.name}</b>
             <small>${workoutDayLabel(rec.day)} • ${when.toLocaleDateString([], {day:"numeric",month:"short",year:"numeric"})} • ${when.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}</small>
@@ -5136,6 +5133,10 @@ renderTrainingGoal();
 
   function dtCheckWorkoutCompletion(day,showPopup=true){
     dtEnsureSummaryState();
+    /* V25.6: a live timed session owns completion. Without this guard the
+       older observer can open/store "workout complete" before the user
+       presses Finish on the session timer. */
+    if(typeof window.dtWorkoutSessionActive==="function" && window.dtWorkoutSessionActive())return false;
     const summary=dtBuildWorkoutSummary(day);
     if(!summary)return false;
     if(state.workouts.dailySummaries[summary.id]){
@@ -6472,6 +6473,10 @@ function resetWorkoutData(){
   state.workouts.dailySummaries={};
   state.workouts.savedRoutines=[];
   state.workouts.routineOverrides={};
+  /* Timed sessions are workout history too. A workout-data reset must not
+     leave a running clock or old timed-session rows behind. */
+  state.workouts.timedSessions=[];
+  state.workouts.sessionClock=null;
   state.workouts.collapsedByDay={push:true,pull:true,legs:true};
   state.workouts.demoDataLoaded=false;
   state.workouts.demoDataVersion=null;
@@ -8985,7 +8990,20 @@ function exAddEntry(){
   }
   const history=document.getElementById("history");
   if(history&&!document.getElementById("dtHistoryExportBtn")){
-    const h=history.querySelector("h1");if(h){const b=document.createElement("button");b.id="dtHistoryExportBtn";b.type="button";b.textContent="Export";b.style.cssText="float:right;margin-top:-39px;border:1px solid #25414e;border-radius:11px;background:#081821;color:#72aee0;padding:7px 11px;font:800 9px system-ui";b.onclick=exOpen;h.insertAdjacentElement("afterend",b)}
+    const h=history.querySelector("h1");
+    if(h){
+      let headRow=history.querySelector(".dt-history-head-row");
+      if(!headRow){
+        headRow=document.createElement("div");
+        headRow.className="dt-history-head-row";
+        h.parentNode.insertBefore(headRow,h);
+        headRow.appendChild(h);
+      }
+      const b=document.createElement("button");
+      b.id="dtHistoryExportBtn";b.type="button";b.className="dt-history-export-btn";
+      b.textContent="Export";b.onclick=exOpen;
+      headRow.appendChild(b);
+    }
   }
 }
 function exBoot(){exRemoveSampleData();exEnsureModal();exAddEntry()}
@@ -11104,6 +11122,140 @@ nav.dt-v10-nav{
 </script>
 
 
+<script id="dt-v25-5-muscle-icon-js">
+(()=>{
+  "use strict";
+  const V="25.5-history-muscle-icon";
+
+  /* ---------------------------------------------------------
+     Classifies rec.muscle (the exercise tuple's own e[2] field,
+     already carried onto every completedExercises/pendingExercises
+     record -- see startCompletion()) into one of a small set of
+     glyph regions, then renders a tiny front/back silhouette badge
+     with that region highlighted. Pure, self-contained, does not
+     read or duplicate any workout data beyond this one string.
+     --------------------------------------------------------- */
+
+  function dtClassifyMuscle(raw){
+    const full = String(raw||"").toLowerCase().replace(/_/g," ").trim();
+    if(!full) return {bucket:"fullbody", view:"front"};
+    const first = full.split(/[\/,]/)[0].trim();
+    const rules = [
+      [/oblique/, "obliques","front"],
+      [/abs|abdominal|\bcore\b/, "abs","front"],
+      [/chest|pec/, "chest","front"],
+      [/rear delt/, "back","back"],
+      [/shoulder|delt/, "shoulders","front"],
+      [/bicep|brachialis/, "biceps","front"],
+      [/tricep/, "triceps","back"],
+      [/forearm|wrist/, "forearms","back"],
+      [/lat|trap|back|rhomboid|posterior chain/, "back","back"],
+      [/glute/, "glutes","back"],
+      [/hamstring/, "hamstrings","back"],
+      [/quad/, "quads","front"],
+      [/calf|calves/, "calves","back"],
+      [/adductor|abductor/, "quads","front"],
+    ];
+    for(const [re,bucket,view] of rules){ if(re.test(first)) return {bucket,view}; }
+    for(const [re,bucket,view] of rules){ if(re.test(full)) return {bucket,view}; }
+    return {bucket:"fullbody", view:"front"};
+  }
+
+  const BASE="#3a4d58", HILITE="#50dfa0";
+
+  const REGIONS=[
+    ["head","shared","circle",{cx:12,cy:3,r:2.4}],
+    ["neck","shared","rect",{x:10.7,y:5,width:2.6,height:1.4,rx:1}],
+    ["hips","shared","rect",{x:8.3,y:17,width:7.4,height:3,rx:1.6}],
+    ["feetL","shared","rect",{x:8.3,y:29.2,width:2.6,height:1.6,rx:0.8}],
+    ["feetR","shared","rect",{x:13.1,y:29.2,width:2.6,height:1.6,rx:0.8}],
+    ["shoulders","front","g",null],
+    ["chest","front","rect",{x:8.7,y:7.5,width:6.6,height:4.2,rx:2}],
+    ["biceps","front","g",null],
+    ["abs","front","rect",{x:9.3,y:12,width:5.4,height:5,rx:1.6}],
+    ["obliques","front","g",null],
+    ["quads","front","g",null],
+    ["back","back","rect",{x:7.5,y:7.3,width:9,height:9,rx:2.4}],
+    ["triceps","back","g",null],
+    ["forearms","back","g",null],
+    ["glutes","back","rect",{x:8.3,y:17,width:7.4,height:3.4,rx:1.8}],
+    ["hamstrings","back","g",null],
+    ["calves","back","g",null],
+  ];
+  function attrStr(a){ return Object.entries(a).map(([k,v])=>`${k}="${v}"`).join(" "); }
+  const GROUP_BUILDERS={
+    shoulders:f=>`<ellipse cx="7" cy="7.6" rx="2.6" ry="2" fill="${f}"/><ellipse cx="17" cy="7.6" rx="2.6" ry="2" fill="${f}"/>`,
+    biceps:f=>`<rect x="4.3" y="8" width="2.6" height="7" rx="1.3" fill="${f}"/><rect x="17.1" y="8" width="2.6" height="7" rx="1.3" fill="${f}"/>`,
+    triceps:f=>`<rect x="4.3" y="8" width="2.6" height="6" rx="1.3" fill="${f}"/><rect x="17.1" y="8" width="2.6" height="6" rx="1.3" fill="${f}"/>`,
+    forearms:f=>`<rect x="4.5" y="14.5" width="2.2" height="4" rx="1" fill="${f}"/><rect x="17.3" y="14.5" width="2.2" height="4" rx="1" fill="${f}"/>`,
+    obliques:f=>`<rect x="7.6" y="12.5" width="1.6" height="4.4" rx="0.8" fill="${f}"/><rect x="14.8" y="12.5" width="1.6" height="4.4" rx="0.8" fill="${f}"/>`,
+    quads:f=>`<rect x="8.5" y="20" width="3" height="8" rx="1.4" fill="${f}"/><rect x="12.5" y="20" width="3" height="8" rx="1.4" fill="${f}"/>`,
+    hamstrings:f=>`<rect x="8.5" y="20.5" width="3" height="5" rx="1.4" fill="${f}"/><rect x="12.5" y="20.5" width="3" height="5" rx="1.4" fill="${f}"/>`,
+    calves:f=>`<rect x="8.5" y="25.5" width="3" height="4.5" rx="1.3" fill="${f}"/><rect x="12.5" y="25.5" width="3" height="4.5" rx="1.3" fill="${f}"/>`,
+  };
+  const BUCKET_REGION={
+    chest:{view:"front",region:"chest"}, shoulders:{view:"front",region:"shoulders"},
+    biceps:{view:"front",region:"biceps"}, abs:{view:"front",region:"abs"},
+    obliques:{view:"front",region:"obliques"}, quads:{view:"front",region:"quads"},
+    back:{view:"back",region:"back"}, triceps:{view:"back",region:"triceps"},
+    forearms:{view:"back",region:"forearms"}, glutes:{view:"back",region:"glutes"},
+    hamstrings:{view:"back",region:"hamstrings"}, calves:{view:"back",region:"calves"},
+    fullbody:{view:"front",region:null},
+  };
+
+  function dtMuscleGlyphSVG(bucket){
+    const target=BUCKET_REGION[bucket]||BUCKET_REGION.fullbody;
+    const view=target.view, highlightRegion=target.region;
+    let parts=[];
+    REGIONS.forEach(([id,regionView,tag,attrs])=>{
+      if(regionView!=="shared"&&regionView!==view)return;
+      const isHighlight=id===highlightRegion;
+      const fill=isHighlight?HILITE:BASE;
+      if(tag==="g"){ const b=GROUP_BUILDERS[id]; if(b)parts.push(b(fill)); }
+      else parts.push(`<${tag} ${attrStr(attrs)} fill="${fill}"/>`);
+    });
+    const glow=highlightRegion?` style="filter:drop-shadow(0 0 2.2px ${HILITE}99)"`:"";
+    return `<svg viewBox="0 0 24 32" width="22" height="29" xmlns="http://www.w3.org/2000/svg"${glow}>${parts.join("")}</svg>`;
+  }
+
+  function dtMuscleIconHTML(rawMuscle){
+    const {bucket}=dtClassifyMuscle(rawMuscle);
+    return dtMuscleGlyphSVG(bucket);
+  }
+
+  window.dtClassifyMuscle=dtClassifyMuscle;
+  window.dtMuscleGlyphSVG=dtMuscleGlyphSVG;
+  window.dtMuscleIconHTML=dtMuscleIconHTML;
+  window.DT_HISTORY_MUSCLE_ICON_VERSION=V;
+})();
+</script>
+
+<style id="dt-v25-5-history-stats-css">
+/* Task 2: History Export entry point -- larger glass touch target.
+   Does not touch #dtExportModal or any export renderer/logic. */
+.dt-history-head-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.dt-history-export-btn{
+  flex:none;height:46px;padding:0 18px;box-sizing:border-box;
+  border:1px solid rgba(103,196,166,.34);border-radius:14px;
+  background:linear-gradient(135deg,rgba(34,107,171,.16),rgba(58,199,150,.12));
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  color:#8fe0c4;font:800 13px system-ui;letter-spacing:.01em;
+  display:inline-flex;align-items:center;justify-content:center;
+  box-shadow:0 0 18px rgba(80,210,175,.16),inset 0 0 0 1px rgba(255,255,255,.03);
+}
+.dt-history-export-btn:active{background:linear-gradient(135deg,rgba(34,107,171,.26),rgba(58,199,150,.20))}
+
+/* Task 4: Body Composition eyebrow. Scoped to .dt-bf-head only -- the
+   base .label class has no rule anywhere in the file, so this text was
+   previously rendering at plain body size instead of as a small eyebrow.
+   Intentionally NOT touching bare .label or .dt-tb-head (Training Body
+   is locked), only this card's own heading. */
+.dt-bf-head .label{
+  font:750 10px system-ui;letter-spacing:.14em;text-transform:uppercase;
+  color:#718d9c;margin-bottom:2px;
+}
+</style>
+
 <style id="dt-v25-bodyfat-css">
 .dt-bf-card{margin-top:12px}
 .dt-bf-head{margin-bottom:12px}
@@ -12084,6 +12236,963 @@ body.dt-session-focus-open{overflow:hidden!important}
   window.dtFinishWorkoutSession=finishSession;
   window.dtSessionElapsedMs=elapsed;
   window.DT_SESSION_FOCUS_VERSION=VERSION;
+})();
+</script>
+
+<style id="dt-v25-6-session-control-css">
+/* ============================================================
+   M/ARC V25.6 — SESSION CONTROL / FINISH FLOW
+   Session-owned UI only. Training Body and Export are untouched.
+   ============================================================ */
+
+/* ---------- center timer: radial hold-and-slide ---------- */
+nav.dt-v10-nav button.dt-log{
+  touch-action:none!important;
+  user-select:none!important;
+  -webkit-user-select:none!important;
+  -webkit-touch-callout:none!important;
+}
+nav.dt-v10-nav button.dt-log[data-session-state="running"] .dt-session-nav-icon{
+  animation:dtV26TimerBreath 3.4s ease-in-out infinite;
+}
+@keyframes dtV26TimerBreath{
+  0%,100%{transform:scale(.98);filter:drop-shadow(0 0 0 rgba(85,221,160,0))}
+  50%{transform:scale(1.045);filter:drop-shadow(0 0 4px rgba(85,221,160,.27))}
+}
+nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
+  content:"";position:absolute;inset:-7px;border-radius:50%;pointer-events:none;
+  background:conic-gradient(from -90deg,#55dda0 0deg,var(--dt-rest-angle,0deg),rgba(73,119,139,.14) var(--dt-rest-angle,0deg),rgba(73,119,139,.14) 360deg);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 1.5px));
+  mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 1.5px));
+  filter:drop-shadow(0 0 4px rgba(85,221,160,.14));
+}
+#dtSessionRadial{
+  position:fixed;inset:0;z-index:11990;display:none;pointer-events:none;
+  background:radial-gradient(circle at var(--dt-rx,50%) var(--dt-ry,90%),rgba(12,28,36,.18),transparent 150px);
+}
+#dtSessionRadial.show{display:block}
+.dt-radial-track{
+  position:fixed;left:var(--dt-rx);top:var(--dt-ry);width:190px;height:104px;
+  transform:translate(-50%,-100%);
+  border:1px solid rgba(84,130,151,.15);border-bottom:0;border-radius:100px 100px 0 0;
+  box-shadow:0 -6px 26px rgba(0,0,0,.18),inset 0 8px 22px rgba(64,147,179,.025);
+  opacity:0;animation:dtV26RadialTrack .18s ease forwards;
+}
+@keyframes dtV26RadialTrack{to{opacity:1}}
+.dt-radial-option{
+  position:fixed;width:58px;height:58px;transform:translate(-50%,-50%) scale(.78);
+  border:1px solid rgba(81,119,138,.28);border-radius:50%;
+  background:rgba(6,18,25,.96);color:#8599a3;
+  display:grid;place-items:center;align-content:center;gap:2px;
+  opacity:0;box-shadow:0 8px 24px rgba(0,0,0,.32);
+  animation:dtV26RadialIn .20s cubic-bezier(.2,.8,.2,1) forwards;
+  transition:transform .10s ease,border-color .10s ease,color .10s ease,box-shadow .10s ease,background .10s ease;
+}
+.dt-radial-option:nth-of-type(3){animation-delay:.025s}
+.dt-radial-option:nth-of-type(4){animation-delay:.05s}
+@keyframes dtV26RadialIn{to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+.dt-radial-option svg{width:19px;height:19px;stroke:currentColor}
+.dt-radial-option b{font:900 7px/1 system-ui;letter-spacing:.06em}
+.dt-radial-option.selected[data-action="pause"]{
+  color:#f0c66e;border-color:rgba(240,198,110,.58);background:rgba(65,48,18,.94);
+  box-shadow:0 0 24px rgba(240,198,110,.18)
+}
+.dt-radial-option.selected[data-action="focus"]{
+  color:#6bbaff;border-color:rgba(83,168,237,.60);background:rgba(12,38,60,.94);
+  box-shadow:0 0 24px rgba(72,164,236,.18)
+}
+.dt-radial-option.selected[data-action="finish"]{
+  color:#ed8585;border-color:rgba(231,106,106,.58);background:rgba(61,25,28,.95);
+  box-shadow:0 0 24px rgba(225,91,91,.17)
+}
+.dt-radial-cancel{
+  position:fixed;left:var(--dt-rx);top:calc(var(--dt-ry) - 12px);
+  transform:translate(-50%,-100%);color:#526b76;font:800 7px system-ui;letter-spacing:.08em
+}
+
+/* ---------- Focus screen: real pull-down interaction ---------- */
+#dtSessionFocus{overflow:hidden!important;touch-action:none!important}
+#dtSessionFocus .dt-session-focus-inner{
+  will-change:transform,opacity;
+  transition:transform .22s cubic-bezier(.2,.78,.22,1),opacity .18s ease;
+}
+#dtSessionFocus.dt-focus-pulling .dt-session-focus-inner{transition:none!important}
+#dtSessionFocus.dt-focus-closing .dt-session-focus-inner{
+  transform:translate3d(0,105dvh,0)!important;opacity:.28!important;
+}
+#dtSessionFocus::after{
+  content:"";position:fixed;left:50%;bottom:calc(13px + env(safe-area-inset-bottom));
+  width:42px;height:4px;border-radius:99px;background:rgba(129,164,180,.20);
+  transform:translateX(-50%);pointer-events:none
+}
+
+/* ---------- Rest timer: local to current exercise ---------- */
+#dtRestPill{display:none!important}
+.dt-rest-inline-wrap{
+  position:relative;z-index:4;display:flex;justify-content:flex-end;
+  padding:0 11px 7px;pointer-events:none
+}
+.dt-rest-inline{
+  pointer-events:auto;min-height:30px;max-width:100%;
+  display:flex;align-items:center;justify-content:flex-end;gap:7px;
+  padding:5px 8px;border:1px solid rgba(82,194,151,.28);border-radius:11px;
+  background:rgba(7,25,29,.72);box-shadow:0 0 14px rgba(82,194,151,.055);
+  color:#63dda4;touch-action:manipulation;
+  transition:max-width .18s ease,border-color .18s ease,box-shadow .18s ease
+}
+.dt-rest-inline.complete{border-color:rgba(101,225,164,.42);box-shadow:0 0 17px rgba(101,225,164,.10)}
+.dt-rest-inline.paused{color:#efc66c;border-color:rgba(239,198,108,.30)}
+.dt-rest-inline .label{font:900 7px system-ui;letter-spacing:.10em;color:#78919c}
+.dt-rest-inline .time{font:900 12px system-ui;min-width:34px;text-align:center}
+.dt-rest-inline .compact-controls{display:none;align-items:center;gap:5px}
+.dt-rest-inline.expanded .compact-controls{display:flex}
+.dt-rest-inline button{
+  min-width:31px;height:28px;padding:0 7px;border:1px solid rgba(80,121,139,.24);
+  border-radius:9px;background:rgba(8,21,28,.58);color:#9bb0ba;font:850 9px system-ui
+}
+.dt-rest-inline button.skip{color:#708792}
+.dt-rest-inline button.pause{color:#67dda5}
+#dtRestGlobal{
+  position:fixed;z-index:9250;left:50%;bottom:calc(80px + env(safe-area-inset-bottom));
+  transform:translateX(-50%);display:none;align-items:center;gap:7px;
+  min-height:30px;padding:5px 10px;border:1px solid rgba(82,194,151,.24);border-radius:999px;
+  background:rgba(5,20,27,.91);backdrop-filter:blur(10px);
+  box-shadow:0 4px 18px rgba(0,0,0,.25),0 0 13px rgba(82,194,151,.05);
+  color:#64dca4;font:900 9px system-ui
+}
+#dtRestGlobal.show{display:flex}
+#dtRestGlobal small{font:850 7px system-ui;color:#758c97;letter-spacing:.09em}
+#dtRestGlobal.paused{color:#efc66c;border-color:rgba(239,198,108,.27)}
+
+/* ---------- remaining exercises / template decision ---------- */
+#dtSessionRemaining,
+#dtSessionTemplateChoice{
+  position:fixed;inset:0;z-index:12800;display:none;align-items:flex-end;justify-content:center;
+  background:rgba(1,7,11,.68);backdrop-filter:blur(10px)
+}
+#dtSessionRemaining.show,#dtSessionTemplateChoice.show{display:flex}
+.dt-v26-sheet{
+  width:min(560px,100%);max-height:84dvh;overflow:auto;box-sizing:border-box;
+  padding:22px 20px calc(22px + env(safe-area-inset-bottom));
+  border:1px solid rgba(68,105,124,.38);border-bottom:0;border-radius:24px 24px 0 0;
+  background:linear-gradient(180deg,rgba(8,25,34,.985),rgba(4,16,23,.985));
+  box-shadow:0 -18px 60px rgba(0,0,0,.40)
+}
+.dt-v26-sheet .kicker{color:#55dda0;font:900 9px system-ui;letter-spacing:.15em;text-transform:uppercase}
+.dt-v26-sheet h3{margin:7px 0 5px;color:#eef5f7;font:900 22px system-ui}
+.dt-v26-sheet .sub{margin:0;color:#78909b;font:600 11px/1.5 system-ui}
+#dtRemainingList{display:grid;gap:8px;margin-top:17px}
+.dt-remaining-row{
+  --skip-x:0px;position:relative;overflow:hidden;border:1px solid rgba(80,123,142,.20);
+  border-radius:15px;background:rgba(7,22,29,.38);touch-action:pan-y
+}
+.dt-remaining-bg{
+  position:absolute;inset:0;display:flex;align-items:center;padding:0 14px;
+  background:linear-gradient(90deg,rgba(53,171,116,.23),rgba(53,171,116,.03) 64%,transparent);
+  color:#6de1aa;font:900 8px system-ui;letter-spacing:.11em
+}
+.dt-remaining-front{
+  position:relative;z-index:2;min-height:58px;padding:10px 10px 10px 13px;
+  display:flex;align-items:center;gap:10px;background:rgba(7,22,29,.96);
+  transform:translate3d(var(--skip-x),0,0);transition:transform .16s cubic-bezier(.2,.8,.2,1)
+}
+.dt-remaining-row.dragging .dt-remaining-front{transition:none}
+.dt-remaining-copy{min-width:0;flex:1}
+.dt-remaining-copy b{display:block;color:#dce8ed;font:850 12px system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dt-remaining-copy span{display:block;margin-top:3px;color:#708894;font:650 8px system-ui}
+.dt-skip-button{
+  min-width:52px;height:34px;border:1px solid rgba(76,170,124,.26);border-radius:10px;
+  background:rgba(49,151,101,.09);color:#69dfa7;font:850 9px system-ui
+}
+.dt-v26-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:17px}
+.dt-v26-actions button{min-height:48px;border-radius:14px;font:850 11px system-ui}
+.dt-v26-secondary{border:1px solid #2a4350;background:#0b1b24;color:#d4e0e5}
+.dt-v26-primary{border:1px solid rgba(77,190,139,.35);background:#103a2b;color:#68e1aa}
+.dt-v26-primary:disabled{opacity:.35}
+.dt-change-list{display:grid;gap:7px;margin-top:15px}
+.dt-change-row{
+  display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid rgba(73,112,132,.17);
+  border-radius:12px;background:rgba(8,22,30,.35);font:750 10px system-ui;color:#b9cbd3
+}
+.dt-change-row.add i{color:#60dda5}.dt-change-row.remove i{color:#e77d7d}.dt-change-row.update i{color:#6eb6ec}
+.dt-change-row i{font-style:normal;font-weight:950;width:14px;text-align:center}
+
+/* ---------- completion celebration ---------- */
+#dtSessionComplete{
+  position:fixed;inset:0;z-index:13050;display:none;overflow:auto;
+  background:
+    radial-gradient(circle at 50% 35%,rgba(37,143,105,.13),transparent 27%),
+    radial-gradient(circle at 50% 72%,rgba(51,125,179,.06),transparent 31%),
+    #020609;color:#edf5f7
+}
+#dtSessionComplete.show{display:block}
+.dt-complete-inner{
+  position:relative;width:min(560px,100%);min-height:100dvh;margin:auto;box-sizing:border-box;
+  padding:max(30px,env(safe-area-inset-top)) 24px calc(30px + env(safe-area-inset-bottom));
+  display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center
+}
+.dt-complete-mark{
+  width:84px;height:84px;border-radius:50%;display:grid;place-items:center;
+  border:1px solid rgba(87,222,161,.54);background:rgba(28,93,67,.12);
+  color:#66e0a6;box-shadow:0 0 42px rgba(85,221,160,.15);
+  animation:dtCompleteMark .75s cubic-bezier(.18,.85,.25,1) both
+}
+.dt-complete-mark svg{width:39px;height:39px;stroke:currentColor}
+@keyframes dtCompleteMark{0%{transform:scale(.65);opacity:0}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+.dt-complete-kicker{margin-top:19px;color:#59dda1;font:900 9px system-ui;letter-spacing:.19em}
+.dt-complete-title{margin:7px 0 4px;font:900 30px system-ui;letter-spacing:-.02em}
+.dt-complete-day{color:#8198a3;font:800 11px system-ui;letter-spacing:.07em}
+.dt-complete-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%;margin-top:21px}
+.dt-complete-stat{padding:11px 7px;border:1px solid rgba(67,104,122,.20);border-radius:13px;background:rgba(7,21,28,.32)}
+.dt-complete-stat small{display:block;color:#637b86;font:800 7px system-ui;letter-spacing:.10em}
+.dt-complete-stat b{display:block;color:#dfecef;font:900 15px system-ui;margin-top:4px}
+.dt-complete-muscles{width:100%;margin-top:16px;padding:13px;border:1px solid rgba(67,104,122,.18);border-radius:16px;background:rgba(7,21,28,.28);box-sizing:border-box}
+.dt-complete-muscles>small{display:block;text-align:left;color:#68818c;font:850 7px system-ui;letter-spacing:.11em}
+.dt-complete-bodies{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:5px}
+.dt-complete-body{height:170px;overflow:hidden;display:grid;place-items:center}
+.dt-complete-body .body-chart-svg{height:165px!important;width:auto!important;max-width:100%!important}
+.dt-complete-chips{display:flex;justify-content:center;gap:5px;flex-wrap:wrap;margin-top:7px}
+.dt-complete-chip{padding:5px 8px;border:1px solid rgba(87,221,161,.20);border-radius:999px;color:#86a5b1;font:800 8px system-ui;background:rgba(8,24,31,.44)}
+.dt-complete-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;width:100%;margin-top:17px}
+.dt-complete-actions button{min-height:47px;border-radius:14px;font:850 10px system-ui}
+#dtCompleteBodyBtn{border:1px solid rgba(79,192,141,.38);background:#103b2b;color:#68e1aa;box-shadow:0 0 18px rgba(85,221,160,.08)}
+#dtCompleteDone{border:1px solid #294350;background:#0b1b24;color:#d5e1e6}
+.dt-confetti{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.dt-confetti i{
+  position:absolute;left:50%;top:38%;width:3px;height:12px;border-radius:3px;
+  background:var(--c,#55dda0);opacity:0;
+  transform:translate(-50%,-50%) rotate(var(--r,0deg));
+  animation:dtConfetti 1.25s cubic-bezier(.15,.7,.2,1) var(--d,0s) forwards
+}
+@keyframes dtConfetti{
+  0%{opacity:0;transform:translate(-50%,-50%) rotate(var(--r)) scale(.5)}
+  12%{opacity:.92}
+  100%{opacity:0;transform:translate(calc(-50% + var(--x)),calc(-50% + var(--y))) rotate(calc(var(--r) + 210deg)) scale(.85)}
+}
+@media(prefers-reduced-motion:reduce){
+  .dt-confetti{display:none}.dt-complete-mark{animation:none}
+  nav.dt-v10-nav button.dt-log[data-session-state="running"] .dt-session-nav-icon{animation:none}
+}
+</style>
+
+<script id="dt-v25-6-session-control-js">
+(()=>{
+  "use strict";
+  const VERSION="25.6-session-control-stable";
+  const HOLD_MS=340,SKIP_THRESHOLD=52;
+  let radial=null,radialTimer=0,radialGesture=null,radialSelection=null;
+  let focusGesture=null,restExpanded=false,finishContext=null,completeContext=null;
+
+  const now=()=>Date.now();
+  const clone=v=>{try{return JSON.parse(JSON.stringify(v))}catch(_){return v}};
+  const session=()=>state.workouts?.sessionClock||null;
+  const active=()=>!!session()?.active;
+  const saveNow=()=>{try{save()}catch(e){console.warn("V25.6 save failed",e)}};
+  const stableKey=(e,i=0)=>{
+    try{
+      if(e?.[4])return String(e[4]);
+      if(typeof exerciseKey==="function")return String(exerciseKey(e));
+    }catch(_){}
+    return `${e?.[0]||"Exercise"}|${e?.[1]||""}|${i}`;
+  };
+  const displayName=day=>{
+    try{return window.dtWorkoutDisplayName?.(day)||plans?.[day]?.title||String(day||"Workout").toUpperCase()}
+    catch(_){return String(day||"Workout").toUpperCase()}
+  };
+  const fmtDuration=ms=>{
+    const min=Math.max(0,Math.round(Number(ms||0)/60000));
+    if(min<60)return `${min}m`;
+    const h=Math.floor(min/60),m=min%60;return m?`${h}h ${m}m`:`${h}h`;
+  };
+  const fmtRest=ms=>{
+    const t=Math.max(0,Math.ceil(Number(ms||0)/1000)),m=Math.floor(t/60),s=t%60;
+    return `${m}:${String(s).padStart(2,"0")}`;
+  };
+  const dayKey=ms=>{
+    const d=new Date(ms||Date.now()),p=n=>String(n).padStart(2,"0");
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+  };
+  function hapticTick(ms=9){
+    try{if(typeof navigator.vibrate==="function")navigator.vibrate(ms)}catch(_){}
+  }
+
+  /* ---------------- template/session metadata ---------------- */
+  function planDescriptor(day){
+    let ex=[];
+    try{ex=effectiveExercises(day)||[]}catch(_){}
+    return ex.map((e,i)=>({
+      key:stableKey(e,i),name:String(e?.[0]||"Exercise"),type:String(e?.[1]||""),
+      muscle:String(e?.[2]||""),sets:Array.isArray(e?.[3])?e[3].length:0
+    }));
+  }
+  function templateSnapshot(day){
+    return {
+      custom:clone(state.workouts?.custom?.[day]||[]),
+      edits:clone(state.workouts?.edits?.[day]||{}),
+      removed:clone(state.workouts?.removed?.[day]||[]),
+      routineOverride:Object.prototype.hasOwnProperty.call(state.workouts?.routineOverrides||{},day)
+        ?state.workouts.routineOverrides[day]:null,
+      routineOverrideHad:Object.prototype.hasOwnProperty.call(state.workouts?.routineOverrides||{},day),
+      dayName:Object.prototype.hasOwnProperty.call(state.workouts?.dayNames||{},day)
+        ?state.workouts.dayNames[day]:null,
+      dayNameHad:Object.prototype.hasOwnProperty.call(state.workouts?.dayNames||{},day),
+      planTitle:plans?.[day]?.title||null
+    };
+  }
+  function ensureSessionMeta(){
+    const s=session();if(!s?.active)return null;
+    let changed=false;
+    if(!Array.isArray(s.skippedExerciseKeys)){s.skippedExerciseKeys=[];changed=true}
+    if(!Array.isArray(s.events)){s.events=[];changed=true}
+    if(!Array.isArray(s.plannedAtStart)){s.plannedAtStart=planDescriptor(s.day);changed=true}
+    if(!s.templateSnapshot){s.templateSnapshot=templateSnapshot(s.day);changed=true}
+    if(changed)saveNow();
+    return s;
+  }
+  function restoreTemplate(s){
+    const snap=s?.templateSnapshot;if(!snap)return;
+    const day=s.day;
+    state.workouts.custom=state.workouts.custom||{};
+    state.workouts.edits=state.workouts.edits||{};
+    state.workouts.removed=state.workouts.removed||{};
+    state.workouts.routineOverrides=state.workouts.routineOverrides||{};
+    state.workouts.dayNames=state.workouts.dayNames||{};
+    state.workouts.custom[day]=clone(snap.custom||[]);
+    state.workouts.edits[day]=clone(snap.edits||{});
+    state.workouts.removed[day]=clone(snap.removed||[]);
+    if(snap.routineOverrideHad)state.workouts.routineOverrides[day]=snap.routineOverride;
+    else delete state.workouts.routineOverrides[day];
+    if(snap.dayNameHad)state.workouts.dayNames[day]=snap.dayName;
+    else delete state.workouts.dayNames[day];
+    if(plans?.[day]&&snap.planTitle)plans[day].title=snap.planTitle;
+    try{delete state.workouts.drafts?.[`${day}_${s.dayKey}`]}catch(_){}
+    saveNow();
+  }
+  function templateDiff(s){
+    const before=s?.plannedAtStart||[],after=planDescriptor(s?.day);
+    const b=new Map(before.map(x=>[x.key,x])),a=new Map(after.map(x=>[x.key,x]));
+    const added=after.filter(x=>!b.has(x.key));
+    const removed=before.filter(x=>!a.has(x.key));
+    const updated=after.filter(x=>{
+      const old=b.get(x.key);if(!old)return false;
+      return old.name!==x.name||old.type!==x.type||old.muscle!==x.muscle||old.sets!==x.sets;
+    });
+    return {added,removed,updated,changed:!!(added.length||removed.length||updated.length)};
+  }
+
+  /* ---------------- session records / remaining ---------------- */
+  function finalizePendingForSession(s){
+    const pending=Object.values(state.workouts?.pendingExercises||{});
+    pending.forEach(rec=>{
+      if(rec?.day!==s.day||rec?.dayKey!==s.dayKey)return;
+      const t=new Date(rec.startedAt||0).getTime();
+      if(Number.isFinite(t)&&t>=Number(s.startedAtMs||0)){
+        try{window.dtFinalizePending?.(rec.id)}catch(_){}
+      }
+    });
+  }
+  function sessionRecords(s,end=Date.now()){
+    const start=Number(s?.startedAtMs)||0;
+    return (state.workouts?.completedExercises||[]).filter(x=>{
+      const t=new Date(x.finalizedAt||x.startedAt||0).getTime();
+      return x.day===s.day && Number.isFinite(t)&&t>=start&&t<=end;
+    });
+  }
+  function remainingExercises(s){
+    const completed=new Set(sessionRecords(s).map(x=>String(x.exerciseKey||"")));
+    const skipped=new Set(s?.skippedExerciseKeys||[]);
+    let ex=[];try{ex=effectiveExercises(s.day)||[]}catch(_){}
+    return ex.map((e,i)=>({e,key:stableKey(e,i),name:String(e?.[0]||"Exercise"),muscle:String(e?.[2]||"")}))
+      .filter(x=>!completed.has(x.key)&&!skipped.has(x.key));
+  }
+  function sessionStats(s,end=Date.now()){
+    const rows=sessionRecords(s,end);
+    const sets=rows.reduce((n,r)=>n+(r.sets||[]).filter(v=>
+      String(v?.kg??"").trim()!==""||String(v?.reps??"").trim()!==""||String(v?.effort??"").trim()!==""
+    ).length,0);
+    return {rows,sets,exercises:new Set(rows.map(x=>x.exerciseKey||`${x.name}|${x.type||""}`)).size};
+  }
+  function buildMuscleSummary(s,end=Date.now()){
+    const stats=sessionStats(s,end),map={};
+    const weights=window.DT_ROLE_WEIGHTS||{primary:1,secondary:.55,stabilizer:.25};
+    const effort=window.DT_EFFORT_MULT||{easy:.9,ideal:1,max:1.1};
+    const add=(keys,role,factor)=>{
+      const uniq=[...new Set(keys||[])];if(!uniq.length)return;
+      const share=((weights[role]??1)*factor)/uniq.length;
+      uniq.forEach(key=>{
+        if(!map[key])map[key]={key,score:0,roles:{primary:0,secondary:0,stabilizer:0}};
+        map[key].score+=share;map[key].roles[role]+=share;
+      });
+    };
+    stats.rows.forEach(rec=>{
+      const meta=window.dtInferMeta?.(rec.name,rec.muscle)||{};
+      (rec.sets||[]).filter(v=>String(v?.kg??"").trim()!==""||String(v?.reps??"").trim()!==""||String(v?.effort??"").trim()!=="").forEach(set=>{
+        const f=effort[set.effort]??1;
+        add(meta.primaryMuscles,"primary",f);add(meta.secondaryMuscles,"secondary",f);add(meta.stabilizerMuscles,"stabilizer",f);
+      });
+    });
+    let muscles=Object.values(map).sort((a,b)=>b.score-a.score);
+    if(typeof window.dtIntegerPercentages==="function")muscles=window.dtIntegerPercentages(muscles);
+    else{
+      const total=muscles.reduce((n,x)=>n+x.score,0)||1;
+      muscles=muscles.map(x=>({...x,pct:Math.round(x.score/total*100)}));
+    }
+    muscles=muscles.map(m=>{
+      const role=Object.entries(m.roles).sort((a,b)=>b[1]-a[1])[0]?.[0]||"primary";
+      return {...m,role,label:window.dtSummaryLabel?.(m.key)||String(m.key).replace(/_/g," ")};
+    }).sort((a,b)=>(b.pct||0)-(a.pct||0));
+    return {
+      id:`${s.dayKey}|${s.day}`,day:s.day,dayKey:s.dayKey,title:displayName(s.day),
+      completedAt:new Date(end).toISOString(),exerciseCount:stats.exercises,
+      plannedCount:(s.plannedAtStart||[]).length,skippedCount:(s.skippedExerciseKeys||[]).length,
+      workingSets:stats.sets,muscles
+    };
+  }
+
+  /* ---------------- radial center control ---------------- */
+  function ensureRadial(){
+    if(radial)return radial;
+    radial=document.createElement("div");radial.id="dtSessionRadial";
+    radial.innerHTML=`
+      <div class="dt-radial-track"></div>
+      <div class="dt-radial-option" data-action="pause">
+        <svg viewBox="0 0 24 24" fill="none"><path class="pause-lines" d="M9 7v10M15 7v10" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></svg>
+        <b>PAUSE</b>
+      </div>
+      <div class="dt-radial-option" data-action="focus">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="6.5" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <b>FOCUS</b>
+      </div>
+      <div class="dt-radial-option" data-action="finish">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="7.5" y="7.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.9"/></svg>
+        <b>FINISH</b>
+      </div>
+      <div class="dt-radial-cancel">RETURN TO CENTER TO CANCEL</div>`;
+    document.body.appendChild(radial);return radial;
+  }
+  function radialLayout(btn){
+    const r=ensureRadial(),box=btn.getBoundingClientRect(),cx=box.left+box.width/2,cy=box.top+box.height/2;
+    r.style.setProperty("--dt-rx",`${cx}px`);r.style.setProperty("--dt-ry",`${cy}px`);
+    const pos={pause:[cx-72,cy-73],focus:[cx,cy-105],finish:[cx+72,cy-73]};
+    Object.entries(pos).forEach(([a,[x,y]])=>{
+      const el=r.querySelector(`[data-action="${a}"]`);el.style.left=`${x}px`;el.style.top=`${y}px`;
+    });
+    return {cx,cy,pos};
+  }
+  function showRadial(btn,e){
+    if(!active())return;
+    clearTimeout(radialTimer);
+    const layout=radialLayout(btn),s=ensureSessionMeta();
+    radialGesture={id:e.pointerId,btn,cx:layout.cx,cy:layout.cy,pos:layout.pos,active:true};
+    radialSelection=null;
+    const p=ensureRadial().querySelector('[data-action="pause"]');
+    p.querySelector("b").textContent=s.status==="paused"?"RESUME":"PAUSE";
+    p.querySelector("svg").innerHTML=s.status==="paused"
+      ?'<path d="m10 8 6 4-6 4Z" fill="currentColor" stroke="none"/>'
+      :'<path d="M9 7v10M15 7v10" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/>';
+    radial.classList.add("show");hapticTick(10);
+    updateRadialSelection(e.clientX,e.clientY);
+  }
+  function hideRadial(){clearTimeout(radialTimer);radial?.classList.remove("show");radial?.querySelectorAll(".selected").forEach(x=>x.classList.remove("selected"));radialSelection=null}
+  function updateRadialSelection(x,y){
+    if(!radialGesture?.active)return;
+    const dCenter=Math.hypot(x-radialGesture.cx,y-radialGesture.cy);
+    let next=null,best=999;
+    if(dCenter>37){
+      Object.entries(radialGesture.pos).forEach(([action,[ox,oy]])=>{
+        const d=Math.hypot(x-ox,y-oy);if(d<best){best=d;next=action}
+      });
+      if(best>56)next=null;
+    }
+    if(next===radialSelection)return;
+    radial?.querySelectorAll(".dt-radial-option").forEach(el=>el.classList.toggle("selected",el.dataset.action===next));
+    if(next)hapticTick(7);
+    radialSelection=next;
+  }
+  function executeRadial(action){
+    if(action==="pause"){
+      const s=session();if(s?.status==="paused")window.dtResumeWorkoutSession?.();else window.dtPauseWorkoutSession?.();
+    }else if(action==="focus")window.dtOpenSessionFocus?.();
+    else if(action==="finish")openFinishFlow();
+  }
+  function bindCenter(){
+    const b=document.querySelector('nav.dt-v10-nav [data-v10="log"]');if(!b||b.dataset.v26Bound==="1")return;
+    b.dataset.v26Bound="1";b.oncontextmenu=e=>e.preventDefault();
+    /* Neutralize the older click action; pointer-up below owns tap vs hold. */
+    b.onclick=e=>{e.preventDefault();e.stopImmediatePropagation()};
+    b.addEventListener("pointerdown",e=>{
+      if(e.isPrimary===false||(e.pointerType==="mouse"&&e.button!==0))return;
+      radialGesture={id:e.pointerId,btn:b,startX:e.clientX,startY:e.clientY,started:performance.now(),active:false};
+      try{b.setPointerCapture?.(e.pointerId)}catch(_){}
+      if(active())radialTimer=setTimeout(()=>showRadial(b,e),HOLD_MS);
+    });
+    b.addEventListener("pointermove",e=>{
+      if(!radialGesture||e.pointerId!==radialGesture.id)return;
+      if(radialGesture.active){e.preventDefault();updateRadialSelection(e.clientX,e.clientY);return}
+      if(Math.hypot(e.clientX-radialGesture.startX,e.clientY-radialGesture.startY)>13)clearTimeout(radialTimer);
+    });
+    const end=e=>{
+      if(!radialGesture||e.pointerId!==radialGesture.id)return;
+      const g=radialGesture,wasRadial=!!g.active,choice=radialSelection;
+      clearTimeout(radialTimer);radialGesture=null;
+      try{if(b.hasPointerCapture?.(e.pointerId))b.releasePointerCapture?.(e.pointerId)}catch(_){}
+      if(wasRadial){hideRadial();if(choice)executeRadial(choice);return}
+      if(Math.hypot(e.clientX-g.startX,e.clientY-g.startY)<=14){
+        if(active()){ensureSessionMeta();window.dtOpenSessionFocus?.()}
+        else{window.dtStartWorkoutSession?.();setTimeout(ensureSessionMeta,0)}
+      }
+    };
+    b.addEventListener("pointerup",end);b.addEventListener("pointercancel",e=>{clearTimeout(radialTimer);hideRadial();radialGesture=null});
+  }
+
+  /* ---------------- Focus pull-down ---------------- */
+  function bindFocusPull(){
+    const f=document.getElementById("dtSessionFocus");if(!f||f.dataset.v26Pull==="1")return;
+    f.dataset.v26Pull="1";
+    const inner=f.querySelector(".dt-session-focus-inner");
+    f.addEventListener("pointerdown",e=>{
+      if(!f.classList.contains("show"))return;
+      if(e.target.closest("button,input,select,textarea,#dtSessionRestCard")){focusGesture={blocked:true,id:e.pointerId};return}
+      focusGesture={blocked:false,id:e.pointerId,x:e.clientX,y:e.clientY,dy:0,started:performance.now(),drag:false};
+      try{f.setPointerCapture?.(e.pointerId)}catch(_){}
+    },true);
+    f.addEventListener("pointermove",e=>{
+      const g=focusGesture;if(!g||g.blocked||e.pointerId!==g.id)return;
+      const dx=e.clientX-g.x,dy=e.clientY-g.y;g.dy=dy;
+      if(!g.drag){
+        if(Math.max(Math.abs(dx),Math.abs(dy))<7)return;
+        if(dy>0&&Math.abs(dy)>Math.abs(dx)*1.12)g.drag=true;
+        else{focusGesture=null;return}
+      }
+      e.preventDefault();e.stopImmediatePropagation();
+      const pull=Math.min(260,Math.max(0,dy));
+      f.classList.add("dt-focus-pulling");
+      inner.style.transform=`translate3d(0,${pull}px,0)`;
+      inner.style.opacity=String(Math.max(.60,1-pull/620));
+    },true);
+    f.addEventListener("pointerup",e=>{
+      const g=focusGesture;if(!g||e.pointerId!==g.id)return;
+      focusGesture=null;
+      if(g.blocked){e.stopImmediatePropagation();return}
+      e.stopImmediatePropagation();
+      f.classList.remove("dt-focus-pulling");
+      const v=g.dy/Math.max(1,performance.now()-g.started);
+      if(g.drag&&(g.dy>82||v>.58)){
+        f.classList.add("dt-focus-closing");
+        setTimeout(()=>{
+          f.classList.remove("dt-focus-closing");inner.style.transform="";inner.style.opacity="";
+          window.dtCloseSessionFocusToWorkout?.();
+        },185);
+      }else{
+        inner.style.transform="";inner.style.opacity="";
+      }
+    },true);
+    f.addEventListener("pointercancel",()=>{
+      focusGesture=null;f.classList.remove("dt-focus-pulling");inner.style.transform="";inner.style.opacity="";
+    },true);
+  }
+
+  /* ---------------- local rest timer ---------------- */
+  function currentWorkoutKey(){
+    const box=document.querySelector("#wlist .exercise.open[data-exkey]")||document.querySelector("#wlist .exercise[data-exkey]");
+    return box?.dataset.exkey||null;
+  }
+  function tagRestTarget(){
+    setTimeout(()=>{
+      const s=ensureSessionMeta();if(!s?.active||!s.rest)return;
+      if(!(s.rest.running||s.rest.paused))return;
+      if(!s.rest.exerciseKey){
+        try{
+          if(typeof effTarget!=="undefined"&&effTarget){
+            const ex=(effectiveExercises(s.day)||[])[effTarget.ei];
+            if(ex){s.rest.exerciseKey=stableKey(ex,effTarget.ei);s.rest.exerciseName=String(ex[0]||"Exercise");s.rest.setIndex=effTarget.si}
+          }
+        }catch(_){}
+        if(!s.rest.exerciseKey)s.rest.exerciseKey=currentWorkoutKey();
+      }
+      if(!Number.isFinite(s.rest.durationMs)||s.rest.durationMs<=0){
+        const remaining=s.rest.running?Math.max(0,s.rest.endsAtMs-Date.now()):Number(s.rest.remainingMs)||0;
+        s.rest.durationMs=Math.max(1000,remaining);
+      }
+      saveNow();renderRestUX();renderCenterRestRing();
+    },24);
+  }
+  function restRemaining(){
+    const s=session(),r=s?.rest;if(!r)return 0;
+    if(r.running)return Math.max(0,Number(r.endsAtMs||0)-Date.now());
+    if(r.paused)return Math.max(0,Number(r.remainingMs)||0);
+    return 0;
+  }
+  function restVisible(){
+    const r=session()?.rest;
+    return !!(active()&&r&&(r.running||r.paused||(Number(r.completeUntilMs)||0)>Date.now()));
+  }
+  function ensureGlobalRest(){
+    let g=document.getElementById("dtRestGlobal");if(g)return g;
+    g=document.createElement("button");g.id="dtRestGlobal";g.type="button";
+    g.innerHTML='<small>REST</small><b>1:30</b>';g.onclick=()=>window.dtOpenSessionFocus?.();
+    document.body.appendChild(g);return g;
+  }
+  function inlineRest(card){
+    let wrap=card.querySelector(":scope > .dt-rest-inline-wrap");
+    if(wrap)return wrap;
+    wrap=document.createElement("div");wrap.className="dt-rest-inline-wrap";
+    wrap.innerHTML=`<div class="dt-rest-inline" role="button" tabindex="0">
+      <span class="label">REST</span><span class="time">1:30</span>
+      <span class="compact-controls">
+        <button class="minus" type="button">−15</button>
+        <button class="pause" type="button">Ⅱ</button>
+        <button class="plus" type="button">+15</button>
+        <button class="skip" type="button">Skip</button>
+      </span>
+    </div>`;
+    card.insertBefore(wrap,card.querySelector(".exbody"));
+    const chip=wrap.querySelector(".dt-rest-inline");
+    chip.addEventListener("click",e=>{
+      if(e.target.closest("button"))return;
+      restExpanded=!restExpanded;renderRestUX();
+    });
+    chip.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();restExpanded=!restExpanded;renderRestUX()}});
+    ["pointerdown","touchstart"].forEach(ev=>wrap.addEventListener(ev,e=>e.stopPropagation(),{passive:true}));
+    wrap.querySelector(".minus").onclick=()=>{window.dtAdjustRestTimer?.(-15);tagRestTarget()};
+    wrap.querySelector(".plus").onclick=()=>{window.dtAdjustRestTimer?.(15);tagRestTarget()};
+    wrap.querySelector(".skip").onclick=()=>{skipRestDirect();restExpanded=false};
+    wrap.querySelector(".pause").onclick=()=>toggleRestDirect();
+    return wrap;
+  }
+  function skipRestDirect(){
+    const s=session();if(!s?.rest)return;
+    if(s.rest.running&&s.rest.lastActiveAtMs)s.restSpentMs=(Number(s.restSpentMs)||0)+Math.max(0,Date.now()-s.rest.lastActiveAtMs);
+    s.rest={running:false,paused:false,remainingMs:0,endsAtMs:0,lastActiveAtMs:0,completeUntilMs:0};
+    saveNow();renderRestUX();renderCenterRestRing();
+  }
+  function toggleRestDirect(){
+    const s=session(),r=s?.rest;if(!s?.active||!r)return;
+    if(r.running){
+      if(r.lastActiveAtMs)s.restSpentMs=(Number(s.restSpentMs)||0)+Math.max(0,Date.now()-r.lastActiveAtMs);
+      r.remainingMs=Math.max(0,r.endsAtMs-Date.now());r.running=false;r.paused=true;r.lastActiveAtMs=0;
+    }else if(r.paused&&s.status==="running"){
+      r.running=true;r.paused=false;r.endsAtMs=Date.now()+Math.max(1000,r.remainingMs);r.lastActiveAtMs=Date.now();
+    }
+    saveNow();renderRestUX();renderCenterRestRing();
+  }
+  function renderRestUX(){
+    const g=ensureGlobalRest(),s=session(),r=s?.rest;
+    g.classList.remove("show","paused");
+    if(!restVisible()){
+      document.querySelectorAll(".dt-rest-inline-wrap").forEach(x=>x.remove());
+      return;
+    }
+
+    const complete=(Number(r.completeUntilMs)||0)>Date.now(),time=complete?"0:00":fmtRest(restRemaining());
+    const activeView=document.querySelector(".view.active")?.id;
+    let card=null;
+    if(activeView==="workout"&&r.exerciseKey){
+      try{card=document.querySelector(`#wlist .exercise[data-exkey="${CSS.escape(r.exerciseKey)}"]`)}catch(_){}
+    }
+
+    /* Keep the same inline node while its exercise card survives. This avoids
+       a MutationObserver/render loop and makes expansion feel stable. */
+    document.querySelectorAll(".dt-rest-inline-wrap").forEach(w=>{
+      if(!card || w.parentElement!==card)w.remove();
+    });
+
+    if(card){
+      const wrap=inlineRest(card),chip=wrap.querySelector(".dt-rest-inline");
+      chip.classList.toggle("expanded",restExpanded);chip.classList.toggle("paused",!!r.paused);chip.classList.toggle("complete",complete);
+      chip.querySelector(".label").textContent=complete?"READY":r.paused?"PAUSED":"REST";
+      chip.querySelector(".time").textContent=time;
+      chip.querySelector(".pause").textContent=r.paused?"▶":"Ⅱ";
+    }else{
+      g.classList.add("show");g.classList.toggle("paused",!!r.paused);
+      g.querySelector("small").textContent=complete?"READY":r.paused?"PAUSED":"REST";
+      g.querySelector("b").textContent=time;
+    }
+  }
+  function renderCenterRestRing(){
+    const b=document.querySelector('nav.dt-v10-nav [data-v10="log"]'),r=session()?.rest;if(!b)return;
+    if(!restVisible()||!r){b.dataset.restActive="0";b.style.removeProperty("--dt-rest-angle");return}
+    const rem=(Number(r.completeUntilMs)||0)>Date.now()?0:restRemaining();
+    const total=Math.max(1000,Number(r.durationMs)||Number(state.workouts?.sessionSettings?.restDefaultSec||90)*1000);
+    const progress=Math.max(0,Math.min(1,1-rem/total));
+    b.dataset.restActive="1";b.style.setProperty("--dt-rest-angle",`${Math.round(progress*360)}deg`);
+  }
+
+  /* Existing V25.5 auto-rest fires first; attach its exercise context afterward. */
+  document.addEventListener("click",e=>{
+    if(e.target.closest?.("[data-eff],#dtRestMain,#dtRestMinus,#dtRestPlus"))tagRestTarget();
+  });
+  document.addEventListener("focusin",e=>{
+    if(e.target.matches?.(".loginput,input,textarea")){restExpanded=false;renderRestUX()}
+  });
+  window.visualViewport?.addEventListener?.("resize",()=>{restExpanded=false;renderRestUX()});
+  /* Route changes do not necessarily mutate child nodes, so refresh the
+     compact/global rest placement immediately after bottom-nav taps. */
+  document.addEventListener("click",e=>{
+    if(e.target.closest?.("nav.dt-v10-nav button"))setTimeout(()=>{renderRestUX();renderCenterRestRing()},0);
+  },true);
+
+  /* ---------------- finish workflow ---------------- */
+  function ensureFinishUI(){
+    if(!document.getElementById("dtSessionRemaining")){
+      const m=document.createElement("div");m.id="dtSessionRemaining";
+      m.innerHTML=`<section class="dt-v26-sheet">
+        <div class="kicker">SESSION PAUSED</div>
+        <h3 id="dtRemainingTitle">Exercises remaining</h3>
+        <p class="sub">Complete them, or swipe right to skip them for today. Skipping here does not delete them from your program.</p>
+        <div id="dtRemainingList"></div>
+        <div class="dt-v26-actions">
+          <button class="dt-v26-secondary" id="dtRemainingContinue" type="button">Continue workout</button>
+          <button class="dt-v26-primary" id="dtRemainingFinish" type="button" disabled>Finish session</button>
+        </div>
+      </section>`;document.body.appendChild(m);
+      m.querySelector("#dtRemainingContinue").onclick=cancelFinishFlow;
+      m.querySelector("#dtRemainingFinish").onclick=advanceAfterRemaining;
+    }
+    if(!document.getElementById("dtSessionTemplateChoice")){
+      const m=document.createElement("div");m.id="dtSessionTemplateChoice";
+      m.innerHTML=`<section class="dt-v26-sheet">
+        <div class="kicker">WORKOUT CHANGED</div>
+        <h3>Save these changes?</h3>
+        <p class="sub">Your logged session is kept either way. Choose whether today's exercise changes should become the future program.</p>
+        <div class="dt-change-list" id="dtTemplateChanges"></div>
+        <div class="dt-v26-actions">
+          <button class="dt-v26-secondary" id="dtTemplateToday" type="button">Just today</button>
+          <button class="dt-v26-primary" id="dtTemplateFuture" type="button">Save for future</button>
+        </div>
+      </section>`;document.body.appendChild(m);
+      m.querySelector("#dtTemplateToday").onclick=()=>resolveTemplate("today");
+      m.querySelector("#dtTemplateFuture").onclick=()=>resolveTemplate("future");
+    }
+    if(!document.getElementById("dtSessionComplete")){
+      const c=document.createElement("div");c.id="dtSessionComplete";
+      c.innerHTML=`<div class="dt-complete-inner">
+        <div class="dt-confetti" id="dtCompleteConfetti"></div>
+        <div class="dt-complete-mark"><svg viewBox="0 0 24 24" fill="none"><path d="m6 12.5 4 4 8-9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="dt-complete-kicker">M/ARC SESSION</div>
+        <div class="dt-complete-title">TRAINING COMPLETE</div>
+        <div class="dt-complete-day" id="dtCompleteDay">WORKOUT</div>
+        <div class="dt-complete-stats">
+          <div class="dt-complete-stat"><small>DURATION</small><b id="dtCompleteDuration">0m</b></div>
+          <div class="dt-complete-stat"><small>EXERCISES</small><b id="dtCompleteExercises">0</b></div>
+          <div class="dt-complete-stat"><small>SETS</small><b id="dtCompleteSets">0</b></div>
+        </div>
+        <section class="dt-complete-muscles">
+          <small>TODAY'S MUSCLE EMPHASIS</small>
+          <div class="dt-complete-bodies"><div class="dt-complete-body" id="dtCompleteFront"></div><div class="dt-complete-body" id="dtCompleteBack"></div></div>
+          <div class="dt-complete-chips" id="dtCompleteChips"></div>
+        </section>
+        <div class="dt-complete-actions">
+          <button id="dtCompleteDone" type="button">Done</button>
+          <button id="dtCompleteBodyBtn" type="button">View Training Body</button>
+        </div>
+      </div>`;document.body.appendChild(c);
+      c.querySelector("#dtCompleteDone").onclick=()=>closeComplete(false);
+      c.querySelector("#dtCompleteBodyBtn").onclick=()=>closeComplete(true);
+    }
+  }
+  function pauseForFinish(){
+    const s=ensureSessionMeta();if(!s)return null;
+    if(!finishContext)finishContext={wasRunning:s.status==="running"};
+    if(s.status==="running")window.dtPauseWorkoutSession?.();
+    finalizePendingForSession(s);
+    return s;
+  }
+  function cancelFinishFlow(){
+    document.getElementById("dtSessionRemaining")?.classList.remove("show");
+    document.getElementById("dtSessionTemplateChoice")?.classList.remove("show");
+    if(finishContext?.wasRunning&&session()?.status==="paused")window.dtResumeWorkoutSession?.();
+    finishContext=null;
+  }
+  function skipKey(key){
+    const s=ensureSessionMeta();if(!s)return;
+    if(!s.skippedExerciseKeys.includes(key))s.skippedExerciseKeys.push(key);
+    s.events.push({type:"skip_today",key,atMs:Date.now()});saveNow();renderRemaining();
+  }
+  function bindSkipRow(row,key){
+    let g=null,raf=0;
+    row.addEventListener("pointerdown",e=>{
+      if(e.target.closest("button"))return;
+      g={id:e.pointerId,x:e.clientX,y:e.clientY,dx:0,axis:null,started:performance.now()};
+      try{row.setPointerCapture?.(e.pointerId)}catch(_){}
+    });
+    row.addEventListener("pointermove",e=>{
+      if(!g||e.pointerId!==g.id)return;const dx=e.clientX-g.x,dy=e.clientY-g.y;g.dx=dx;
+      if(!g.axis){
+        if(Math.max(Math.abs(dx),Math.abs(dy))<7)return;
+        if(Math.abs(dx)>Math.abs(dy)*1.12)g.axis="x";else{g=null;return}
+      }
+      if(g.axis!=="x"||dx<0)return;e.preventDefault();row.classList.add("dragging");
+      cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>row.style.setProperty("--skip-x",`${Math.min(112,dx)}px`));
+    });
+    const end=e=>{
+      if(!g||e.pointerId!==g.id)return;const x=g.dx,v=x/Math.max(1,performance.now()-g.started);
+      row.classList.remove("dragging");g=null;
+      if(x>=SKIP_THRESHOLD||(x>=31&&v>.45)){row.style.setProperty("--skip-x","120px");setTimeout(()=>skipKey(key),90)}
+      else row.style.setProperty("--skip-x","0px");
+    };
+    row.addEventListener("pointerup",end);row.addEventListener("pointercancel",()=>{g=null;row.classList.remove("dragging");row.style.setProperty("--skip-x","0px")});
+  }
+  function renderRemaining(){
+    const s=ensureSessionMeta(),m=document.getElementById("dtSessionRemaining"),list=m.querySelector("#dtRemainingList"),left=remainingExercises(s);
+    m.querySelector("#dtRemainingTitle").textContent=left.length?`${left.length} exercise${left.length===1?"":"s"} remaining`:"Workout resolved";
+    list.innerHTML="";
+    left.forEach(x=>{
+      const row=document.createElement("div");row.className="dt-remaining-row";row.dataset.key=x.key;
+      row.innerHTML=`<div class="dt-remaining-bg">SKIP TODAY</div><div class="dt-remaining-front"><div class="dt-remaining-copy"><b>${x.name}</b><span>${x.muscle||"Planned activity"}</span></div><button class="dt-skip-button" type="button">Skip</button></div>`;
+      row.querySelector(".dt-skip-button").onclick=()=>skipKey(x.key);bindSkipRow(row,x.key);list.appendChild(row);
+    });
+    m.querySelector("#dtRemainingFinish").disabled=left.length>0;
+    if(!left.length)setTimeout(advanceAfterRemaining,220);
+  }
+  function openFinishFlow(){
+    ensureFinishUI();const s=pauseForFinish();if(!s)return;
+    const left=remainingExercises(s);
+    if(left.length){
+      document.getElementById("dtSessionFocus")?.classList.remove("show");
+      document.body.classList.remove("dt-session-focus-open");
+      renderRemaining();document.getElementById("dtSessionRemaining").classList.add("show");
+    }else advanceAfterRemaining();
+  }
+  function advanceAfterRemaining(){
+    document.getElementById("dtSessionRemaining")?.classList.remove("show");
+    const s=ensureSessionMeta();if(!s)return;
+    const diff=templateDiff(s);
+    finishContext={...(finishContext||{}),diff};
+    if(diff.changed){
+      const list=document.getElementById("dtTemplateChanges");list.innerHTML=[
+        ...diff.added.map(x=>`<div class="dt-change-row add"><i>+</i><span>${x.name}</span></div>`),
+        ...diff.removed.map(x=>`<div class="dt-change-row remove"><i>−</i><span>${x.name}</span></div>`),
+        ...diff.updated.map(x=>`<div class="dt-change-row update"><i>~</i><span>${x.name}</span></div>`)
+      ].join("");
+      document.getElementById("dtSessionTemplateChoice").classList.add("show");
+    }else commitFinish("unchanged");
+  }
+  function resolveTemplate(choice){
+    const s=ensureSessionMeta();if(!s)return;
+    document.getElementById("dtSessionTemplateChoice")?.classList.remove("show");
+    if(choice==="today")restoreTemplate(s);
+    commitFinish(choice);
+  }
+  function saveSessionSummary(summary,s,end,duration,choice){
+    if(!state.workouts.timedSessions)state.workouts.timedSessions=[];
+    const stats=sessionStats(s,end),rec={
+      id:`timed-${s.startedAtMs}`,day:s.day,dayKey:s.dayKey,
+      startedAt:new Date(s.startedAtMs).toISOString(),endedAt:new Date(end).toISOString(),
+      durationMs:duration,pausedMs:Number(s.pausedAccumMs)||0,restMs:Number(s.restSpentMs)||0,
+      exerciseCount:stats.exercises,workingSets:stats.sets,
+      skippedExerciseKeys:clone(s.skippedExerciseKeys||[]),templateChoice:choice,
+      events:clone(s.events||[])
+    };
+    const idx=state.workouts.timedSessions.findIndex(x=>x.id===rec.id);
+    if(idx>=0)state.workouts.timedSessions[idx]=rec;else state.workouts.timedSessions.push(rec);
+    state.workouts.timedSessions=state.workouts.timedSessions.slice(-300);
+
+    state.workouts.dailySummaries=state.workouts.dailySummaries||{};
+    state.workouts.dailySummaries[summary.id]=summary;
+    state.workouts.sessions=state.workouts.sessions||[];
+    if(!state.workouts.sessions.some(x=>x.summaryId===summary.id)){
+      const snapshot=stats.rows.map(r=>({name:r.name,type:r.type||"",muscle:r.muscle||"",sets:clone(r.sets||[])}));
+      state.workouts.sessions.push({summaryId:summary.id,day:s.day,date:summary.completedAt,snapshot,exercises:snapshot.map(x=>({sets:x.sets}))});
+    }
+    state.days=state.days||{};
+    if(!state.days[s.dayKey])state.days[s.dayKey]={work:false,workout:false,water:false,protein:false,sleep:false,restDay:false};
+    state.days[s.dayKey].workout=true;
+  }
+  function confetti(){
+    const host=document.getElementById("dtCompleteConfetti");if(!host)return;host.innerHTML="";
+    const colors=["#55dda0","#55aaff","#9f75ef","#d9a15f"];
+    for(let i=0;i<18;i++){
+      const p=document.createElement("i"),angle=(-155+i*(310/17))*Math.PI/180,dist=92+(i%5)*15;
+      p.style.setProperty("--x",`${Math.cos(angle)*dist}px`);p.style.setProperty("--y",`${Math.sin(angle)*dist}px`);
+      p.style.setProperty("--r",`${(i*43)%180}deg`);p.style.setProperty("--d",`${(i%4)*.035}s`);
+      p.style.setProperty("--c",colors[i%colors.length]);host.appendChild(p);
+    }
+  }
+  function showComplete(summary,duration){
+    ensureFinishUI();completeContext={summary,duration};
+    document.getElementById("dtCompleteDay").textContent=summary.title;
+    document.getElementById("dtCompleteDuration").textContent=fmtDuration(duration);
+    document.getElementById("dtCompleteExercises").textContent=summary.exerciseCount;
+    document.getElementById("dtCompleteSets").textContent=summary.workingSets;
+    const chips=document.getElementById("dtCompleteChips");
+    chips.innerHTML=(summary.muscles||[]).slice(0,4).map(x=>`<span class="dt-complete-chip">${x.label} ${x.pct||0}%</span>`).join("")||'<span class="dt-complete-chip">Session logged</span>';
+    document.getElementById("dtSessionComplete").classList.add("show");confetti();hapticTick(18);
+    try{window.dtRenderSummaryBodies?.(summary,"dtComplete",true)}catch(_){}
+  }
+  function commitFinish(choice){
+    const s=ensureSessionMeta();if(!s)return;finalizePendingForSession(s);
+    const end=Date.now(),duration=window.dtSessionElapsedMs?.(s,end)||Math.max(0,end-Number(s.startedAtMs||end));
+    /* If a rest interval is active, count the elapsed part before ending. */
+    if(s.rest?.running&&s.rest.lastActiveAtMs)s.restSpentMs=(Number(s.restSpentMs)||0)+Math.max(0,end-s.rest.lastActiveAtMs);
+    const summary=buildMuscleSummary(s,end);
+    saveSessionSummary(summary,s,end,duration,choice);
+
+    /* The V25.5 back handler owns wake-lock release. Invoke it while the
+       active session still exists, then clear session state. */
+    try{document.getElementById("dtSessionBack")?.click()}catch(_){}
+    state.workouts.sessionClock=null;saveNow();
+
+    document.getElementById("dtSessionRemaining")?.classList.remove("show");
+    document.getElementById("dtSessionTemplateChoice")?.classList.remove("show");
+    document.getElementById("dtSessionFinishSheet")?.classList.remove("show");
+    document.getElementById("dtSessionFocus")?.classList.remove("show");
+    document.body.classList.remove("dt-session-focus-open");
+    try{renderWorkoutHistory?.();renderHistory?.();renderToday?.();renderWorkout?.();window.dtRenderBodyCard?.()}catch(_){}
+    finishContext=null;restExpanded=false;renderRestUX();renderCenterRestRing();showComplete(summary,duration);
+  }
+  function closeComplete(toBody){
+    document.getElementById("dtSessionComplete")?.classList.remove("show");
+    if(toBody){
+      try{
+        switchView("today");
+        setTimeout(()=>{
+          window.dtRenderBodyCard?.();
+          document.getElementById("dtTBCard")?.scrollIntoView({behavior:"smooth",block:"start"});
+        },130);
+      }catch(_){}
+    }else{
+      try{switchView("today");window.dtRenderBodyCard?.()}catch(_){}
+    }
+    completeContext=null;
+  }
+
+  /* ---------------- boot / integration ---------------- */
+  function rebindSessionControls(){
+    bindCenter();bindFocusPull();ensureFinishUI();
+    const finish=document.getElementById("dtSessionFinish");
+    if(finish&&finish.dataset.v26Bound!=="1"){
+      finish.dataset.v26Bound="1";finish.onclick=openFinishFlow;
+    }
+    const oldSheet=document.getElementById("dtSessionFinishSheet");
+    if(oldSheet)oldSheet.classList.remove("show");
+  }
+  function renderV26(){
+    ensureSessionMeta();rebindSessionControls();renderRestUX();renderCenterRestRing();
+  }
+  const observer=new MutationObserver(()=>{
+    clearTimeout(observer._t);observer._t=setTimeout(renderV26,30);
+  });
+  observer.observe(document.body,{childList:true,subtree:true});
+
+  /* If some code calls the exported Finish API, route it through the safe flow. */
+  window.dtFinishWorkoutSession=openFinishFlow;
+  window.dtOpenSessionFinishFlow=openFinishFlow;
+  window.dtWorkoutSessionActive=active;
+  window.dtCloseSessionFocusToWorkout=()=>{
+    const back=document.getElementById("dtSessionBack");
+    if(back){back.click();return}
+    document.getElementById("dtSessionFocus")?.classList.remove("show");
+    document.body.classList.remove("dt-session-focus-open");
+    const s=session();
+    try{switchView("workout");setTimeout(()=>{if(s?.day){const tab=document.querySelector(`.workout-tab[data-wday="${CSS.escape(s.day)}"]`);tab?.click()}},80)}catch(_){}
+  };
+  window.dtRenderSessionEnhancements=renderV26;
+  window.DT_SESSION_CONTROL_VERSION=VERSION;
+
+  document.readyState==="loading"?document.addEventListener("DOMContentLoaded",renderV26):renderV26();
+  setTimeout(renderV26,500);
+  setInterval(renderV26,500);
 })();
 </script>
 </body>
