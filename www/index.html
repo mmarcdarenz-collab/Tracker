@@ -2593,7 +2593,7 @@ function renderToday(){
   if(pr) pr.style.setProperty("--p",res.pct);
   const msg=document.getElementById("todayCompleteText");
   if(msg) msg.textContent=res.pct===100?"✓ All tasks completed!":res.pct>=80?"Daily goal reached ✓":"Keep going.";
-  document.getElementById("streakToday").textContent=streakCount()+" days";
+  document.getElementById("streakToday").textContent=(typeof currentStreak==="function"?currentStreak():streakCount())+" days";
   if(res.pct===100 && old<100 && pr){
     pr.animate([{transform:"scale(1)"},{transform:"scale(1.06)",filter:"drop-shadow(0 0 18px rgba(84,224,151,.8))"},{transform:"scale(1)"}],{duration:700,easing:"ease"});
   }
@@ -2660,7 +2660,7 @@ function last7(){
 function renderWeekly(){
   const days=last7(),scores=days.map(x=>x.r?.percent||0),avg=Math.round(scores.reduce((a,b)=>a+b,0)/7);
   document.getElementById("weeklyScore").textContent=avg+"%";document.getElementById("geoFill").style.width=avg+"%";
-  document.getElementById("weeklyStreak").textContent=streakCount()+" day streak";
+  document.getElementById("weeklyStreak").textContent=(typeof currentStreak==="function"?currentStreak():streakCount())+" day streak";
   const row=document.getElementById("hexRow");row.innerHTML="";
   days.forEach(x=>{
     const p=x.r?.percent||0,w=document.createElement("div");w.className="hexwrap";
@@ -5292,7 +5292,14 @@ renderTrainingGoal();
   const DT_BEGINNER_EVIDENCE_NOTE='Beginner templates favor 2–3 resistance sessions weekly, simple major-muscle coverage, gradual progression and manageable session volume.';
 
   function dtBeginnerState(){
-    if(!state.onboarding)state.onboarding={completed:false,answers:{}};
+    if(!state.onboarding){
+      // Users who already have real workout history predate this wizard
+      // (or are far enough past first launch that it no longer applies) --
+      // don't show a "first-time setup" flow to someone who's clearly not
+      // first-time.
+      const hasHistory=(state.workouts?.completedExercises?.length>0)||(state.workouts?.sessions?.length>0);
+      state.onboarding={completed:hasHistory,answers:{}};
+    }
     if(!state.workouts.savedRoutines)state.workouts.savedRoutines=[];
     if(!state.workouts.routineOverrides)state.workouts.routineOverrides={};
     return state.onboarding;
@@ -5396,7 +5403,7 @@ renderTrainingGoal();
     m=document.createElement('div');m.className='modal';m.id='dtOnboardingModal';
     m.innerHTML=`<div class="sheet dt-onboard-sheet"><button class="dt-onboard-close" type="button" aria-label="Close setup">×</button><div class="dt-onboard-kicker">FIRST-TIME SETUP · ~60 SECONDS</div><h2 class="dt-onboard-title">Build your starting program</h2><div class="dt-onboard-sub">A simple beginner setup. You can change everything later.</div><div class="dt-onboard-progress">${DT_ONBOARD_STEPS.map(()=>'<i></i>').join('')}</div><div id="dtOnboardBody"></div><div class="dt-onboard-actions"><button class="dt-onboard-back" type="button">Back</button><button class="dt-onboard-next" type="button">Next</button></div><button class="dt-onboard-skip" type="button">Keep current program instead</button></div>`;
     document.body.appendChild(m);
-    m.querySelector('.dt-onboard-close').onclick=()=>m.classList.remove('show');
+    m.querySelector('.dt-onboard-close').onclick=()=>{const ob=dtBeginnerState();ob.completed=true;ob.dismissed=true;save();m.classList.remove('show')};
     return m;
   }
 
@@ -10551,7 +10558,7 @@ nav.dt-v10-nav .dt-log{
 
 /* Keep the persistent nav above normal content, below temporary surfaces. */
 nav.dt-v10-nav{
-  z-index:9300!important;
+  z-index:60;
 }
 </style>
 
