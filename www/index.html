@@ -11544,5 +11544,547 @@ nav.dt-v10-nav{
 
 <style id="dt-v25-4-stabilized-css">#history .day.has-workout::after{background:#55dda0!important;width:6px!important;height:6px!important;bottom:5px!important;box-shadow:0 0 8px rgba(85,221,160,.60)!important}</style>
 <script>window.DT_V25_4_EXERCISE_UX_STABILIZED="25.4";</script>
+
+<style id="dt-v25-5-session-focus-css">
+/* ============================================================
+   M/ARC V25.5 — SESSION FOCUS
+   The center nav action is no longer a duplicate Workout link.
+   It owns the live workout session clock.
+   ============================================================ */
+
+/* Center session button — dark glass, timer/play icon, restrained halo. */
+nav.dt-v10-nav button.dt-log{
+  position:relative!important;
+  width:62px!important;height:62px!important;margin-top:-23px!important;
+  border:1px solid rgba(82,164,218,.48)!important;
+  background:linear-gradient(180deg,rgba(10,28,39,.98),rgba(5,18,27,.98))!important;
+  color:#70baff!important;
+  box-shadow:0 8px 27px rgba(0,0,0,.34),0 0 18px rgba(63,157,227,.12)!important;
+  overflow:visible!important;
+}
+nav.dt-v10-nav button.dt-log::before{
+  content:"";position:absolute;inset:-4px;border-radius:50%;pointer-events:none;
+  border:1px solid rgba(87,180,231,.10);opacity:.7
+}
+nav.dt-v10-nav button.dt-log[data-session-state="running"]{
+  border-color:rgba(85,221,160,.62)!important;color:#67e1a5!important;
+  box-shadow:0 8px 27px rgba(0,0,0,.34),0 0 22px rgba(85,221,160,.18)!important;
+}
+nav.dt-v10-nav button.dt-log[data-session-state="running"]::before{
+  border-color:rgba(85,221,160,.28);animation:dtSessionNavPulse 2.3s ease-in-out infinite
+}
+nav.dt-v10-nav button.dt-log[data-session-state="paused"]{
+  border-color:rgba(244,187,81,.52)!important;color:#efc66c!important
+}
+.dt-session-nav-icon{width:24px;height:24px;display:block}
+.dt-session-nav-icon svg{width:100%;height:100%;display:block;stroke:currentColor}
+.dt-session-nav-label{font:780 7px/1 system-ui!important;color:currentColor!important;white-space:nowrap;letter-spacing:.01em}
+@keyframes dtSessionNavPulse{0%,100%{transform:scale(.98);opacity:.48}50%{transform:scale(1.055);opacity:1}}
+@media(prefers-reduced-motion:reduce){nav.dt-v10-nav button.dt-log::before{animation:none!important}}
+
+/* Full focus screen */
+#dtSessionFocus{
+  position:fixed;inset:0;z-index:12050;display:none;overflow:auto;
+  color:#eaf3f6;background:
+    radial-gradient(circle at 50% 38%,rgba(25,107,94,.13),transparent 31%),
+    radial-gradient(circle at 50% 58%,rgba(41,128,188,.08),transparent 34%),
+    #020609;
+  overscroll-behavior:contain;touch-action:pan-y;
+}
+#dtSessionFocus.show{display:block}
+body.dt-session-focus-open{overflow:hidden!important}
+.dt-session-focus-inner{
+  width:min(560px,100%);min-height:100dvh;margin:auto;box-sizing:border-box;
+  padding:max(19px,env(safe-area-inset-top)) 22px calc(28px + env(safe-area-inset-bottom));
+  display:flex;flex-direction:column
+}
+.dt-session-focus-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.dt-session-focus-brand small{display:block;color:#55dda0;font:850 9px system-ui;letter-spacing:.17em;text-transform:uppercase}
+.dt-session-focus-brand b{display:block;margin-top:4px;color:#f1f7f9;font:900 17px system-ui}
+.dt-session-focus-clock{color:#718994;font:750 10px system-ui;text-align:right}
+.dt-session-back{
+  width:43px;height:43px;margin-right:10px;border:1px solid rgba(85,125,145,.30);border-radius:14px;
+  background:rgba(9,22,29,.66);color:#cfe0e7;display:grid;place-items:center;flex:none
+}
+.dt-session-back svg{width:20px;height:20px;stroke:currentColor}
+.dt-session-focus-heading{display:flex;align-items:center;min-width:0}
+
+.dt-session-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 0 20px}
+.dt-session-orbit{
+  position:relative;width:min(67vw,285px);aspect-ratio:1;border-radius:50%;display:grid;place-items:center;
+  isolation:isolate
+}
+.dt-session-orbit::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;
+  background:conic-gradient(from 0deg,rgba(83,221,159,.08),rgba(83,221,159,.80),rgba(78,161,226,.45),rgba(83,221,159,.08));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+  animation:dtSessionOrbit 7s linear infinite
+}
+.dt-session-orbit::after{
+  content:"";position:absolute;inset:10%;border-radius:inherit;
+  border:1px solid rgba(76,153,170,.15);box-shadow:0 0 44px rgba(69,211,158,.10),inset 0 0 36px rgba(38,134,122,.045)
+}
+.dt-session-orbit.paused::before{animation-play-state:paused;opacity:.42;background:conic-gradient(from 0deg,rgba(239,198,108,.05),rgba(239,198,108,.56),rgba(101,125,139,.25),rgba(239,198,108,.05))}
+@keyframes dtSessionOrbit{to{transform:rotate(360deg)}}
+.dt-session-time-wrap{position:relative;z-index:2;text-align:center}
+#dtSessionElapsed{font:850 clamp(43px,12vw,68px)/1 system-ui;letter-spacing:-.055em;color:#f3f8fa;text-shadow:0 0 24px rgba(92,230,168,.13)}
+#dtSessionStatus{margin-top:10px;color:#5fdf9f;font:850 9px system-ui;letter-spacing:.18em;text-transform:uppercase}
+.dt-session-orbit.paused #dtSessionStatus{color:#efc66c}
+.dt-session-split{margin-top:24px;text-align:center}
+.dt-session-split b{display:block;color:#dbe7eb;font:850 14px system-ui}
+.dt-session-split span{display:block;color:#667e8a;font:650 9px system-ui;margin-top:4px}
+
+.dt-session-stats{width:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:25px}
+.dt-session-stat{padding:12px 8px;border:1px solid rgba(76,117,135,.20);border-radius:14px;background:rgba(7,19,26,.35);text-align:center}
+.dt-session-stat small{display:block;color:#637b86;font:750 8px system-ui;text-transform:uppercase;letter-spacing:.08em}
+.dt-session-stat b{display:block;margin-top:5px;color:#dbe7eb;font:850 14px system-ui}
+
+/* Rest control */
+#dtSessionRestCard{
+  width:100%;box-sizing:border-box;margin-top:17px;padding:15px;border:1px solid rgba(78,126,146,.22);border-radius:18px;
+  background:rgba(6,18,25,.47);position:relative;overflow:hidden;touch-action:pan-y;
+  transition:border-color .18s ease,box-shadow .18s ease,background .18s ease
+}
+#dtSessionRestCard.active{border-color:rgba(82,196,151,.34);box-shadow:0 0 20px rgba(82,196,151,.055)}
+#dtSessionRestCard.complete{border-color:rgba(94,225,162,.50);box-shadow:0 0 24px rgba(94,225,162,.11);background:rgba(13,43,34,.38)}
+.dt-rest-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.dt-rest-title small{display:block;color:#68808b;font:800 8px system-ui;text-transform:uppercase;letter-spacing:.12em}
+.dt-rest-title b{display:block;color:#dce8ec;font:850 12px system-ui;margin-top:3px}
+#dtRestTime{font:850 27px/1 system-ui;color:#67e0a6;letter-spacing:-.03em}
+#dtSessionRestCard.paused #dtRestTime{color:#efc66c}
+.dt-rest-controls{display:grid;grid-template-columns:1fr 1.45fr 1fr;gap:8px;margin-top:13px}
+.dt-rest-controls button,.dt-session-mini-btn{
+  min-height:40px;border:1px solid rgba(75,117,137,.27);border-radius:12px;background:rgba(10,25,33,.54);color:#a9bdc6;font:850 10px system-ui
+}
+.dt-rest-controls button.primary{border-color:rgba(83,204,153,.32);color:#68dfa7;background:rgba(38,123,85,.12)}
+.dt-rest-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;color:#5e7681;font:650 8px system-ui}
+.dt-rest-auto{border:0;background:transparent;color:#65dca4;font:800 8px system-ui;padding:4px}
+.dt-rest-auto.off{color:#657985}
+
+.dt-session-controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;margin-top:17px}
+.dt-session-controls button{min-height:49px;border-radius:15px;font:850 12px system-ui}
+#dtSessionPause{border:1px solid rgba(84,139,164,.28);background:rgba(9,23,31,.55);color:#dce7eb}
+#dtSessionFinish{border:1px solid rgba(224,91,91,.27);background:rgba(119,36,38,.08);color:#e88383}
+.dt-session-hint{text-align:center;color:#4e6874;font:650 8px system-ui;margin-top:15px;letter-spacing:.04em}
+
+/* Compact rest pill while logging / browsing. */
+#dtRestPill{
+  position:fixed;z-index:9250;left:50%;bottom:calc(75px + env(safe-area-inset-bottom));transform:translateX(-50%);
+  display:none;align-items:center;gap:8px;min-width:224px;max-width:calc(100vw - 32px);padding:8px 10px;
+  border:1px solid rgba(82,187,147,.28);border-radius:15px;background:rgba(5,19,26,.91);backdrop-filter:blur(12px);
+  box-shadow:0 8px 26px rgba(0,0,0,.30),0 0 17px rgba(82,187,147,.06)
+}
+#dtRestPill.show{display:flex}
+#dtRestPill.complete{border-color:rgba(91,224,161,.50);box-shadow:0 0 20px rgba(91,224,161,.12)}
+.dt-rest-pill-label{color:#60dda4;font:850 8px system-ui;letter-spacing:.10em;text-transform:uppercase;white-space:nowrap}
+.dt-rest-pill-time{color:#e6f0f3;font:850 16px system-ui;min-width:50px;text-align:center}
+#dtRestPill button{width:33px;height:33px;border:1px solid rgba(82,122,140,.25);border-radius:10px;background:#091a22;color:#9db2bb;font:850 11px system-ui}
+#dtRestPill .skip{width:auto;padding:0 9px;color:#6f8792;font-size:9px}
+
+/* Finish summary */
+#dtSessionFinishSheet{
+  position:fixed;inset:0;z-index:12120;display:none;align-items:flex-end;justify-content:center;
+  background:rgba(0,4,7,.68);backdrop-filter:blur(9px)
+}
+#dtSessionFinishSheet.show{display:flex}
+.dt-session-finish-sheet{width:min(520px,100%);padding:20px 20px calc(22px + env(safe-area-inset-bottom));border:1px solid #243e4b;border-radius:24px 24px 0 0;background:#06141b;box-shadow:0 -20px 55px rgba(0,0,0,.34)}
+.dt-session-finish-sheet small{color:#58dda1;font:850 8px system-ui;text-transform:uppercase;letter-spacing:.14em}
+.dt-session-finish-sheet h3{margin:5px 0 4px;color:#eef5f7;font:900 21px system-ui}
+.dt-session-finish-sheet p{margin:0;color:#6d8490;font:600 10px/1.45 system-ui}
+.dt-session-summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:15px}
+.dt-session-summary-grid div{padding:12px 7px;border:1px solid #19333f;border-radius:13px;background:#071a22;text-align:center}
+.dt-session-summary-grid small{color:#647d88;font-size:7px;letter-spacing:.08em}
+.dt-session-summary-grid b{display:block;color:#dce7eb;font:850 14px system-ui;margin-top:4px}
+.dt-session-finish-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:16px}
+.dt-session-finish-actions button{min-height:47px;border-radius:14px;font:850 11px system-ui}
+#dtSessionContinue{border:1px solid #28414e;background:#091923;color:#c9d7dd}
+#dtSessionConfirmFinish{border:1px solid rgba(89,213,159,.34);background:rgba(36,118,82,.18);color:#66dda5;box-shadow:0 0 18px rgba(75,201,145,.07)}
+
+/* Time card prepended into an existing History day sheet. */
+.dt-session-history-time{padding:13px 14px;margin-bottom:10px;border:1px solid rgba(82,188,148,.22);border-radius:15px;background:rgba(18,74,54,.08)}
+.dt-session-history-time small{display:block;color:#5cdca3;font:800 8px system-ui;text-transform:uppercase;letter-spacing:.10em}
+.dt-session-history-time b{display:block;color:#dce8ec;font:850 13px system-ui;margin-top:4px}
+.dt-session-history-time span{display:block;color:#718996;font:600 9px system-ui;margin-top:3px}
+
+@media(max-height:690px){
+  .dt-session-main{justify-content:flex-start;padding-top:17px}
+  .dt-session-orbit{width:min(48vh,230px)}
+  .dt-session-stats{margin-top:17px}.dt-session-rest-card{margin-top:12px}
+}
+</style>
+
+<script id="dt-v25-5-session-focus-js">
+(()=>{
+  "use strict";
+  const VERSION="25.5-session-focus";
+  const REST_MIN=15,REST_MAX=600;
+  let uiTimer=null,wakeLock=null,focusStartY=null;
+
+  function now(){return Date.now()}
+  function clamp(n,a,b){return Math.max(a,Math.min(b,n))}
+  function pad2(n){return String(n).padStart(2,"0")}
+  function localDayKey(ms=Date.now()){
+    const d=new Date(ms);return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+  }
+  function fmtLong(ms){
+    const total=Math.max(0,Math.floor(ms/1000)),h=Math.floor(total/3600),m=Math.floor((total%3600)/60),s=total%60;
+    return `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
+  }
+  function fmtNav(ms){
+    const total=Math.max(0,Math.floor(ms/1000)),m=Math.floor(total/60),s=total%60;
+    return `${m}:${pad2(s)}`;
+  }
+  function fmtRest(ms){
+    const total=Math.max(0,Math.ceil(ms/1000)),m=Math.floor(total/60),s=total%60;
+    return `${m}:${pad2(s)}`;
+  }
+  function fmtDuration(ms){
+    const total=Math.max(0,Math.round(ms/60000));
+    if(total<60)return `${total}m`;
+    const h=Math.floor(total/60),m=total%60;return m?`${h}h ${m}m`:`${h}h`;
+  }
+  function fmtClock(ms=Date.now()){
+    try{return new Date(ms).toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit",hour12:true})}catch(_){return ""}
+  }
+  function displayDay(day){
+    try{return window.dtWorkoutDisplayName?.(day)||window.dtWorkoutDayLabel?.(day)||plans?.[day]?.title||String(day||"Workout").toUpperCase()}
+    catch(_){return String(day||"Workout").toUpperCase()}
+  }
+  function ensure(){
+    if(!state.workouts)state.workouts={sessions:[],drafts:{}};
+    if(!state.workouts.sessionSettings)state.workouts.sessionSettings={restDefaultSec:90,autoRest:true};
+    const set=state.workouts.sessionSettings;
+    set.restDefaultSec=clamp(Number(set.restDefaultSec)||90,REST_MIN,REST_MAX);
+    if(typeof set.autoRest!=="boolean")set.autoRest=true;
+    if(!Array.isArray(state.workouts.timedSessions))state.workouts.timedSessions=[];
+    const s=state.workouts.sessionClock;
+    if(s?.active){
+      if(!s.status)s.status="running";
+      if(!Number.isFinite(s.pausedAccumMs))s.pausedAccumMs=0;
+      if(!Array.isArray(s.restTriggeredSets))s.restTriggeredSets=[];
+      if(!Number.isFinite(s.restSpentMs))s.restSpentMs=0;
+      if(!s.rest)s.rest={running:false,paused:false,remainingMs:0,endsAtMs:0};
+    }
+    return s||null;
+  }
+  function persist(){try{save()}catch(e){console.warn("Session state save failed",e)}}
+  function session(){return ensure()}
+  function running(){const s=session();return !!(s?.active&&s.status==="running")}
+  function active(){return !!session()?.active}
+  function elapsed(s=session(),at=now()){
+    if(!s?.active)return 0;
+    const end=s.status==="paused"?(Number(s.pausedAtMs)||at):at;
+    return Math.max(0,end-(Number(s.startedAtMs)||end)-(Number(s.pausedAccumMs)||0));
+  }
+  function restRemaining(s=session(),at=now()){
+    const r=s?.rest;if(!r)return 0;
+    if(r.running)return Math.max(0,(Number(r.endsAtMs)||0)-at);
+    if(r.paused)return Math.max(0,Number(r.remainingMs)||0);
+    return 0;
+  }
+  function sessionRecords(s=session(),endMs=now()){
+    if(!s?.active&&!s?.startedAtMs)return [];
+    const start=Number(s.startedAtMs)||0;
+    return (state.workouts?.completedExercises||[]).filter(x=>{
+      const t=new Date(x.finalizedAt||x.startedAt||0).getTime();return Number.isFinite(t)&&t>=start&&t<=endMs;
+    });
+  }
+  function recordStats(s=session(),endMs=now()){
+    const rows=sessionRecords(s,endMs);
+    const sets=rows.reduce((n,x)=>n+(x.sets||[]).filter(v=>String(v.kg??"").trim()!==""||String(v.reps??"").trim()!==""||String(v.effort??"").trim()!=="").length,0);
+    return {exercises:new Set(rows.map(x=>x.exerciseKey||`${x.name}|${x.type||""}`)).size,sets,rows};
+  }
+  function restSpent(s=session(),at=now()){
+    if(!s)return 0;
+    let v=Number(s.restSpentMs)||0;
+    if(s.rest?.running&&s.rest?.lastActiveAtMs)v+=Math.max(0,at-s.rest.lastActiveAtMs);
+    return v;
+  }
+  function accumulateRest(s=session()){
+    if(s?.rest?.running&&s.rest.lastActiveAtMs){
+      s.restSpentMs=(Number(s.restSpentMs)||0)+Math.max(0,now()-s.rest.lastActiveAtMs);
+      s.rest.lastActiveAtMs=0;
+    }
+  }
+
+  function assignedDay(){
+    try{
+      const key=["sun","mon","tue","wed","thu","fri","sat"][new Date().getDay()];
+      return state.trainingSchedule?.days?.[key]||wday||"push";
+    }catch(_){return typeof wday!=="undefined"?wday:"push"}
+  }
+  function selectSessionDay(day){
+    try{
+      const tab=document.querySelector(`.workout-tab[data-wday="${CSS.escape(day)}"]`);
+      if(tab)tab.click();
+      else if(typeof wday!=="undefined"){wday=day;renderWorkout?.()}
+    }catch(_){}
+  }
+
+  function startSession(){
+    ensure();
+    if(active()){openFocus();return}
+    const t=now(),day=assignedDay();
+    state.workouts.sessionClock={
+      version:1,active:true,status:"running",startedAtMs:t,startedAt:new Date(t).toISOString(),day,dayKey:localDayKey(t),
+      pausedAccumMs:0,pausedAtMs:0,restSpentMs:0,restTriggeredSets:[],
+      rest:{running:false,paused:false,remainingMs:0,endsAtMs:0,lastActiveAtMs:0,completeUntilMs:0}
+    };
+    persist();
+    renderAll();
+    openFocus();
+  }
+  function pauseSession(){
+    const s=session();if(!s?.active||s.status!=="running")return;
+    const t=now();s.status="paused";s.pausedAtMs=t;
+    if(s.rest?.running){
+      accumulateRest(s);s.rest.remainingMs=Math.max(0,s.rest.endsAtMs-t);s.rest.running=false;s.rest.paused=true;s.rest.pausedBySession=true;
+    }
+    persist();renderAll();
+  }
+  function resumeSession(){
+    const s=session();if(!s?.active||s.status!=="paused")return;
+    const t=now();s.pausedAccumMs=(Number(s.pausedAccumMs)||0)+Math.max(0,t-(Number(s.pausedAtMs)||t));s.pausedAtMs=0;s.status="running";
+    if(s.rest?.pausedBySession&&s.rest.remainingMs>0){
+      s.rest.running=true;s.rest.paused=false;s.rest.pausedBySession=false;s.rest.endsAtMs=t+s.rest.remainingMs;s.rest.lastActiveAtMs=t;
+    }
+    persist();renderAll();
+  }
+  function togglePause(){running()?pauseSession():resumeSession()}
+
+  function startRest(seconds){
+    const s=session();if(!s?.active||s.status!=="running")return;
+    const set=state.workouts.sessionSettings,sec=clamp(Number(seconds)||set.restDefaultSec,REST_MIN,REST_MAX),t=now();
+    accumulateRest(s);
+    s.rest={running:true,paused:false,remainingMs:sec*1000,endsAtMs:t+sec*1000,lastActiveAtMs:t,completeUntilMs:0};
+    persist();renderAll();
+  }
+  function adjustRest(deltaSec){
+    const s=session(),set=state.workouts.sessionSettings;if(!s?.active)return;
+    const delta=Number(deltaSec)*1000;
+    if(s.rest?.running){
+      s.rest.endsAtMs=Math.max(now()+1000,s.rest.endsAtMs+delta);s.rest.remainingMs=Math.max(1000,s.rest.endsAtMs-now());
+    }else if(s.rest?.paused){
+      s.rest.remainingMs=clamp((Number(s.rest.remainingMs)||0)+delta,1000,REST_MAX*1000);
+    }else{
+      set.restDefaultSec=clamp(set.restDefaultSec+Number(deltaSec),REST_MIN,REST_MAX);
+    }
+    persist();renderAll();
+  }
+  function pauseRest(){
+    const s=session();if(!s?.rest?.running)return;
+    accumulateRest(s);s.rest.remainingMs=Math.max(0,s.rest.endsAtMs-now());s.rest.running=false;s.rest.paused=true;persist();renderAll();
+  }
+  function resumeRest(){
+    const s=session();if(!s?.rest?.paused||s.status!=="running")return;
+    const t=now();s.rest.running=true;s.rest.paused=false;s.rest.endsAtMs=t+Math.max(1000,s.rest.remainingMs);s.rest.lastActiveAtMs=t;persist();renderAll();
+  }
+  function skipRest(){
+    const s=session();if(!s?.rest)return;accumulateRest(s);s.rest={running:false,paused:false,remainingMs:0,endsAtMs:0,lastActiveAtMs:0,completeUntilMs:0};persist();renderAll();
+  }
+  function restTick(){
+    const s=session();if(!s?.active||!s.rest?.running)return;
+    if(s.rest.endsAtMs<=now()){
+      accumulateRest(s);s.rest.running=false;s.rest.paused=false;s.rest.remainingMs=0;s.rest.completeUntilMs=now()+4200;persist();renderAll();
+    }
+  }
+  function toggleAutoRest(){ensure();state.workouts.sessionSettings.autoRest=!state.workouts.sessionSettings.autoRest;persist();renderAll()}
+
+  function nextExercise(s=session()){
+    if(!s?.active)return "";
+    try{
+      const exs=effectiveExercises(s.day)||[];
+      const completed=new Set((state.workouts.completedExercises||[]).filter(x=>x.day===s.day&&x.dayKey===s.dayKey).map(x=>x.exerciseKey));
+      const next=exs.find(e=>{
+        let key="";
+        try{key=typeof exerciseKey==="function"?String(exerciseKey(e)):String(e?.[4]||`${e?.[0]||"Exercise"}|${e?.[1]||""}`)}catch(_){key=String(e?.[4]||`${e?.[0]||"Exercise"}|${e?.[1]||""}`)}
+        return !completed.has(key);
+      });
+      return next?.[0]||"Session in progress";
+    }catch(_){return "Session in progress"}
+  }
+
+  function ensureUI(){
+    if(!document.getElementById("dtSessionFocus")){
+      const f=document.createElement("div");f.id="dtSessionFocus";
+      f.innerHTML=`<div class="dt-session-focus-inner">
+        <div class="dt-session-focus-top">
+          <div class="dt-session-focus-heading"><button class="dt-session-back" id="dtSessionBack" type="button" aria-label="Return to workout"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg></button><div class="dt-session-focus-brand"><small>M/ARC SESSION</small><b id="dtSessionDay">Workout</b></div></div>
+          <div class="dt-session-focus-clock" id="dtSessionClock">--:--</div>
+        </div>
+        <main class="dt-session-main">
+          <div class="dt-session-orbit" id="dtSessionOrbit"><div class="dt-session-time-wrap"><div id="dtSessionElapsed">00:00:00</div><div id="dtSessionStatus">LIVE</div></div></div>
+          <div class="dt-session-split"><b id="dtSessionNext">Session in progress</b><span id="dtSessionSub">Swipe down to log your workout</span></div>
+          <div class="dt-session-stats"><div class="dt-session-stat"><small>Exercises</small><b id="dtSessionExercises">0</b></div><div class="dt-session-stat"><small>Sets</small><b id="dtSessionSets">0</b></div><div class="dt-session-stat"><small>Rest</small><b id="dtSessionRestSpent">0m</b></div></div>
+          <section id="dtSessionRestCard">
+            <div class="dt-rest-head"><div class="dt-rest-title"><small>REST TIMER</small><b id="dtRestLabel">Ready · default 1:30</b></div><div id="dtRestTime">1:30</div></div>
+            <div class="dt-rest-controls"><button id="dtRestMinus" type="button">−15</button><button id="dtRestMain" class="primary" type="button">Start rest</button><button id="dtRestPlus" type="button">+15</button></div>
+            <div class="dt-rest-foot"><span>Swipe left/right to adjust 15s</span><button class="dt-rest-auto" id="dtRestAuto" type="button">Auto-rest ON</button></div>
+          </section>
+          <div class="dt-session-controls"><button id="dtSessionPause" type="button">Pause session</button><button id="dtSessionFinish" type="button">Finish</button></div>
+          <div class="dt-session-hint">SESSION CONTINUES WHEN YOU LEAVE THIS SCREEN</div>
+        </main>
+      </div>`;
+      document.body.appendChild(f);
+
+      f.querySelector("#dtSessionBack").onclick=closeFocusToWorkout;
+      f.querySelector("#dtSessionPause").onclick=togglePause;
+      f.querySelector("#dtSessionFinish").onclick=openFinish;
+      f.querySelector("#dtRestMinus").onclick=()=>adjustRest(-15);
+      f.querySelector("#dtRestPlus").onclick=()=>adjustRest(15);
+      f.querySelector("#dtRestMain").onclick=()=>{
+        const s=session();if(!s?.rest?.running&&!s?.rest?.paused)startRest();else if(s.rest.running)pauseRest();else resumeRest();
+      };
+      f.querySelector("#dtRestAuto").onclick=toggleAutoRest;
+
+      /* Focus-screen gesture: swipe down returns to Workout; no timer stop. */
+      f.addEventListener("pointerdown",e=>{if(e.isPrimary!==false)focusStartY={x:e.clientX,y:e.clientY,id:e.pointerId}}, {passive:true});
+      f.addEventListener("pointerup",e=>{
+        if(!focusStartY||e.pointerId!==focusStartY.id)return;
+        const dx=e.clientX-focusStartY.x,dy=e.clientY-focusStartY.y;focusStartY=null;
+        if(dy>88&&Math.abs(dy)>Math.abs(dx)*1.25)closeFocusToWorkout();
+      },{passive:true});
+
+      /* Rest gesture: right +15, left -15. */
+      const rest=f.querySelector("#dtSessionRestCard");let rs=null;
+      rest.addEventListener("pointerdown",e=>{if(e.target.closest("button"))return;rs={x:e.clientX,y:e.clientY,id:e.pointerId}}, {passive:true});
+      rest.addEventListener("pointerup",e=>{if(!rs||e.pointerId!==rs.id)return;const dx=e.clientX-rs.x,dy=e.clientY-rs.y;rs=null;if(Math.abs(dx)>46&&Math.abs(dx)>Math.abs(dy)*1.15)adjustRest(dx>0?15:-15)}, {passive:true});
+    }
+
+    if(!document.getElementById("dtRestPill")){
+      const p=document.createElement("div");p.id="dtRestPill";
+      p.innerHTML=`<span class="dt-rest-pill-label">REST</span><button class="minus" type="button">−15</button><span class="dt-rest-pill-time">1:30</span><button class="plus" type="button">+15</button><button class="skip" type="button">Skip</button>`;
+      document.body.appendChild(p);p.querySelector(".minus").onclick=()=>adjustRest(-15);p.querySelector(".plus").onclick=()=>adjustRest(15);p.querySelector(".skip").onclick=skipRest;p.querySelector(".dt-rest-pill-time").onclick=openFocus;
+    }
+
+    if(!document.getElementById("dtSessionFinishSheet")){
+      const m=document.createElement("div");m.id="dtSessionFinishSheet";
+      m.innerHTML=`<section class="dt-session-finish-sheet"><small>SESSION SUMMARY</small><h3 id="dtFinishTitle">Finish workout?</h3><p id="dtFinishSub">Your timer and session duration will be saved to History.</p><div class="dt-session-summary-grid"><div><small>Duration</small><b id="dtFinishDuration">0m</b></div><div><small>Exercises</small><b id="dtFinishExercises">0</b></div><div><small>Sets</small><b id="dtFinishSets">0</b></div></div><div class="dt-session-finish-actions"><button id="dtSessionContinue" type="button">Continue</button><button id="dtSessionConfirmFinish" type="button">Finish session</button></div></section>`;
+      document.body.appendChild(m);m.onclick=e=>{if(e.target===m)m.classList.remove("show")};m.querySelector("#dtSessionContinue").onclick=()=>m.classList.remove("show");m.querySelector("#dtSessionConfirmFinish").onclick=finishSession;
+    }
+  }
+
+  async function requestWake(){
+    if(!document.getElementById("dtSessionFocus")?.classList.contains("show"))return;
+    try{if("wakeLock" in navigator&&!wakeLock)wakeLock=await navigator.wakeLock.request("screen")}catch(_){wakeLock=null}
+  }
+  async function releaseWake(){try{await wakeLock?.release?.()}catch(_){}wakeLock=null}
+
+  function openFocus(){
+    if(!active()){startSession();return}
+    ensureUI();document.getElementById("dtSessionFocus").classList.add("show");document.body.classList.add("dt-session-focus-open");requestWake();renderAll();
+  }
+  function closeFocusToWorkout(){
+    document.getElementById("dtSessionFocus")?.classList.remove("show");document.body.classList.remove("dt-session-focus-open");releaseWake();
+    const s=session();try{switchView("workout");setTimeout(()=>selectSessionDay(s?.day),80)}catch(_){}
+  }
+
+  function openFinish(){
+    const s=session();if(!s?.active)return;ensureUI();const stats=recordStats(s),m=document.getElementById("dtSessionFinishSheet");
+    m.querySelector("#dtFinishTitle").textContent=`Finish ${displayDay(s.day)}?`;
+    m.querySelector("#dtFinishDuration").textContent=fmtDuration(elapsed(s));m.querySelector("#dtFinishExercises").textContent=stats.exercises;m.querySelector("#dtFinishSets").textContent=stats.sets;m.classList.add("show");
+  }
+  function finishSession(){
+    const s=session();if(!s?.active)return;const t=now();accumulateRest(s);const stats=recordStats(s,t),duration=elapsed(s,t);
+    const rec={id:`timed-${s.startedAtMs}`,day:s.day,dayKey:s.dayKey,startedAt:new Date(s.startedAtMs).toISOString(),endedAt:new Date(t).toISOString(),durationMs:duration,pausedMs:Number(s.pausedAccumMs)||0,restMs:Number(s.restSpentMs)||0,exerciseCount:stats.exercises,workingSets:stats.sets};
+    if(!state.workouts.timedSessions.some(x=>x.id===rec.id))state.workouts.timedSessions.push(rec);
+    state.workouts.timedSessions=state.workouts.timedSessions.slice(-300);
+    state.workouts.sessionClock=null;persist();document.getElementById("dtSessionFinishSheet")?.classList.remove("show");document.getElementById("dtSessionFocus")?.classList.remove("show");document.body.classList.remove("dt-session-focus-open");releaseWake();renderAll();
+    try{switchView("history");renderHistory?.()}catch(_){}
+  }
+
+  function sessionIcon(stateName){
+    if(stateName==="paused")return `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7"/><path d="M9.5 3h5M12 6v2"/><path d="m10.5 10 4 3-4 3Z" fill="currentColor" stroke="none"/></svg>`;
+    if(stateName==="running")return `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7"/><path d="M9.5 3h5M12 6v2M12 13V9.5M12 13l3 1.5"/></svg>`;
+    return `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7"/><path d="M9.5 3h5M12 6v2"/><path d="m10.5 10 4 3-4 3Z" fill="currentColor" stroke="none"/></svg>`;
+  }
+  function patchCenterButton(){
+    const b=document.querySelector('nav.dt-v10-nav [data-v10="log"]');if(!b)return;
+    if(b.dataset.sessionBound!=="1"){b.dataset.sessionBound="1";b.onclick=e=>{e.preventDefault();active()?openFocus():startSession()}}
+    const s=session(),name=!s?.active?"idle":s.status;b.dataset.sessionState=name;
+    const label=!s?.active?"Start":s.status==="paused"?"Paused":fmtNav(elapsed(s));
+    const renderKey=`${name}|${label}`;
+    if(b.dataset.sessionRenderKey!==renderKey){
+      b.dataset.sessionRenderKey=renderKey;
+      b.innerHTML=`<span class="dt-session-nav-icon">${sessionIcon(name)}</span><span class="dt-session-nav-label">${label}</span>`;
+      b.setAttribute("aria-label",!s?.active?"Start workout session":s.status==="paused"?"Resume workout session":"Open workout session timer");
+    }
+  }
+
+  function renderFocus(){
+    ensureUI();const s=session(),f=document.getElementById("dtSessionFocus");if(!s?.active)return;
+    const stats=recordStats(s),r=s.rest||{},set=state.workouts.sessionSettings,remaining=restRemaining(s);
+    f.querySelector("#dtSessionElapsed").textContent=fmtLong(elapsed(s));f.querySelector("#dtSessionStatus").textContent=s.status==="paused"?"PAUSED":"LIVE";f.querySelector("#dtSessionOrbit").classList.toggle("paused",s.status==="paused");
+    f.querySelector("#dtSessionDay").textContent=displayDay(s.day);f.querySelector("#dtSessionClock").textContent=fmtClock();f.querySelector("#dtSessionNext").textContent=nextExercise(s);f.querySelector("#dtSessionSub").textContent=s.status==="paused"?"Session timer paused":"Swipe down to log your workout";
+    f.querySelector("#dtSessionExercises").textContent=stats.exercises;f.querySelector("#dtSessionSets").textContent=stats.sets;f.querySelector("#dtSessionRestSpent").textContent=fmtDuration(restSpent(s));f.querySelector("#dtSessionPause").textContent=s.status==="paused"?"Resume session":"Pause session";
+    const card=f.querySelector("#dtSessionRestCard"),rt=f.querySelector("#dtRestTime"),rl=f.querySelector("#dtRestLabel"),rm=f.querySelector("#dtRestMain");card.classList.toggle("active",!!(r.running||r.paused));card.classList.toggle("paused",!!r.paused);const complete=(Number(r.completeUntilMs)||0)>now();card.classList.toggle("complete",complete);
+    if(r.running){rt.textContent=fmtRest(remaining);rl.textContent="Resting";rm.textContent="Pause rest"}
+    else if(r.paused){rt.textContent=fmtRest(remaining);rl.textContent="Rest paused";rm.textContent="Resume rest"}
+    else if(complete){rt.textContent="0:00";rl.textContent="Rest complete";rm.textContent="Start rest"}
+    else{rt.textContent=fmtRest(set.restDefaultSec*1000);rl.textContent=`Ready · default ${fmtRest(set.restDefaultSec*1000)}`;rm.textContent="Start rest"}
+    const auto=f.querySelector("#dtRestAuto");auto.textContent=`Auto-rest ${set.autoRest?"ON":"OFF"}`;auto.classList.toggle("off",!set.autoRest);
+  }
+  function renderPill(){
+    ensureUI();const s=session(),p=document.getElementById("dtRestPill"),r=s?.rest,complete=!!(r&&(Number(r.completeUntilMs)||0)>now());
+    const visible=!!(s?.active&&(r?.running||r?.paused||complete)&&!document.getElementById("dtSessionFocus")?.classList.contains("show"));p.classList.toggle("show",visible);p.classList.toggle("complete",complete);
+    if(!visible)return;p.querySelector(".dt-rest-pill-label").textContent=complete?"READY":r.paused?"PAUSED":"REST";p.querySelector(".dt-rest-pill-time").textContent=complete?"0:00":fmtRest(restRemaining(s));
+  }
+  function renderAll(){restTick();patchCenterButton();renderFocus();renderPill()}
+
+  /* Auto rest starts when an effort rating completes a set. We key it per
+     session/set so editing the same effort does not repeatedly restart rest. */
+  document.addEventListener("click",e=>{
+    const opt=e.target.closest?.("[data-eff]");if(!opt)return;
+    setTimeout(()=>{
+      const s=session();if(!s?.active||s.status!=="running"||!state.workouts.sessionSettings.autoRest)return;
+      try{
+        if(typeof effTarget==="undefined"||!effTarget)return;
+        const k=`${s.day}|${effTarget.ei}|${effTarget.si}`;
+        if(s.restTriggeredSets.includes(k))return;s.restTriggeredSets.push(k);persist();startRest();
+      }catch(_){}
+    },0);
+  });
+
+  /* Add session-duration context to the existing History day detail without
+     replacing the V25.3 History renderer. */
+  function timedForDay(key){return (state.workouts?.timedSessions||[]).filter(x=>x.dayKey===key).sort((a,b)=>String(a.startedAt).localeCompare(String(b.startedAt)))}
+  function injectTimedHistory(key){
+    const body=document.getElementById("dtHistoryDayBody");if(!body)return;body.querySelectorAll(".dt-session-history-time").forEach(x=>x.remove());
+    const rows=timedForDay(key);if(!rows.length)return;
+    const frag=document.createDocumentFragment();rows.forEach(x=>{const d=document.createElement("div");d.className="dt-session-history-time";d.innerHTML=`<small>Timed session</small><b>${displayDay(x.day)} · ${fmtDuration(x.durationMs)}</b><span>${fmtClock(new Date(x.startedAt).getTime())} – ${fmtClock(new Date(x.endedAt).getTime())} · ${x.workingSets||0} sets</span>`;frag.appendChild(d)});body.prepend(frag);
+  }
+  const baseOpenDay=window.dtOpenHistoryDay;
+  if(typeof baseOpenDay==="function"&&!baseOpenDay.__sessionWrapped){
+    const wrapped=function(key){const r=baseOpenDay(key);setTimeout(()=>injectTimedHistory(key),0);return r};wrapped.__sessionWrapped=true;window.dtOpenHistoryDay=wrapped;
+  }
+
+  /* If any older module rebuilds the bottom nav, immediately restore the new
+     center-session control. */
+  if(typeof window.buildNav==="function"&&!window.buildNav.__sessionWrapped){
+    const old=window.buildNav;window.buildNav=function(...a){const r=old.apply(this,a);setTimeout(patchCenterButton,0);return r};window.buildNav.__sessionWrapped=true;
+  }
+  const navObserver=new MutationObserver(()=>patchCenterButton());
+  const nav=document.querySelector("nav.dt-v10-nav")||document.querySelector("body>nav");if(nav)navObserver.observe(nav,{childList:true,subtree:true});
+
+  document.addEventListener("visibilitychange",()=>{
+    renderAll();
+    if(document.visibilityState==="visible"&&document.getElementById("dtSessionFocus")?.classList.contains("show"))requestWake();
+  });
+
+  function boot(){ensure();ensureUI();patchCenterButton();renderAll();if(uiTimer)clearInterval(uiTimer);uiTimer=setInterval(renderAll,500)}
+  document.readyState==="loading"?document.addEventListener("DOMContentLoaded",boot):boot();setTimeout(boot,450);
+
+  window.dtStartWorkoutSession=startSession;
+  window.dtOpenSessionFocus=openFocus;
+  window.dtPauseWorkoutSession=pauseSession;
+  window.dtResumeWorkoutSession=resumeSession;
+  window.dtStartRestTimer=startRest;
+  window.dtAdjustRestTimer=adjustRest;
+  window.dtFinishWorkoutSession=finishSession;
+  window.dtSessionElapsedMs=elapsed;
+  window.DT_SESSION_FOCUS_VERSION=VERSION;
+})();
+</script>
 </body>
 </html>
