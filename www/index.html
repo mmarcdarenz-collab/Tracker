@@ -2291,32 +2291,135 @@ document.getElementById("muscleDetailModal")?.addEventListener("click",e=>{if(e.
 
 <script>
 const KEY="dailyTrackerPremium";
-const defaults={days:{},money:{available:850,savings:2400,weeklyLimit:300,currency:"AUD",transactions:[]}};
-let state=JSON.parse(localStorage.getItem(KEY)||"null")||defaults;
-if(!state.money.weeklyLimit) state.money.weeklyLimit=300;
+const DT_PHASE12_BACKUP_KEY = KEY + "_backup_before_schema_v2";
+const DT_RECOVERY_META_KEY = KEY + "_last_known_good_meta_v1";
+const DT_DAMAGED_RAW_KEY = KEY + "_damaged_recovery_raw_v1";
+const DT_FORENSIC_TYPE = "marc-recovery-forensic";
+const defaults={days:{},money:{available:0,savings:0,weeklyLimit:0,currency:"AUD",transactions:[]}};
+
+function dtFreshDefaults(){return JSON.parse(JSON.stringify(defaults))}
+function dtPlainObject(v){return !!v&&typeof v==="object"&&!Array.isArray(v)}
+function dtIsValidStateRoot(v){
+  return dtPlainObject(v)&&dtPlainObject(v.days)&&dtPlainObject(v.money)&&
+    (v.money.transactions==null||Array.isArray(v.money.transactions));
+}
+function dtSafeParse(raw){
+  if(typeof raw!=="string"||!raw.trim())return null;
+  try{const v=JSON.parse(raw);return dtIsValidStateRoot(v)?v:null}catch(_){return null}
+}
+function dtReadRecoveryMeta(){
+  try{const x=JSON.parse(localStorage.getItem(DT_RECOVERY_META_KEY)||"null");return dtPlainObject(x)?x:null}catch(_){return null}
+}
+function dtRawLatestDateHint(raw){
+  if(typeof raw!=="string")return null;
+  let best=null,m;const rx=/(20\d{2}-[01]\d-[0-3]\d)/g;
+  while((m=rx.exec(raw))){if(!best||m[1]>best)best=m[1]}
+  return best;
+}
+function dtRecoveryFacts(root,deep=false){
+  const w=root?.workouts||{}, money=root?.money||{};
+  const facts={
+    days:Object.keys(root?.days||{}).length,
+    exercises:Array.isArray(w.completedExercises)?w.completedExercises.length:0,
+    sessions:Array.isArray(w.sessions)?w.sessions.length:0,
+    timedSessions:Array.isArray(w.timedSessions)?w.timedSessions.length:0,
+    transactions:Array.isArray(money.transactions)?money.transactions.length:0,
+    latestActivity:null
+  };
+  const consider=v=>{
+    if(v==null)return;
+    const s=String(v), hit=s.match(/20\d{2}-[01]\d-[0-3]\d/);
+    if(hit&&(!facts.latestActivity||hit[0]>facts.latestActivity))facts.latestActivity=hit[0];
+  };
+  const dayKeys=Object.keys(root?.days||{}); if(dayKeys.length)consider(dayKeys.sort().at(-1));
+  const tails=(arr,n=8)=>Array.isArray(arr)?arr.slice(-n):[];
+  const inspectRec=r=>{consider(r?.dayKey);consider(r?.date);consider(r?.finalizedAt);consider(r?.endedAt);consider(r?.startedAt);consider(r?.completedAt)};
+  if(deep){
+    (w.completedExercises||[]).forEach(inspectRec);(w.sessions||[]).forEach(inspectRec);
+    (w.timedSessions||[]).forEach(inspectRec);(money.transactions||[]).forEach(inspectRec);
+  }else{
+    tails(w.completedExercises).forEach(inspectRec);tails(w.sessions).forEach(inspectRec);
+    tails(w.timedSessions).forEach(inspectRec);tails(money.transactions).forEach(inspectRec);
+  }
+  return facts;
+}
+function dtBackupLooksStale(backup,known,rawHint){
+  if(!backup)return false;
+  const b=dtRecoveryFacts(backup,true), k=known||{};
+  if(k.latestActivity&&(!b.latestActivity||k.latestActivity>b.latestActivity))return true;
+  if(rawHint&&(!b.latestActivity||rawHint>b.latestActivity))return true;
+  for(const key of ["days","exercises","sessions","timedSessions","transactions"]){
+    if(Number(k[key]||0)>Number(b[key]||0))return true;
+  }
+  return false;
+}
+
+const dtPrimaryRaw=(()=>{try{return localStorage.getItem(KEY)}catch(_){return null}})();
+let state=dtSafeParse(dtPrimaryRaw);
+const dtKnownRecoveryMeta=dtReadRecoveryMeta();
+const DT_BOOT_RECOVERY={recovered:false,source:"primary",stale:false,damagedPreserved:false,rawDateHint:dtRawLatestDateHint(dtPrimaryRaw)};
+if(!state){
+  if(dtPrimaryRaw){
+    try{localStorage.setItem(DT_DAMAGED_RAW_KEY,dtPrimaryRaw);DT_BOOT_RECOVERY.damagedPreserved=true}catch(_){}
+  }
+  let backupRaw=null;try{backupRaw=localStorage.getItem(DT_PHASE12_BACKUP_KEY)}catch(_){}
+  const backup=dtSafeParse(backupRaw);
+  if(backup){
+    state=backup;DT_BOOT_RECOVERY.recovered=true;DT_BOOT_RECOVERY.source="backup";
+    DT_BOOT_RECOVERY.stale=dtBackupLooksStale(backup,dtKnownRecoveryMeta,DT_BOOT_RECOVERY.rawDateHint);
+  }else{
+    state=dtFreshDefaults();DT_BOOT_RECOVERY.recovered=!!dtPrimaryRaw;DT_BOOT_RECOVERY.source="defaults";
+  }
+}
+window.DT_BOOT_RECOVERY=DT_BOOT_RECOVERY;
+window.dtIsValidStateRoot=dtIsValidStateRoot;
+
+if(!dtPlainObject(state.days))state.days={};
+if(!dtPlainObject(state.money))state.money=dtFreshDefaults().money;
+if(!Array.isArray(state.money.transactions))state.money.transactions=[];
+if(!Number.isFinite(Number(state.money.available)))state.money.available=0;else state.money.available=Number(state.money.available);
+if(!Number.isFinite(Number(state.money.savings)))state.money.savings=0;else state.money.savings=Number(state.money.savings);
+if(!Number.isFinite(Number(state.money.weeklyLimit))||Number(state.money.weeklyLimit)<0)state.money.weeklyLimit=0;else state.money.weeklyLimit=Number(state.money.weeklyLimit);
 if(!state.money.currency) state.money.currency="AUD";
 if(!state.money.baseCurrency) state.money.baseCurrency="AUD";
 if(!state.money.fx) state.money.fx={rates:{AUD:1,PHP:null,USD:null},updatedAt:0,sourceDate:null};
+if(!dtPlainObject(state.workouts))state.workouts={};
+if(!Array.isArray(state.workouts.sessions))state.workouts.sessions=[];
+if(!dtPlainObject(state.workouts.drafts))state.workouts.drafts={};
+if(!dtPlainObject(state.workouts.pendingExercises))state.workouts.pendingExercises={};
+if(!Array.isArray(state.workouts.completedExercises))state.workouts.completedExercises=[];
+if(!dtPlainObject(state.workouts.dailySummaries))state.workouts.dailySummaries={};
+if(!Array.isArray(state.workouts.timedSessions))state.workouts.timedSessions=[];
+if(!Array.isArray(state.workouts.savedRoutines))state.workouts.savedRoutines=[];
+if(!dtPlainObject(state.workouts.routineOverrides))state.workouts.routineOverrides={};
+if(!Array.isArray(state.workouts.customSplits))state.workouts.customSplits=[];
+if(!dtPlainObject(state.workouts.dayNames))state.workouts.dayNames={};
 if(!state.health) state.health={connected:false,provider:"Android Health Connect",sourceMode:"auto",lastSync:0,sleepMinutes:null,restingHR:null,workoutHR:null,steps:null};
 if(!state.health.sourceMode) state.health.sourceMode="auto";
 let calendarDate=new Date();
 let currentAction=null;
 let transferDirection="toSavings";
 
-const todayKey=()=>{
-  const d=new Date();
-  const p=n=>String(n).padStart(2,"0");
+const dtLocalDateKey=(value=new Date())=>{
+  const d=value instanceof Date?value:new Date(value),p=n=>String(n).padStart(2,"0");
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
 };
+const todayKey=()=>dtLocalDateKey(new Date());
+const dtEscapeHtml=value=>String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+const dtCleanUserText=(value,max=80)=>String(value??"").replace(/[\u0000-\u001f\u007f<>]/g," ").replace(/\s+/g," ").trim().slice(0,max);
+window.dtEscapeHtml=dtEscapeHtml;window.dtCleanUserText=dtCleanUserText;window.dtLocalDateKey=dtLocalDateKey;
 const convertMoney=n=>{
   const c=state.money.currency||"AUD";
-  const rate=(state.money.fx&&state.money.fx.rates&&state.money.fx.rates[c])||1;
-  return n*rate;
+  const raw=state.money.fx?.rates?.[c];
+  const rate=c==="AUD"?1:Number(raw);
+  if(!Number.isFinite(rate)||rate<=0)return null;
+  return Number(n||0)*rate;
 };
 const fmt=n=>{
-  const currency=state.money.currency||"AUD";
+  const currency=state.money.currency||"AUD",converted=convertMoney(n);
+  if(converted==null)return "—";
   const locale=currency==="PHP"?"en-PH":currency==="USD"?"en-US":"en-AU";
-  return new Intl.NumberFormat(locale,{style:"currency",currency,maximumFractionDigits:currency==="PHP"?0:2}).format(convertMoney(n));
+  return new Intl.NumberFormat(locale,{style:"currency",currency,maximumFractionDigits:currency==="PHP"?0:2}).format(converted);
 };
 
 
@@ -2327,7 +2430,7 @@ const fmt=n=>{
    ================================================================ */
 
 const DT_SCHEMA_VERSION = 2;
-const DT_PHASE12_BACKUP_KEY = KEY + "_backup_before_schema_v2";
+/* DT_PHASE12_BACKUP_KEY is defined before boot recovery. */
 
 function dtStableId(prefix, value){
   const text=String(value??"");
@@ -2519,14 +2622,59 @@ function dtValidateFoundation(){
   return {ok:issues.length===0,issues,schemaVersion:state.appMeta?.schemaVersion||null};
 }
 
-function save(){
-  dtSyncFoundationShadow();
-  localStorage.setItem(KEY,JSON.stringify(state));
+function dtSurfaceStorageWarning(message,unsaved=false){
+  if(unsaved)window.DT_UNSAVED_STATE=true;
+  try{
+    let el=document.getElementById("dtStorageWarning");
+    if(!el){el=document.createElement("div");el.id="dtStorageWarning";el.style.cssText="position:fixed;left:12px;right:12px;top:max(12px,env(safe-area-inset-top));z-index:2147483000;background:#3b2025;color:#fff;border:1px solid #e56b79;border-radius:12px;padding:11px 13px;font:700 12px/1.35 system-ui;box-shadow:0 12px 34px #0008";document.body.appendChild(el)}
+    el.textContent=message;
+  }catch(_){}
 }
+function dtMergeRecoveryMeta(current,previous,replace=false){
+  if(replace||!previous)return {...current,updatedAt:new Date().toISOString()};
+  const out={...current,updatedAt:new Date().toISOString()};
+  if(previous.latestActivity&&(!out.latestActivity||previous.latestActivity>out.latestActivity))out.latestActivity=previous.latestActivity;
+  for(const key of ["days","exercises","sessions","timedSessions","transactions"])out[key]=Math.max(Number(out[key]||0),Number(previous[key]||0));
+  return out;
+}
+function dtWriteRecoveryMeta(opts={}){
+  try{
+    const prev=dtReadRecoveryMeta();
+    const deep=!!opts.forceRecoveryScan||!prev;
+    const current=dtRecoveryFacts(state,deep);
+    const next=dtMergeRecoveryMeta(current,prev,!!opts.replaceRecoveryMeta);
+    localStorage.setItem(DT_RECOVERY_META_KEY,JSON.stringify(next));
+    return next;
+  }catch(e){console.warn("Recovery metadata could not be updated",e);return null}
+}
+function save(opts={}){
+  dtSyncFoundationShadow();
+  const payload=JSON.stringify(state);
+  try{localStorage.setItem(KEY,payload)}catch(e){
+    dtSurfaceStorageWarning("M/ARC could not save this change. Your last saved copy is still preserved; free device storage or export a backup before continuing.",true);
+    console.warn("M/ARC save failed",e);throw e;
+  }
+  window.DT_UNSAVED_STATE=false;
+  dtWriteRecoveryMeta(opts);
+  if(payload.length>3500000&&!window.DT_LARGE_STATE_WARNED){
+    window.DT_LARGE_STATE_WARNED=true;
+    setTimeout(()=>dtSurfaceStorageWarning("Your on-device M/ARC history is getting large. Create a Full App Backup from Settings to protect your data."),0);
+  }
+  return true;
+}
+window.dtWriteRecoveryMeta=dtWriteRecoveryMeta;
+window.dtResetRecoveryMetaBaseline=()=>{try{localStorage.removeItem(DT_RECOVERY_META_KEY)}catch(_){};return dtWriteRecoveryMeta({forceRecoveryScan:true,replaceRecoveryMeta:true})};
 
 dtEnsureFoundation();
-dtSyncFoundationShadow();
-localStorage.setItem(KEY,JSON.stringify(state));
+try{save({forceRecoveryScan:!dtKnownRecoveryMeta})}catch(_){}
+setTimeout(()=>{
+  const r=window.DT_BOOT_RECOVERY;
+  if(!r?.recovered)return;
+  const msg=r.source==="backup"
+    ?(r.stale?"M/ARC recovered an older saved copy after detecting damaged app data. Recent activity may be missing. The damaged data is preserved and can be exported from Settings.":"M/ARC recovered your last valid saved copy after detecting damaged app data. Recovery data is available in Settings.")
+    :"M/ARC detected damaged app data and started with clean defaults. The damaged data is preserved and can be exported from Settings.";
+  dtSurfaceStorageWarning(msg);
+},0);
 
 window.DTDataFoundation={
   schemaVersion:DT_SCHEMA_VERSION,
@@ -2550,9 +2698,13 @@ window.DTExerciseKnowledge={
 };
 
 
-function ensureToday(){
+function dtBlankDay(){return {work:false,workout:false,water:false,protein:false,sleep:false,restDay:false}}
+function ensureToday(create=true){
   const k=todayKey();
-  if(!state.days[k])state.days[k]={work:false,workout:false,water:false,protein:false,sleep:false,restDay:false};
+  if(!state.days[k]){
+    if(!create)return dtBlankDay();
+    state.days[k]=dtBlankDay();
+  }
   return state.days[k];
 }
 function getPct(r){
@@ -2565,7 +2717,7 @@ function streakCount(){
   let n=0;
   let d=new Date();
   for(let i=0;i<365;i++){
-    const k=d.toISOString().slice(0,10);
+    const k=dtLocalDateKey(d);
     const r=state.days[k];
     if(r && (r.percent??getPct(r).pct)>=80) n++;
     else if(i===0 && !r) {}
@@ -2589,11 +2741,12 @@ function launchCompletionAnimation(){
   }
 }
 function renderToday(){
-  const r=ensureToday();
+  const existing=state.days[todayKey()]||null;
+  const r=existing||ensureToday(false);
   document.querySelectorAll(".task-check").forEach(el=>el.checked=!!r[el.dataset.key]);
   document.getElementById("restDay").checked=!!r.restDay;
   const res=getPct(r),old=r.percent||0;
-  r.percent=res.pct;r.done=res.done;r.total=res.total;save();
+  if(existing){r.percent=res.pct;r.done=res.done;r.total=res.total;save();}
   const pt=document.getElementById("progressText"),pr=document.getElementById("progressRing");
   if(pt) pt.textContent=res.pct+"%";
   if(pr) pr.style.setProperty("--p",res.pct);
@@ -2703,7 +2856,7 @@ function renderMoney(){
   const days=[];const start=startOfWeek();
   for(let i=0;i<7;i++){let d=new Date(start);d.setDate(start.getDate()+i);days.push(d)}
   const vals=days.map(d=>{
-    const k=d.toISOString().slice(0,10);
+    const k=dtLocalDateKey(d);
     return state.money.transactions.filter(t=>t.type==="expense"&&t.date.slice(0,10)===k).reduce((s,t)=>s+t.amount,0)
   });
   const miniTotal=vals.reduce((a,b)=>a+b,0);
@@ -2730,7 +2883,7 @@ function renderMoney(){
     else if(t.type==="savingsWithdraw"||t.type==="withdraw"){cls="neg";sign="-";icon="↩️";title=t.note||"Savings withdrawal"}
     else if(t.type==="transfer"){sub=t.direction==="toSavings"?"Available → Savings":"Savings → Available"}
     const row=document.createElement("div");row.className="tx";
-    row.innerHTML=`<div class="tx-icon">${icon}</div><div class="tx-main"><b>${title}</b><small>${new Date(t.date).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})}${sub?" • "+sub:""}</small></div><div class="tx-amount ${cls}">${sign}${fmt(t.amount)}</div>`;
+    row.innerHTML=`<div class="tx-icon">${icon}</div><div class="tx-main"><b>${dtEscapeHtml(title)}</b><small>${new Date(t.date).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})}${sub?" • "+dtEscapeHtml(sub):""}</small></div><div class="tx-amount ${cls}">${sign}${fmt(t.amount)}</div>`;
     list.appendChild(row)
   })
 }
@@ -2947,7 +3100,7 @@ currencySelect.onchange=e=>{
   renderTodayDashboardExtras();
 };
 
-document.getElementById("resetBtn").onclick=()=>{if(confirm("Reset all app data?")){localStorage.removeItem(KEY);state=JSON.parse(JSON.stringify(defaults));currencySelect.value=state.money.currency||"AUD";
+document.getElementById("resetBtn").onclick=()=>{if(confirm("Reset all app data?")){localStorage.removeItem(KEY);localStorage.removeItem(DT_RECOVERY_META_KEY);localStorage.removeItem(DT_DAMAGED_RAW_KEY);localStorage.removeItem(DT_PHASE12_BACKUP_KEY);state=dtFreshDefaults();dtEnsureFoundation();save({forceRecoveryScan:true,replaceRecoveryMeta:true});currencySelect.value=state.money.currency||"AUD";
 const fxStatus=document.getElementById("fxStatus");
 if(fxStatus){
   const fx=state.money.fx;
@@ -3008,14 +3161,14 @@ function renderWorkoutHistory(){
         const reps=(x.reps!==""&&x.reps!=null)?`${x.reps} reps`:"—";
         return `${kg} × ${reps}`;
       }).join(" · ");
-      return `<div><b style="color:#dce7ef">${ex.name}</b> — ${sets}</div>`;
+      return `<div><b style="color:#dce7ef">${dtEscapeHtml(ex.name)}</b> — ${dtEscapeHtml(sets)}</div>`;
     }).filter(Boolean).join("");
 
     wrap.innerHTML=`
       <div class="workout-history-row">
-        <div class="workout-history-icon">${workoutDayIcon(s.day)}</div>
+        <div class="workout-history-icon">${dtEscapeHtml(workoutDayIcon(s.day))}</div>
         <div class="workout-history-main">
-          <b>${workoutDayLabel(s.day)}</b>
+          <b>${dtEscapeHtml(workoutDayLabel(s.day))}</b>
           <small>${when.toLocaleDateString("en-AU",{day:"numeric",month:"short",year:"numeric"})} • ${when.toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit",hour12:true})}</small>
         </div>
         <div class="workout-history-right">
@@ -3041,7 +3194,7 @@ function openWorkoutHistory(){
 }
 function workoutDraftHasData(){
   try{
-    return draft().some(ex=>ex.sets.some(s=>s.kg||s.reps||s.effort));
+    return draft().some(ex=>ex.sets.some(s=>{const reps=Number(s?.reps);const kgRaw=String(s?.kg??"").trim();const kg=kgRaw===""?null:Number(s.kg);return Number.isFinite(reps)&&reps>0&&(kg==null||(Number.isFinite(kg)&&kg>=0));}));
   }catch(e){ return false; }
 }
 function updateFinishWorkoutButton(){
@@ -3080,10 +3233,48 @@ function latest(d){return state.workouts.sessions.filter(x=>x.day===d).sort((a,b
 function draft(){
   const ex=effectiveExercises(wday);
   const key=wkey();
-  if(!state.workouts.drafts[key] || state.workouts.drafts[key].length!==ex.length){
-    const existing=state.workouts.drafts[key]||[];
-    state.workouts.drafts[key]=ex.map((e,i)=>existing[i]||({sets:e[3].map(()=>({kg:'',reps:'',effort:''}))}));
+  if(!state.workouts.drafts)state.workouts.drafts={};
+  const existing=Array.isArray(state.workouts.drafts[key])?state.workouts.drafts[key]:[];
+  const stableKeys=ex.map((e,i)=>String(e?.[4]||exerciseKey(e)||`${e?.[0]||"Exercise"}|${e?.[1]||""}|${i}`));
+
+  // Critical identity rule: once a draft is normalized for this exact exercise
+  // order, keep the same objects. Input event handlers hold references to these
+  // set objects, so rebuilding on every draft() read can detach visible inputs
+  // from the state that save()/Done later validates.
+  const normalized=existing.length===ex.length&&existing.every((entry,i)=>
+    entry&&String(entry.__exkey||entry.exerciseKey||"")===stableKeys[i]&&Array.isArray(entry.sets)
+  );
+  if(normalized){
+    existing.forEach((entry,i)=>{
+      entry.__exkey=stableKeys[i];
+      const planned=Array.isArray(ex[i]?.[3])?ex[i][3].length:0;
+      while(entry.sets.length<Math.max(1,planned))entry.sets.push({kg:'',reps:'',effort:''});
+    });
+    return existing;
   }
+
+  const legacyByIndexSafe=existing.length===ex.length;
+  const byKey=new Map();
+  existing.forEach(entry=>{
+    const stable=String(entry?.__exkey||entry?.exerciseKey||"");
+    if(stable&&!byKey.has(stable))byKey.set(stable,entry);
+  });
+  state.workouts.drafts[key]=ex.map((e,i)=>{
+    const stable=stableKeys[i];
+    let src=byKey.get(stable)||null;
+    if(!src&&legacyByIndexSafe&&existing[i]&&!existing[i].__exkey&&!existing[i].exerciseKey)src=existing[i];
+    const sourceSets=Array.isArray(src?.sets)?src.sets:[];
+    const planned=Array.isArray(e?.[3])?e[3].length:0;
+    const targetCount=Math.max(1,planned,sourceSets.length||0);
+    return {
+      __exkey:stable,
+      sets:Array.from({length:targetCount},(_,si)=>({
+        kg:sourceSets[si]?.kg??'',
+        reps:sourceSets[si]?.reps??'',
+        effort:sourceSets[si]?.effort??''
+      }))
+    };
+  });
   return state.workouts.drafts[key];
 }
 function prev(ei,si){return latest(wday)?.exercises?.[ei]?.sets?.[si]||null}
@@ -3114,10 +3305,10 @@ function renderWorkout(){
     box.innerHTML=`<div class="exercise-head">
       <span class="exnum">${ei+1}</span>
       <button class="exname" style="border:0;background:transparent;color:inherit;text-align:left;padding:0">
-        <b>${e[0]} ${e[1]?'<span style="color:var(--muted);font-weight:500">('+e[1]+')</span>':''}</b>
-        <small>${e[2]}</small>
+        <b>${dtEscapeHtml(e[0])} ${e[1]?'<span style="color:var(--muted);font-weight:500">('+dtEscapeHtml(e[1])+')</span>':''}</b>
+        <small>${dtEscapeHtml(e[2])}</small>
       </button>
-      <span class="exsum">${pv?(pv.kg||'–')+' × '+(pv.reps||'–'):(pl[0]??'–')+' × '+(pl[1]||'')}</span>
+      <span class="exsum">${dtEscapeHtml(pv?(pv.kg||'–')+' × '+(pv.reps||'–'):(pl[0]??'–')+' × '+(pl[1]||''))}</span>
       <button class="exercise-menu-btn" aria-label="Activity menu">⋯</button>
       <button class="exercise-chevron" aria-label="Expand activity"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </div>
@@ -3142,10 +3333,10 @@ function renderWorkout(){
       const smartKg=!old?window.dtSuggestStartWeight?.(e[0])?.kg:null;
       const row=document.createElement('div');row.className='setrow'+(window.dtIsDurationBased?.(e)?' duration-mode':'');
       row.innerHTML=`<b style="text-align:center">${si+1}</b>
-        <div class="prevval">${old?window.dtFormatLift?.(old.kg,old.reps)||((old.kg||'–')+' × '+(old.reps||'–')):window.dtFormatLift?.(pln[0],pln[1])||((pln[0]??'–')+' × '+(pln[1]||''))}<br><span style="opacity:.5">${old?'previous':'plan'}</span></div>
-        <input class="loginput kg" type="number" step="${window.dtWeightUnit?.()==='lb'?'1':'.5'}" value="${window.dtWeightDisplayValue?.(x.kg)??x.kg}" placeholder="${window.dtWeightDisplayValue?.(old?.kg??smartKg)??old?.kg??smartKg??window.dtWeightUnitLabel?.()??'KG'}">
-        <input class="loginput reps" type="number" value="${x.reps}" placeholder="${old?.reps??(window.dtIsDurationBased?.(e)?'Sec':'Reps')}">
-        <button class="effort ${x.effort}"></button>`;
+        <div class="prevval">${dtEscapeHtml(old?window.dtFormatLift?.(old.kg,old.reps)||((old.kg||'–')+' × '+(old.reps||'–')):window.dtFormatLift?.(pln[0],pln[1])||((pln[0]??'–')+' × '+(pln[1]||'')))}<br><span style="opacity:.5">${old?'previous':'plan'}</span></div>
+        <input class="loginput kg" type="number" step="${window.dtWeightUnit?.()==='lb'?'1':'.5'}" value="${dtEscapeHtml(window.dtWeightDisplayValue?.(x.kg)??x.kg)}" placeholder="${window.dtWeightDisplayValue?.(old?.kg??smartKg)??old?.kg??smartKg??window.dtWeightUnitLabel?.()??'KG'}">
+        <input class="loginput reps" type="number" value="${dtEscapeHtml(x.reps)}" placeholder="${old?.reps??(window.dtIsDurationBased?.(e)?'Sec':'Reps')}">
+        <button class="effort ${["easy","ideal","max"].includes(x.effort)?x.effort:""}"></button>`;
       row.querySelector('.kg').oninput=z=>{x.kg=window.dtWeightInputToKg?window.dtWeightInputToKg(z.target.value):z.target.value;save();updateFinishWorkoutButton()};
       row.querySelector('.reps').oninput=z=>{x.reps=z.target.value;save();updateFinishWorkoutButton()};
       row.querySelector('.effort').onclick=()=>{
@@ -3218,9 +3409,9 @@ document.getElementById("saveEditExercise").onclick=()=>{
   const exercises=effectiveExercises(wday);
   const e=exercises[ei];
   if(!e)return;
-  const name=document.getElementById("editExName").value.trim()||e[0];
-  const type=document.getElementById("editExType").value.trim();
-  const muscle=document.getElementById("editExMuscle").value.trim()||e[2];
+  const name=dtCleanUserText(document.getElementById("editExName").value,80)||e[0];
+  const type=dtCleanUserText(document.getElementById("editExType").value,60);
+  const muscle=dtCleanUserText(document.getElementById("editExMuscle").value,60)||e[2];
   const sets=Math.max(1,Math.min(10,parseInt(document.getElementById("editExSets").value)||3));
 
   const baseKey=e[4] && String(e[4]).startsWith("custom:") ? null : (e[4]||exerciseKey(e));
@@ -3406,7 +3597,7 @@ function dtRenderExerciseResults(){
     btn.type="button";
     btn.className="exercise-search-item";
     const sec=(ex.secondaryMuscles||[]).map(dtPrettyMuscleKey);
-    btn.innerHTML=`<span><strong>${ex.name}</strong><small>${ex.primaryMuscle}${sec.length?` • ${sec.join(", ")}`:""}</small></span><span class="exercise-search-tag">${ex.equipment}</span>`;
+    btn.innerHTML=`<span><strong>${dtEscapeHtml(ex.name)}</strong><small>${dtEscapeHtml(ex.primaryMuscle)}${sec.length?` • ${sec.map(dtEscapeHtml).join(", ")}`:""}</small></span><span class="exercise-search-tag">${dtEscapeHtml(ex.equipment)}</span>`;
     btn.onclick=()=>dtSelectLibraryExercise(ex);
     exerciseLibraryResults.appendChild(btn);
   }
@@ -3463,9 +3654,9 @@ document.getElementById("saveExercise").onclick=()=>{
     movementPattern=selectedLibraryExercise.movementPattern||null;
     aliases=selectedLibraryExercise.aliases||[];
   }else{
-    name=document.getElementById("customExName").value.trim();
-    type=document.getElementById("customExType").value.trim();
-    muscle=document.getElementById("customExMuscle").value.trim();
+    name=dtCleanUserText(document.getElementById("customExName").value,80);
+    type=dtCleanUserText(document.getElementById("customExType").value,60);
+    muscle=dtCleanUserText(document.getElementById("customExMuscle").value,60);
     sets=Math.max(1,Math.min(8,parseInt(document.getElementById("customExSets").value)||3));
   }
   if(!name){alert("Enter an exercise name.");return}
@@ -3534,7 +3725,7 @@ function getWeekDates(){
 function weeklyTaskStats(){
   const dates=getWeekDates();let total=0,success=0;
   dates.forEach(d=>{
-    const r=state.days[d.toISOString().slice(0,10)];
+    const r=state.days[dtLocalDateKey(d)];
     const p=r?.percent||0;total+=p;if(p>=80)success++;
   });
   return {avg:Math.round(total/7),success};
@@ -3557,7 +3748,7 @@ function todayExpense(){
   return state.money.transactions.filter(t=>t.type==="expense"&&t.date.slice(0,10)===k).reduce((a,t)=>a+t.amount,0);
 }
 function renderTodayDashboardExtras(){
-  const r=ensureToday(),stats=weeklyTaskStats(),spent=weekExpenses(),limit=state.money.weeklyLimit||300,left=Math.max(0,limit-spent),schange=weeklySavingsChange(),wc=weeklyWorkoutCount();
+  const r=state.days[todayKey()]||ensureToday(false),stats=weeklyTaskStats(),spent=weekExpenses(),limit=Math.max(0,Number(state.money.weeklyLimit)||0),left=Math.max(0,limit-spent),schange=weeklySavingsChange(),wc=weeklyWorkoutCount();
   document.getElementById("sumCompletion").textContent=stats.avg+"%";
   document.getElementById("sumDays").textContent=stats.success+" / 7";
   document.getElementById("sumWorkouts").textContent=wc;
@@ -3914,6 +4105,8 @@ renderTrainingGoal();
   font-weight:900;
 }
 .exercise-done-btn:active{transform:scale(.99)}
+.exercise-done-btn:disabled{opacity:.42;filter:saturate(.45);cursor:not-allowed;transform:none!important}
+.exercise-done-btn.ready{opacity:1;filter:none}
 .pending-workout-wrap{
   display:grid;
   gap:9px;
@@ -3948,12 +4141,12 @@ renderTrainingGoal();
 .all-workouts-done{
   padding:28px 16px;text-align:center;color:var(--green)
 }
-.all-workouts-done>div{
+.all-workouts-done>.dt-workout-complete-check{
   width:50px;height:50px;border-radius:50%;display:grid;place-items:center;
   margin:0 auto 10px;background:#153b2a;font-size:24px;font-weight:900
 }
-.all-workouts-done b{display:block;color:#fff}
-.all-workouts-done small{display:block;color:var(--muted);margin-top:5px;line-height:1.4}
+.all-workouts-done>b{display:block;color:#fff}
+.all-workouts-done>small{display:block;color:var(--muted);margin-top:5px;line-height:1.4}
 .activity-history-title{
   margin-top:18px;padding-top:13px;border-top:1px solid rgba(255,255,255,.08);
   color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:900
@@ -3979,8 +4172,8 @@ renderTrainingGoal();
 <script>
 
 /* Daily Tracker Workout Reliability + 3-Minute Completion Patch
-   Designed for daily_tracker_login_money_minimal.html
-   Add this script AFTER the app's existing script, just before </body>.
+   Designed for daily_tracker_login_money_minimal.html.
+   Runs after the app's existing workout script.
 */
 (() => {
   "use strict";
@@ -3989,7 +4182,7 @@ renderTrainingGoal();
   const tickers = new Map();
 
   function deepClone(v){ return JSON.parse(JSON.stringify(v)); }
-  function dayKey(){ return typeof todayKey === "function" ? todayKey() : new Date().toISOString().slice(0,10); }
+  function dayKey(){ return typeof todayKey === "function" ? todayKey() : (window.dtLocalDateKey?.(new Date())||new Date().toLocaleDateString("en-CA")); }
   function pendingId(day, key){ return `${day}|${dayKey()}|${key}`; }
 
   function ensureWorkoutPatchState(){
@@ -4007,13 +4200,12 @@ renderTrainingGoal();
     return `${e?.[0] || "Exercise"}|${e?.[1] || ""}|${index}`;
   }
 
-  function hasSetData(entry){
-    return !!entry?.sets?.some(s =>
-      String(s?.kg ?? "").trim() !== "" ||
-      String(s?.reps ?? "").trim() !== "" ||
-      String(s?.effort ?? "").trim() !== ""
-    );
+  function validSet(s){
+    const reps=Number(s?.reps),kgRaw=String(s?.kg??"").trim(),kg=kgRaw===""?null:Number(s.kg);
+    return Number.isFinite(reps)&&reps>0&&(kg==null||(Number.isFinite(kg)&&kg>=0));
   }
+  function validSets(entry){return (entry?.sets||[]).filter(validSet).map(s=>({kg:s.kg,reps:s.reps,effort:s.effort||""}))}
+  function hasSetData(entry){return validSets(entry).length>0}
 
   function persistNow(){
     try { save(); } catch(err){ console.warn("Workout autosave failed", err); }
@@ -4044,10 +4236,11 @@ renderTrainingGoal();
     const rec = state.workouts.pendingExercises[id];
     if(!rec) return;
 
+    const cleanSets=validSets(rec);
     const already = state.workouts.completedExercises.some(x => x.id === rec.id);
-    if(!already){
+    if(!already && cleanSets.length){
       state.workouts.completedExercises.push({
-        ...deepClone(rec),
+        ...deepClone(rec),sets:cleanSets,
         finalizedAt: new Date().toISOString()
       });
     }
@@ -4101,12 +4294,55 @@ renderTrainingGoal();
     tickers.set(id, setInterval(loop, 1000));
   }
 
+  function renderedEffort(btn){
+    if(!btn)return "";
+    if(btn.classList.contains("easy"))return "easy";
+    if(btn.classList.contains("ideal"))return "ideal";
+    if(btn.classList.contains("max"))return "max";
+    return "";
+  }
+
+  function renderedSetsForExercise(e,ei,boxOverride=null){
+    const key=exerciseStableKey(e,ei);
+    const box=boxOverride||[...document.querySelectorAll("#wlist .exercise")].find(x=>x.dataset.exerciseKey===key);
+    if(!box)return null;
+    return [...box.querySelectorAll(".setrow")].map(row=>({
+      kg:row.querySelector(".kg")?.value??"",
+      reps:row.querySelector(".reps")?.value??"",
+      effort:renderedEffort(row.querySelector(".effort"))
+    }));
+  }
+
+  function syncRenderedExerciseDraft(e,ei){
+    const rendered=renderedSetsForExercise(e,ei);
+    const d=draft();
+    if(!d[ei])d[ei]={sets:[]};
+    if(rendered)d[ei].sets=rendered.map(s=>({
+      kg:window.dtWeightInputToKg?window.dtWeightInputToKg(s.kg):s.kg,
+      reps:s.reps,
+      effort:s.effort
+    }));
+    return d[ei];
+  }
+
+  function refreshActivityDoneButton(e,ei,box){
+    const btn=box?.querySelector(".exercise-done-btn");
+    if(!btn)return;
+    const rendered=renderedSetsForExercise(e,ei,box)||[];
+    const ready=hasSetData({sets:rendered});
+    btn.disabled=!ready;
+    btn.classList.toggle("ready",ready);
+    btn.setAttribute("aria-disabled",ready?"false":"true");
+  }
+
   function startCompletion(e, ei){
     ensureWorkoutPatchState();
-    const d = draft();
-    const entry = d[ei];
+    const entry = syncRenderedExerciseDraft(e,ei);
+    persistNow();
     if(!hasSetData(entry)){
-      alert("Enter at least one set before marking this activity done.");
+      const key=exerciseStableKey(e,ei);
+      const box=[...document.querySelectorAll("#wlist .exercise")].find(x=>x.dataset.exerciseKey===key);
+      refreshActivityDoneButton(e,ei,box);
       return;
     }
     const key = exerciseStableKey(e,ei);
@@ -4119,7 +4355,7 @@ renderTrainingGoal();
       name: e[0],
       type: e[1] || "",
       muscle: e[2] || "",
-      sets: deepClone(entry.sets || []),
+      sets: validSets(entry),
       startedAt: new Date().toISOString(),
       expiresAt: Date.now() + FINALIZE_MS
     };
@@ -4183,7 +4419,7 @@ renderTrainingGoal();
       item.innerHTML = `
         <div class="pending-check">✓</div>
         <div class="pending-main">
-          <b>${rec.name}</b>
+          <b>${window.dtEscapeHtml?.(rec.name)??rec.name}</b>
           <small>Completed • saving in <span class="pending-time">${formatLeft(rec.expiresAt-Date.now())}</span></small>
         </div>
         <button class="pending-edit" type="button">Edit</button>
@@ -4234,10 +4470,10 @@ renderTrainingGoal();
         <div class="exercise-head">
           <span class="exnum">${ei+1}</span>
           <button class="exname ${["Chest Press","Incline Machine Press","Shoulder Press","Pec Fly","Lateral Raise","Triceps Pushdown","Lat Pulldown","Chest Supported Row","Close Grip Pulldown","Rear Delt Fly","DB Biceps Curl","Hammer Curl","Abs Work","DB Shrugs","Leg Extension","Hamstring Curl","Leg Press","Seated Calf Raise","Abs Workout"].includes(e[0])?"has-muscle-detail":""}" type="button" style="border:0;background:transparent;color:inherit;text-align:left;padding:0">
-            <b>${e[0]} ${e[1]?'<span style="color:var(--muted);font-weight:500">('+e[1]+')</span>':''}</b>
-            <small>${e[2]}</small>
+            <b>${window.dtEscapeHtml?.(e[0])??e[0]} ${e[1]?'<span style="color:var(--muted);font-weight:500">('+(window.dtEscapeHtml?.(e[1])??e[1])+')</span>':''}</b>
+            <small>${window.dtEscapeHtml?.(e[2])??e[2]}</small>
           </button>
-          <span class="exsum">${pv?(window.dtFormatLift?.(pv.kg,pv.reps)||((pv.kg||"–")+" × "+(pv.reps||"–"))):(window.dtFormatLift?.(pl[0],pl[1])||((pl[0]??"–")+" × "+(pl[1]||"")))}</span>
+          <span class="exsum">${window.dtEscapeHtml?.(pv?(window.dtFormatLift?.(pv.kg,pv.reps)||((pv.kg||"–")+" × "+(pv.reps||"–"))):(window.dtFormatLift?.(pl[0],pl[1])||((pl[0]??"–")+" × "+(pl[1]||""))))??(pv?"previous":"plan")}</span>
           <button class="exercise-menu-btn" type="button" aria-label="Activity menu">⋯</button>
           <button class="exercise-chevron" type="button" aria-label="Expand activity"><svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
@@ -4249,7 +4485,7 @@ renderTrainingGoal();
           <div class="sethead${window.dtIsDurationBased?.(e)?" duration-mode":""}"><span>SET</span><span>PREVIOUS</span><span class="kg-label">${window.dtWeightUnitLabel?.()||"KG"}</span><span>${window.dtIsDurationBased?.(e)?"SEC":"REPS"}</span><span>EFFORT</span></div>
           <div class="rows"></div>
           <button class="addset" type="button">＋ Add Set</button>
-          <button class="exercise-done-btn" type="button">✓ Done with ${e[0]}</button>
+          <button class="exercise-done-btn" type="button">✓ Done with ${window.dtEscapeHtml?.(e[0])??e[0]}</button>
         </div>`;
 
       const toggle = () => box.classList.toggle("open");
@@ -4274,19 +4510,19 @@ renderTrainingGoal();
         row.className = "setrow" + (window.dtIsDurationBased?.(e) ? " duration-mode" : "");
         row.innerHTML = `
           <b style="text-align:center">${si+1}</b>
-          <div class="prevval">${old?(window.dtFormatLift?.(old.kg,old.reps)||((old.kg||"–")+" × "+(old.reps||"–"))):(window.dtFormatLift?.(pln[0],pln[1])||((pln[0]??"–")+" × "+(pln[1]||"")))}<br><span style="opacity:.5">${old?"previous":"plan"}</span></div>
-          <input class="loginput kg" inputmode="decimal" type="number" step="${window.dtWeightUnit?.()==='lb'?'1':'.5'}" value="${window.dtWeightDisplayValue?.(x.kg)??x.kg??""}" placeholder="${window.dtWeightDisplayValue?.(old?.kg??smartKg)??old?.kg??smartKg??window.dtWeightUnitLabel?.()??"KG"}">
-          <input class="loginput reps" inputmode="numeric" type="number" value="${x.reps ?? ""}" placeholder="${old?.reps ?? (window.dtIsDurationBased?.(e)?"Sec":"Reps")}">
-          <button class="effort ${x.effort || ""}" type="button"></button>`;
+          <div class="prevval">${window.dtEscapeHtml?.(old?(window.dtFormatLift?.(old.kg,old.reps)||((old.kg||"–")+" × "+(old.reps||"–"))):(window.dtFormatLift?.(pln[0],pln[1])||((pln[0]??"–")+" × "+(pln[1]||""))))??"—"}<br><span style="opacity:.5">${old?"previous":"plan"}</span></div>
+          <input class="loginput kg" inputmode="decimal" type="number" step="${window.dtWeightUnit?.()==='lb'?'1':'.5'}" value="${window.dtEscapeHtml?.(window.dtWeightDisplayValue?.(x.kg)??x.kg??"")??""}" placeholder="${window.dtEscapeHtml?.(window.dtWeightDisplayValue?.(old?.kg??smartKg)??old?.kg??smartKg??window.dtWeightUnitLabel?.()??"KG")??"KG"}">
+          <input class="loginput reps" inputmode="numeric" type="number" value="${window.dtEscapeHtml?.(x.reps??"")??""}" placeholder="${window.dtEscapeHtml?.(old?.reps ?? (window.dtIsDurationBased?.(e)?"Sec":"Reps"))??"Reps"}">
+          <button class="effort ${["easy","ideal","max"].includes(x.effort)?x.effort:""}" type="button"></button>`;
 
         const kg = row.querySelector(".kg");
         const reps = row.querySelector(".reps");
-        kg.oninput = z => { x.kg = window.dtWeightInputToKg?window.dtWeightInputToKg(z.target.value):z.target.value; persistNow(); };
-        reps.oninput = z => { x.reps = z.target.value; persistNow(); };
-        kg.onchange = persistNow;
-        reps.onchange = persistNow;
-        kg.onblur = persistNow;
-        reps.onblur = persistNow;
+        kg.oninput = z => { x.kg = window.dtWeightInputToKg?window.dtWeightInputToKg(z.target.value):z.target.value; persistNow(); refreshActivityDoneButton(e,ei,box); };
+        reps.oninput = z => { x.reps = z.target.value; persistNow(); refreshActivityDoneButton(e,ei,box); };
+        kg.onchange = ()=>{persistNow();refreshActivityDoneButton(e,ei,box)};
+        reps.onchange = ()=>{persistNow();refreshActivityDoneButton(e,ei,box)};
+        kg.onblur = ()=>{persistNow();refreshActivityDoneButton(e,ei,box)};
+        reps.onblur = ()=>{persistNow();refreshActivityDoneButton(e,ei,box)};
 
         row.querySelector(".effort").onclick = () => {
           effTarget = {ei,si};
@@ -4297,6 +4533,7 @@ renderTrainingGoal();
 
       box.querySelector(".addset").onclick = () => {
         if(!d[ei]) d[ei] = {sets:[]};
+        if((d[ei].sets||[]).length>=12){alert("Maximum 12 sets per activity.");return;}
         d[ei].sets.push({kg:"",reps:"",effort:""});
         persistNow();
         renderWorkout();
@@ -4308,14 +4545,18 @@ renderTrainingGoal();
       };
 
       box.querySelector(".exercise-done-btn").onclick = () => startCompletion(e,ei);
+      refreshActivityDoneButton(e,ei,box);
       wlist.appendChild(box);
     });
 
     if(!wlist.querySelector(".exercise") && !wlist.querySelector(".pending-workout-bubble")){
       const all = document.createElement("div");
       all.className = "all-workouts-done";
-      all.innerHTML = `<div>✓</div><b>${p.title} complete</b><small>Today's completed activities are saved in History.</small>`;
+      all.innerHTML = `<div class="dt-workout-complete-check">✓</div><b>${p.title} complete</b><small>Today's completed activities are saved in History.</small><div class="dt-workout-recovery-box" id="dtWorkoutRecoveryBox"></div>`;
       wlist.appendChild(all);
+      if(typeof window.dtRenderWorkoutRecoveryPanel === "function"){
+        requestAnimationFrame(()=>window.dtRenderWorkoutRecoveryPanel(wday));
+      }
     }
 
     if(typeof updateFinishWorkoutButton === "function") updateFinishWorkoutButton();
@@ -4375,9 +4616,9 @@ renderTrainingGoal();
         const when = new Date(rec.finalizedAt || rec.startedAt);
         const logged = (rec.sets||[]).filter(s => s.kg || s.reps || s.effort);
         const details = logged.map((s,i)=>{
-          const kg = (s.kg!=="" && s.kg!=null) ? `${s.kg} kg` : "—";
-          const reps = (s.reps!=="" && s.reps!=null) ? `${s.reps} reps` : "—";
-          return `Set ${i+1}: ${kg} × ${reps}${s.effort ? ` • ${s.effort}` : ""}`;
+          const kg = (s.kg!=="" && s.kg!=null) ? `${window.dtEscapeHtml?.(s.kg)??s.kg} kg` : "—";
+          const reps = (s.reps!=="" && s.reps!=null) ? `${window.dtEscapeHtml?.(s.reps)??s.reps} reps` : "—";
+          return `Set ${i+1}: ${kg} × ${reps}${s.effort ? ` • ${window.dtEscapeHtml?.(s.effort)??s.effort}` : ""}`;
         }).join("<br>");
 
         const row = document.createElement("div");
@@ -4385,8 +4626,8 @@ renderTrainingGoal();
         row.innerHTML = `
           <div class="saved-activity-icon">${window.dtMuscleIconHTML?.(rec.muscle)||"✓"}</div>
           <div class="saved-activity-main">
-            <b>${rec.name}</b>
-            <small>${workoutDayLabel(rec.day)} • ${when.toLocaleDateString([], {day:"numeric",month:"short",year:"numeric"})} • ${when.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}</small>
+            <b>${window.dtEscapeHtml?.(rec.name)??rec.name}</b>
+            <small>${window.dtEscapeHtml?.(workoutDayLabel(rec.day))??workoutDayLabel(rec.day)} • ${when.toLocaleDateString([], {day:"numeric",month:"short",year:"numeric"})} • ${when.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}</small>
             <div class="saved-activity-detail">${details || "No set details"}</div>
           </div>`;
         list.appendChild(row);
@@ -4397,10 +4638,29 @@ renderTrainingGoal();
   // Do not use the old whole-workout button as the primary completion path.
   // It remains available as a manual fallback if already shown by the original app.
   const finishBtn = document.getElementById("saveWorkout");
+  function saveRemainingActivities(){
+    ensureWorkoutPatchState();
+    const entries=draft(),exs=effectiveExercises(wday),today=dayKey();let saved=0;
+    exs.forEach((e,ei)=>{
+      const key=exerciseStableKey(e,ei),sets=validSets(entries[ei]);
+      if(!sets.length||completedToday(wday,key))return;
+      const id=pendingId(wday,key);
+      if(state.workouts.pendingExercises?.[id]){finalizePending(id);saved++;return}
+      state.workouts.completedExercises.push({id,day:wday,dayKey:today,exerciseKey:key,name:e[0],type:e[1]||"",muscle:e[2]||"",sets:deepClone(sets),startedAt:new Date().toISOString(),finalizedAt:new Date().toISOString()});
+      if(entries[ei])entries[ei].sets=(entries[ei].sets||[]).map(()=>({kg:"",reps:"",effort:""}));
+      saved++;
+    });
+    if(!saved){alert("Enter at least one valid set first (reps must be above 0; weight cannot be negative).");return}
+    persistNow();
+    try{window.dtCheckWorkoutCompletion?.(wday,true)}catch(_){}
+    try{renderWorkout();renderWorkoutHistory?.();renderHistory?.();renderToday?.();renderTodayDashboardExtras?.()}catch(_){}
+  }
   if(finishBtn){
     finishBtn.textContent = "Save remaining workout";
-    finishBtn.title = "Optional fallback. Individual activities now save automatically after their 3-minute countdown.";
+    finishBtn.title = "Saves valid entered activities. A workout is counted only when the full plan is complete.";
+    finishBtn.onclick=saveRemainingActivities;
   }
+  window.dtSaveRemainingActivities=saveRemainingActivities;
 
   // Reconcile timers after reload/app reopen.
   ensureWorkoutPatchState();
@@ -4806,7 +5066,7 @@ renderTrainingGoal();
   const DT_EFFORT_MULT = {easy:.90,ideal:1.00,max:1.10};
 
   function dtSumNorm(v){return String(v||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}
-  function dtSummaryDayKey(){return typeof todayKey==="function"?todayKey():new Date().toISOString().slice(0,10)}
+  function dtSummaryDayKey(){return typeof todayKey==="function"?todayKey():(window.dtLocalDateKey?.(new Date())||new Date().toLocaleDateString("en-CA"))}
   function dtSummaryStableKey(e){return e?.[4]?String(e[4]):(typeof exerciseKey==="function"?exerciseKey(e):`${e?.[0]||""}|${e?.[1]||""}`)}
   function dtSummaryLabel(key){return DT_SUMMARY_LABELS[key]||String(key).replaceAll("_"," ")}
   function dtSummaryDayTitle(day){
@@ -4831,11 +5091,10 @@ renderTrainingGoal();
   }
 
   function dtLoggedSets(rec){
-    return (rec?.sets||[]).filter(s =>
-      String(s?.kg??"").trim()!=="" ||
-      String(s?.reps??"").trim()!=="" ||
-      String(s?.effort??"").trim()!==""
-    );
+    return (rec?.sets||[]).filter(s=>{
+      const reps=Number(s?.reps),kgRaw=String(s?.kg??"").trim(),kg=kgRaw===""?null:Number(s.kg);
+      return Number.isFinite(reps)&&reps>0&&(kg==null||(Number.isFinite(kg)&&kg>=0));
+    });
   }
 
   function dtIntegerPercentages(items){
@@ -4953,9 +5212,9 @@ renderTrainingGoal();
     const rows=(summary.muscles||[]).filter(x=>x.pct>0).slice(0,7);
     return rows.map((m,i)=>`
       <div class="dt-emphasis-row">
-        <span class="dt-emphasis-name">${m.label}</span>
-        <div class="dt-emphasis-track"><div class="dt-emphasis-fill" style="width:${m.pct}%;background:${dtBarColor(m.role)};animation-delay:${i*.06}s"></div></div>
-        <span class="dt-emphasis-pct">${m.pct}%</span>
+        <span class="dt-emphasis-name">${window.dtEscapeHtml?.(m.label)??m.label}</span>
+        <div class="dt-emphasis-track"><div class="dt-emphasis-fill" style="width:${Math.max(0,Math.min(100,Number(m.pct)||0))}%;background:${dtBarColor(m.role)};animation-delay:${i*.06}s"></div></div>
+        <span class="dt-emphasis-pct">${Math.max(0,Math.min(100,Number(m.pct)||0))}%</span>
       </div>`).join("");
   }
 
@@ -5052,7 +5311,7 @@ renderTrainingGoal();
         </div>
         <button class="dt-summary-close" type="button">✕</button>
       </div>
-      <div class="dt-summary-sub">${summary.title} · Relative workout emphasis from your completed sets, exercise roles and logged effort.</div>
+      <div class="dt-summary-sub">${window.dtEscapeHtml?.(summary.title)??summary.title} · Relative workout emphasis from your completed sets, exercise roles and logged effort.</div>
       <div class="dt-summary-stats">
         <div class="dt-summary-stat"><small>EXERCISES</small><b>${summary.exerciseCount}/${summary.exerciseCount}</b></div>
         <div class="dt-summary-stat"><small>WORKING SETS</small><b>${summary.workingSets}</b></div>
@@ -5115,20 +5374,22 @@ renderTrainingGoal();
       <div class="dt-today-result-head">
         <div class="dt-today-result-status">
           <div class="dt-today-result-check">✓</div>
-          <div><small>WORKOUT COMPLETE</small><b>${summary.title}</b></div>
+          <div><small>WORKOUT COMPLETE</small><b>${window.dtEscapeHtml?.(summary.title)??summary.title}</b></div>
         </div>
         <button class="dt-today-result-view" type="button">View Summary ›</button>
       </div>
       <div class="dt-today-result-meta">${summary.exerciseCount}/${summary.exerciseCount} activities · ${summary.workingSets} working sets</div>
       <div class="dt-today-top-focus">
-        ${top.map(m=>`<span class="dt-focus-chip" style="border-color:${dtBarColor(m.role)}55"><b>${m.label}</b> ${m.pct}%</span>`).join("")}
+        ${top.map(m=>`<span class="dt-focus-chip" style="border-color:${dtBarColor(m.role)}55"><b>${window.dtEscapeHtml?.(m.label)??m.label}</b> ${Math.max(0,Math.min(100,Number(m.pct)||0))}%</span>`).join("")}
       </div>
       <div class="dt-today-mini-wrap">
         <div class="dt-today-mini-body" id="dtTodaySummaryFront"></div>
         <div class="dt-today-mini-body" id="dtTodaySummaryBack"></div>
-      </div>`;
+      </div>
+      <div class="dt-today-recovery" id="dtTodayRecovery"></div>`;
     card.querySelector(".dt-today-result-view").onclick=()=>window.dtOpenWorkoutSummary(summary);
     dtRenderSummaryBodies(summary,"dtTodaySummary",true);
+    if(typeof window.dtRenderTodayRecoverySummary==="function")window.dtRenderTodayRecoverySummary(summary);
   }
 
   function dtCheckWorkoutCompletion(day,showPopup=true){
@@ -5494,7 +5755,7 @@ renderTrainingGoal();
   function dtRenderSavedRoutines(){
     dtBeginnerState();const panel=dtEnsureSavedPanel(),list=panel.querySelector('.dt-routine-list'),routines=state.workouts.savedRoutines||[];
     panel.style.display=routines.length?'block':'none';list.innerHTML='';
-    routines.slice(0,6).forEach(r=>{const c=document.createElement('div');c.className='dt-routine-card';c.innerHTML=`<strong>${r.name}</strong><small>${r.exercises.length} exercises · saved ${new Date(r.createdAt).toLocaleDateString('en-AU',{day:'numeric',month:'short'})}</small><div class="dt-routine-actions"><button class="dt-use-routine" type="button">Use on ${wday.toUpperCase()}</button><button class="dt-del-routine" type="button">×</button></div>`;c.querySelector('.dt-use-routine').onclick=()=>{state.workouts.routineOverrides[wday]=r.id;delete state.workouts.drafts[wkey()];save();renderWorkout()};c.querySelector('.dt-del-routine').onclick=()=>{state.workouts.savedRoutines=state.workouts.savedRoutines.filter(x=>x.id!==r.id);Object.keys(state.workouts.routineOverrides||{}).forEach(k=>{if(state.workouts.routineOverrides[k]===r.id)delete state.workouts.routineOverrides[k]});save();dtRenderSavedRoutines();renderWorkout()};list.appendChild(c)});
+    routines.slice(0,6).forEach(r=>{const c=document.createElement('div');c.className='dt-routine-card';c.innerHTML=`<strong>${window.dtEscapeHtml?.(r.name)??r.name}</strong><small>${r.exercises.length} exercises · saved ${new Date(r.createdAt).toLocaleDateString('en-AU',{day:'numeric',month:'short'})}</small><div class="dt-routine-actions"><button class="dt-use-routine" type="button">Use on ${wday.toUpperCase()}</button><button class="dt-del-routine" type="button">×</button></div>`;c.querySelector('.dt-use-routine').onclick=()=>{state.workouts.routineOverrides[wday]=r.id;delete state.workouts.drafts[wkey()];save();renderWorkout()};c.querySelector('.dt-del-routine').onclick=()=>{state.workouts.savedRoutines=state.workouts.savedRoutines.filter(x=>x.id!==r.id);Object.keys(state.workouts.routineOverrides||{}).forEach(k=>{if(state.workouts.routineOverrides[k]===r.id)delete state.workouts.routineOverrides[k]});save();dtRenderSavedRoutines();renderWorkout()};list.appendChild(c)});
   }
 
   /* Replace summary bars with angular segmented meters after each summary render. */
@@ -5614,7 +5875,7 @@ renderTrainingGoal();
   const DT_V4='4.0';
 
   function n(v){return String(v||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
-  function today(){return typeof todayKey==='function'?todayKey():new Date().toISOString().slice(0,10)}
+  function today(){return typeof todayKey==='function'?todayKey():(window.dtLocalDateKey?.(new Date())||new Date().toLocaleDateString("en-CA"))}
 
   /* Isolate generated programs from custom/edited exercises belonging to an older program. */
   window.dtResetProgramCustomState=function(program){
@@ -6125,7 +6386,7 @@ const boot=()=>{ensure();addButton()};document.readyState==='loading'?document.a
 const DT_V7="7.1-fixed-goals";
 
 function todayKeyV7(){
-  return typeof todayKey==="function"?todayKey():new Date().toISOString().slice(0,10);
+  return typeof todayKey==="function"?todayKey():(window.dtLocalDateKey?.(new Date())||new Date().toLocaleDateString("en-CA"));
 }
 function weekKeysV7(){
   const now=new Date(); now.setHours(12,0,0,0);
@@ -6133,7 +6394,7 @@ function weekKeysV7(){
   const monday=new Date(now.getTime()-mondayOffset*86400000);
   return Array.from({length:7},(_,i)=>{
     const d=new Date(monday.getTime()+i*86400000);
-    return d.toISOString().slice(0,10);
+    return window.dtLocalDateKey?.(d)||d.toLocaleDateString("en-CA");
   });
 }
 function ensureGoalState(){
@@ -6190,7 +6451,7 @@ function renderGoals(){
   const weeklyPct=Math.min(100,Math.round(done/weekly*100));
   const names=exerciseOptions();
   const options=[`<option value="">No exercise target</option>`]
-    .concat(names.map(name=>`<option value="${name.replaceAll('"','&quot;')}" ${name===g.exercise?"selected":""}>${name}</option>`)).join("");
+    .concat(names.map(name=>`<option value="${window.dtEscapeHtml?.(name)??name}" ${name===g.exercise?"selected":""}>${window.dtEscapeHtml?.(name)??name}</option>`)).join("");
   const best=g.exercise?bestExerciseScore(g.exercise):{score:0,set:null};
   const targetKg=+g.kg||0,targetReps=+g.reps||0;
   const targetScore=(targetKg>0&&targetReps>0)?targetKg*(1+Math.min(targetReps,30)/30):0;
@@ -6358,239 +6619,38 @@ window.DT_GOALS_VERSION=DT_V7;
 <script id="dt-v8-demo-reset-js">
 (()=>{
 "use strict";
-const DT_V8_DATA_TOOLS="8.0-demo-reset";
-
-function dkey(offset){
-  const d=new Date();
-  d.setHours(12,0,0,0);
-  d.setDate(d.getDate()+offset);
-  return d.toISOString().slice(0,10);
-}
-function isoAt(offset,hour=18){
-  const d=new Date();
-  d.setHours(hour,0,0,0);
-  d.setDate(d.getDate()+offset);
-  return d.toISOString();
-}
-function exKey(name,type){
-  try{
-    if(typeof exerciseKey==="function")return exerciseKey([name,type,"",[]]);
-  }catch(_){}
-  return `${name}|${type}`;
-}
-function mkRec(day,offset,name,type,muscle,sets){
-  return {
-    id:`demo|${day}|${dkey(offset)}|${name}`,
-    day,
-    dayKey:dkey(offset),
-    exerciseKey:exKey(name,type),
-    name,type,muscle,
-    sets:sets.map(s=>({kg:String(s[0]),reps:String(s[1]),effort:s[2]})),
-    finalizedAt:isoAt(offset)
-  };
-}
-function demoBaseLoad(name,type,muscle,index){
-  const t=`${name} ${type} ${muscle}`.toLowerCase();
-  if(/lateral raise|rear delt/.test(t))return 6;
-  if(/curl|biceps/.test(t))return 8;
-  if(/triceps|pushdown/.test(t))return 12.5;
-  if(/fly/.test(t))return 15;
-  if(/shoulder press/.test(t))return 20;
-  if(/hamstring|leg curl/.test(t))return 25;
-  if(/leg extension/.test(t))return 30;
-  if(/lat pulldown|pulldown|row/.test(t))return 35;
-  if(/chest press|bench press|incline/.test(t))return 35;
-  if(/leg press/.test(t))return 50;
-  if(/romanian|rdl|deadlift/.test(t))return 25;
-  if(/goblet squat|lunge/.test(t))return 12.5;
-  if(/calf/.test(t))return 35;
-  if(/plank|abs|core/.test(t))return 5;
-  return 10 + (index%4)*2.5;
-}
-function demoRoundLoad(v){
-  return Math.round(v*2)/2;
-}
-function demoRecords(){
-  const records=[];
-  const days=["push","pull","legs"];
-  days.forEach((day,di)=>{
-    let exercises=[];
-    try{exercises=effectiveExercises(day)||[]}catch(_){}
-    exercises.slice(0,8).forEach((e,ei)=>{
-      const name=String(e?.[0]||`Exercise ${ei+1}`),type=String(e?.[1]||""),muscle=String(e?.[2]||"");
-      const base=demoBaseLoad(name,type,muscle,ei);
-      const offsets=[-21+di,-14+di,-7+di,-2+di];
-      const reps=[8,10,12,10];
-      offsets.forEach((off,si)=>{
-        const load=demoRoundLoad(base + (si===0?0:si===1?0:si===2?2.5:5));
-        records.push(mkRec(day,off,name,type,muscle,[
-          [load,reps[si],"ideal"],
-          [load,Math.max(6,reps[si]-1),"ideal"]
-        ]));
-      });
-    });
-  });
-
-  // Add a completed demonstration workout TODAY for the currently selected workout.
-  // This guarantees the Today dashboard can show the muscle heatmap and summary immediately.
-  let todayExercises=[];
-  try{todayExercises=effectiveExercises(wday)||[]}catch(_){}
-  todayExercises.slice(0,8).forEach((e,ei)=>{
-    const name=String(e?.[0]||`Exercise ${ei+1}`),type=String(e?.[1]||""),muscle=String(e?.[2]||"");
-    const base=demoBaseLoad(name,type,muscle,ei);
-    const load=demoRoundLoad(base+5);
-    records.push(mkRec(wday,0,name,type,muscle,[
-      [load,10,"ideal"],
-      [load,9,"ideal"]
-    ]));
-  });
-  return records;
-}
-function demoSessionsFrom(records){
-  const by=new Map();
-  records.forEach(r=>{
-    const id=`${r.dayKey}|${r.day}`;
-    if(!by.has(id))by.set(id,{summaryId:`demo-summary|${id}`,day:r.day,date:r.finalizedAt,snapshot:[],exercises:[],demo:true});
-    const s=by.get(id);
-    const snap={name:r.name,type:r.type,muscle:r.muscle,sets:JSON.parse(JSON.stringify(r.sets))};
-    s.snapshot.push(snap);s.exercises.push({sets:snap.sets});
-  });
-  return [...by.values()];
-}
-function clearTodayWorkoutFlags(){
-  try{
-    Object.keys(state.days||{}).forEach(k=>{
-      if(state.days[k])state.days[k].workout=false;
-    });
-  }catch(_){}
-}
+const DT_V8_DATA_TOOLS="8.0-production-reset-only";
+function clearTodayWorkoutFlags(){try{Object.keys(state.days||{}).forEach(k=>{if(state.days[k])state.days[k].workout=false})}catch(_){}}
 function resetWorkoutData(){
   if(!state.workouts)state.workouts={};
-  state.workouts.sessions=[];
-  state.workouts.drafts={};
-  state.workouts.pendingExercises={};
-  state.workouts.completedExercises=[];
-  state.workouts.dailySummaries={};
-  state.workouts.savedRoutines=[];
-  state.workouts.routineOverrides={};
-  /* Timed sessions are workout history too. A workout-data reset must not
-     leave a running clock or old timed-session rows behind. */
-  state.workouts.timedSessions=[];
-  state.workouts.sessionClock=null;
+  state.workouts.sessions=[];state.workouts.drafts={};state.workouts.pendingExercises={};state.workouts.completedExercises=[];state.workouts.dailySummaries={};
+  state.workouts.savedRoutines=[];state.workouts.routineOverrides={};state.workouts.timedSessions=[];state.workouts.sessionClock=null;
   state.workouts.collapsedByDay={push:true,pull:true,legs:true};
-  state.workouts.demoDataLoaded=false;
-  state.workouts.demoDataVersion=null;
+  delete state.workouts.demoDataLoaded;delete state.workouts.demoDataVersion;delete state.workouts.demoDataLoadedAt;delete state.workouts.demoDataDismissed;
   clearTodayWorkoutFlags();
+  try{localStorage.removeItem(window.DT_RECOVERY_META_KEY||"dailyTrackerPremium_last_known_good_meta_v1")}catch(_){}
   try{
-    if(typeof save==="function")save();
-    if(typeof renderWorkoutHistory==="function")renderWorkoutHistory();
-    if(typeof renderHistory==="function")renderHistory();
-    if(typeof renderToday==="function")renderToday();
-    if(typeof renderWorkout==="function")renderWorkout();
-    if(typeof dtRenderTodayWorkoutResult==="function")dtRenderTodayWorkoutResult();
-    if(typeof window.dtRenderBodyCard==="function")window.dtRenderBodyCard();
-    if(document.querySelector(".view.active")?.id==="stats" && typeof window.dtOpenStatsDestination==="function")window.dtOpenStatsDestination();
+    if(typeof save==="function")save({forceRecoveryScan:true,replaceRecoveryMeta:true});
+    renderWorkoutHistory?.();renderHistory?.();renderToday?.();renderWorkout?.();dtRenderTodayWorkoutResult?.();window.dtRenderBodyCard?.();
+    if(document.querySelector(".view.active")?.id==="stats")window.dtOpenStatsDestination?.();
   }catch(e){console.warn("Workout reset render failed",e)}
 }
-function loadDemoData(){
-  if(!state.workouts)state.workouts={};
-  // Demo mode intentionally starts from a clean workout log so trends are easy to inspect.
-  resetWorkoutData();
-  const records=demoRecords();
-  state.workouts.completedExercises=records;
-  state.workouts.sessions=demoSessionsFrom(records);
-  state.workouts.demoDataLoaded=true;
-  state.workouts.demoDataVersion=2;
-  state.workouts.demoDataLoadedAt=new Date().toISOString();
-
-  // Build the same Today summary the real completion flow would use, without opening a popup.
-  try{
-    if(!state.workouts.dailySummaries)state.workouts.dailySummaries={};
-    if(typeof dtBuildWorkoutSummary==="function"){
-      const summary=dtBuildWorkoutSummary(wday);
-      if(summary){
-        state.workouts.dailySummaries[summary.id]=summary;
-        // Keep the visual demo summary, but do NOT mark the actual workout as completed.
-        // The user still needs to see/open the current activity list and its demo lift trends.
-        const tk=typeof todayKey==="function"?todayKey():new Date().toISOString().slice(0,10);
-        state.workouts.completedExercises=(state.workouts.completedExercises||[]).filter(x=>String(x.dayKey||"")!==tk);
-        if(state.days?.[tk])state.days[tk].workout=false;
-      }
-    }
-  }catch(e){console.warn("Demo Today summary failed",e)}
-
-  try{
-    if(typeof save==="function")save();
-    if(typeof renderWorkoutHistory==="function")renderWorkoutHistory();
-    if(typeof renderToday==="function")renderToday();
-    if(typeof renderWorkout==="function")renderWorkout();
-    if(typeof dtRenderTodayWorkoutResult==="function")dtRenderTodayWorkoutResult();
-  }catch(e){console.warn("Demo data render failed",e)}
+function ensureModal(){
+  let m=document.getElementById("dtWorkoutResetModal");if(m)return m;
+  m=document.createElement("div");m.id="dtWorkoutResetModal";
+  m.innerHTML=`<section class="dt-data-sheet"><div class="dt-data-kicker">Workout data</div><div class="dt-data-title">Start workout tracking fresh?</div><div class="dt-data-copy">This removes workout logs, exercise history, completed-session summaries, PR history and saved workout routines. Your Money data and general app settings are not affected.</div><div class="dt-data-actions"><button class="dt-data-cancel" type="button">Cancel</button><button class="dt-data-confirm" type="button">Reset workout data</button></div></section>`;
+  m.onclick=e=>{if(e.target===m)m.classList.remove("show")};m.querySelector(".dt-data-cancel").onclick=()=>m.classList.remove("show");
+  m.querySelector(".dt-data-confirm").onclick=()=>{resetWorkoutData();m.querySelector(".dt-data-confirm").textContent="Reset ✓";setTimeout(()=>{m.classList.remove("show");m.querySelector(".dt-data-confirm").textContent="Reset workout data"},450)};
+  document.body.appendChild(m);return m;
 }
-function ensureModals(){
-  if(!document.getElementById("dtWorkoutResetModal")){
-    const m=document.createElement("div");m.id="dtWorkoutResetModal";
-    m.innerHTML=`<section class="dt-data-sheet"><div class="dt-data-kicker">Workout data</div><div class="dt-data-title">Start workout tracking fresh?</div><div class="dt-data-copy">This removes workout logs, exercise history, completed-session summaries, PR history and saved workout routines. Your Money data and general app settings are not affected.</div><div class="dt-data-actions"><button class="dt-data-cancel" type="button">Cancel</button><button class="dt-data-confirm" type="button">Reset workout data</button></div></section>`;
-    m.onclick=e=>{if(e.target===m)m.classList.remove("show")};
-    m.querySelector(".dt-data-cancel").onclick=()=>m.classList.remove("show");
-    m.querySelector(".dt-data-confirm").onclick=()=>{
-      resetWorkoutData();
-      m.querySelector(".dt-data-confirm").textContent="Reset ✓";
-      setTimeout(()=>{m.classList.remove("show");m.querySelector(".dt-data-confirm").textContent="Reset workout data"},450);
-    };
-    document.body.appendChild(m);
-  }
-  if(!document.getElementById("dtDemoDataModal")){
-    const m=document.createElement("div");m.id="dtDemoDataModal";
-    m.innerHTML=`<section class="dt-data-sheet"><div class="dt-demo-badge">DEMO MODE</div><div class="dt-data-title">Load sample workout history?</div><div class="dt-data-copy">This replaces the current workout log with sample sessions so you can immediately inspect PRs, exercise trends, weekly analytics and progression guidance without manually entering weeks of test data.</div><div class="dt-data-actions"><button class="dt-data-cancel" type="button">Cancel</button><button class="dt-data-demo" type="button">Load demo data</button></div></section>`;
-    m.onclick=e=>{if(e.target===m)m.classList.remove("show")};
-    m.querySelector(".dt-data-cancel").onclick=()=>m.classList.remove("show");
-    m.querySelector(".dt-data-demo").onclick=()=>{
-      loadDemoData();
-      m.querySelector(".dt-data-demo").textContent="Loaded ✓";
-      setTimeout(()=>{m.classList.remove("show");m.querySelector(".dt-data-demo").textContent="Load demo data"},450);
-    };
-    document.body.appendChild(m);
-  }
+function addSettingsTool(){
+  const resetBtn=document.getElementById("resetBtn");if(!resetBtn||document.getElementById("dtResetWorkoutDataBtn"))return;
+  const wrap=document.createElement("div");wrap.className="dt-data-tools";wrap.innerHTML=`<button id="dtResetWorkoutDataBtn" class="dt-data-tool danger" type="button"><span><b>Reset workout data</b><small>Clear workout logs and start from zero.</small></span><span>›</span></button>`;
+  resetBtn.parentNode.insertBefore(wrap,resetBtn);document.getElementById("dtResetWorkoutDataBtn").onclick=()=>{ensureModal().classList.add("show")};
 }
-function addSettingsTools(){
-  const resetBtn=document.getElementById("resetBtn");
-  if(!resetBtn||document.getElementById("dtDemoWorkoutDataBtn"))return;
-  const wrap=document.createElement("div");wrap.className="dt-data-tools";
-  wrap.innerHTML=`
-    <button id="dtDemoWorkoutDataBtn" class="dt-data-tool" type="button">
-      <span><b>Load demo workout data</b><small>Sample history for testing trends, PRs and analytics.</small></span><span>›</span>
-    </button>
-    <button id="dtResetWorkoutDataBtn" class="dt-data-tool danger" type="button">
-      <span><b>Reset workout data</b><small>Clear workout logs and start from zero.</small></span><span>›</span>
-    </button>`;
-  resetBtn.parentNode.insertBefore(wrap,resetBtn);
-  document.getElementById("dtDemoWorkoutDataBtn").onclick=()=>{
-    ensureModals();document.getElementById("dtDemoDataModal").classList.add("show");
-  };
-  document.getElementById("dtResetWorkoutDataBtn").onclick=()=>{
-    ensureModals();document.getElementById("dtWorkoutResetModal").classList.add("show");
-  };
-}
-function maybeSeedDemoOnFreshInstall(){
-  if(!state.workouts)return;
-  const noLogs=(state.workouts.completedExercises||[]).length===0 && (state.workouts.sessions||[]).length===0;
-  if(noLogs && !state.workouts.demoDataDismissed && !state.workouts.demoDataLoaded){
-    // Seed automatically only for a genuinely empty workout history in this testing build.
-    loadDemoData();
-  }
-}
-function boot(){
-  ensureModals();
-  addSettingsTools();
-  setTimeout(addSettingsTools,250);
-  maybeSeedDemoOnFreshInstall();
-}
+function boot(){ensureModal();addSettingsTool();setTimeout(addSettingsTool,250)}
 document.readyState==="loading"?document.addEventListener("DOMContentLoaded",boot):boot();
-
-window.dtLoadDemoWorkoutData=loadDemoData;
-window.dtResetWorkoutData=resetWorkoutData;
-window.DT_DEMO_RESET_VERSION=DT_V8_DATA_TOOLS;
+window.dtLoadDemoWorkoutData=()=>false;window.dtResetWorkoutData=resetWorkoutData;window.DT_DEMO_RESET_VERSION=DT_V8_DATA_TOOLS;
 })();
 </script>
 
@@ -6973,7 +7033,7 @@ function ensureModal(){
 function renderModal(){
   ensureInitialSchedule();ensureModal();
   const st=schedState(),sessions=availableSessions(),todayKey=todaySchedKey();
-  const opts=(value)=>`<option value="">Rest</option>${sessions.map(s=>`<option value="${s.key}" ${value===s.key?"selected":""}>${s.name}</option>`).join("")}`;
+  const opts=(value)=>`<option value="">Rest</option>${sessions.map(s=>`<option value="${window.dtEscapeHtml?.(s.key)??s.key}" ${value===s.key?"selected":""}>${window.dtEscapeHtml?.(s.name)??s.name}</option>`).join("")}`;
   document.getElementById("dtSchedBody").innerHTML=`
     <div class="dt-sched-week">
       ${DAY_KEYS.map((k,i)=>`<div class="dt-sched-day ${k===todayKey?"today":""}">
@@ -7035,7 +7095,7 @@ function renderTodaySchedule(){
   const assigned=currentAssignedDay();
   c.className=assigned?"show":"show dt-tsc-rest";
   c.innerHTML=assigned?
-    `<div class="dt-tsc-head"><div><div class="dt-tsc-kicker">Training today</div><div class="dt-tsc-title">${sessionName(assigned)}</div><div class="dt-tsc-sub">Scheduled for ${DAYS[new Date().getDay()]}. You can still choose a different session.</div></div><button class="dt-tsc-go" type="button">Open workout ›</button></div>`:
+    `<div class="dt-tsc-head"><div><div class="dt-tsc-kicker">Training today</div><div class="dt-tsc-title">${window.dtEscapeHtml?.(sessionName(assigned))??sessionName(assigned)}</div><div class="dt-tsc-sub">Scheduled for ${DAYS[new Date().getDay()]}. You can still choose a different session.</div></div><button class="dt-tsc-go" type="button">Open workout ›</button></div>`:
     `<div class="dt-tsc-head"><div><div class="dt-tsc-kicker">Training schedule</div><div class="dt-tsc-title">Rest day</div><div class="dt-tsc-sub">Nothing is scheduled today. Train anyway whenever you want.</div></div><button class="dt-tsc-go" type="button">Open workout ›</button></div>`;
   const go=c.querySelector(".dt-tsc-go");
   if(go)go.onclick=()=>{
@@ -7060,7 +7120,7 @@ function renderWorkoutScheduleBadge(){
   const assigned=currentAssignedDay();
   if(!assigned){b.classList.remove("show");return}
   b.classList.add("show");
-  b.innerHTML=`<span>Scheduled today · ${sessionName(assigned)}</span><button type="button">Go</button>`;
+  b.innerHTML=`<span>Scheduled today · ${window.dtEscapeHtml?.(sessionName(assigned))??sessionName(assigned)}</span><button type="button">Go</button>`;
   b.querySelector("button").onclick=()=>{
     const tab=document.querySelector(`.workout-tab[data-wday="${assigned}"]`);
     if(tab)tab.click();
@@ -8283,7 +8343,7 @@ function exPlugin(name){
 function exIsNative(){try{return !!window.Capacitor?.isNativePlatform?.()}catch(_){return false}}
 
 /* ---------- Sample data, explicitly for this export-testing build ---------- */
-function exDate(d){return d.toISOString().slice(0,10)}
+function exDate(d){return window.dtLocalDateKey?.(d)||d.toLocaleDateString("en-CA")}
 function exSeedSampleData(){
   if(!state.workouts)state.workouts={sessions:[],drafts:{}};
   if(state.workouts.exportSampleVersion==="3m-v1")return;
@@ -8898,14 +8958,25 @@ function exBase64FromArray(u8){
 }
 async function exShareBytes(base64,name,mime){
   const fs=exPlugin("Filesystem"),share=exPlugin("Share");
-  if(exIsNative()&&fs&&share){
-    const written=await fs.writeFile({path:name,data:base64,directory:"CACHE",recursive:true});
-    const uri=written.uri||(await fs.getUri({path:name,directory:"CACHE"})).uri;
-    await share.share({title:"M/ARC Training Export",text:"M/ARC workout progress export",files:[uri],dialogTitle:"Save or share export"});
-    return "Share sheet opened.";
+  if(exIsNative()&&fs){
+    const folder="MARC Exports";
+    const path=`${folder}/${name}`;
+    const directory="DOCUMENTS";
+    const written=await fs.writeFile({path,data:base64,directory,recursive:true});
+    const uri=written?.uri||(await fs.getUri({path,directory})).uri;
+    window.dtLastExportSaved={name,mime,uri,directory,path,base64};
+    if(mime==="image/png"){
+      return "Image saved to device files • Documents/MARC Exports";
+    }
+    if(share){
+      await share.share({title:"M/ARC Training Export",text:"M/ARC workout progress export",files:[uri],dialogTitle:"Save or share export"});
+      return "File saved to device files and share sheet opened.";
+    }
+    return "File saved to device files • Documents/MARC Exports";
   }
   const raw=atob(base64),u8=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)u8[i]=raw.charCodeAt(i);
   const blob=new Blob([u8],{type:mime}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1200);
+  window.dtLastExportSaved={name,mime,uri:url,base64};
   return "Download started.";
 }
 async function exGenerate(format,start,end){
@@ -8944,7 +9015,7 @@ function exRender(){
     <div class="dt-ex-formats"><button class="dt-ex-format active" data-ex-format="visual"><b>Visual Report</b><small>PNG · progression, muscle scores, top exercises, highlights & next steps</small></button><button class="dt-ex-format" data-ex-format="xlsx"><b>Excel</b><small>XLSX · summary, sets, exercise progress and muscle trends</small></button></div>
     <div id="dtExportSummary" class="dt-ex-summary"></div>
   </div>
-  <div class="dt-ex-actions"><button class="dt-ex-cancel" type="button">Cancel</button><button class="dt-ex-generate" type="button">Generate & share</button></div><div class="dt-ex-result"></div>`;
+  <div class="dt-ex-actions"><button class="dt-ex-cancel" type="button">Cancel</button><button class="dt-ex-generate" type="button">Generate export</button></div><div class="dt-ex-result"></div>`;
   body.querySelectorAll("[data-ex-days]").forEach(b=>b.onclick=()=>{
     body.querySelectorAll("[data-ex-days]").forEach(x=>x.classList.remove("active"));b.classList.add("active");
     const rr=exDefaultRange(+b.dataset.exDays);body.querySelector("#dtExportStart").value=rr.start;body.querySelector("#dtExportEnd").value=rr.end;exRefreshSummary();
@@ -8963,15 +9034,30 @@ function exRender(){
       res.className="dt-ex-result good";
       if(format==="visual"&&window.dtLastExportPreview){
         res.innerHTML="";
-        const img=document.createElement("img");img.className="dt-ex-preview";img.alt="Visual report preview";img.src=window.dtLastExportPreview;
+        const img=document.createElement("img");
+        img.className="dt-ex-preview";
+        img.alt="Visual report preview";
+        img.src=window.dtLastExportPreview;
+        img.loading="eager";
+        img.onclick=()=>window.dtOpenExportPreview?.(window.dtLastExportPreview);
         const cap=document.createElement("div");cap.textContent=msg;
-        res.appendChild(img);res.appendChild(cap);
+        const hint=document.createElement("div");hint.className="dt-ex-preview-hint";hint.textContent="Tap image to view larger.";
+        const actions=document.createElement("div");actions.className="dt-ex-preview-actions";
+        const openBtn=document.createElement("button");openBtn.type="button";openBtn.textContent="Open larger";openBtn.onclick=()=>window.dtOpenExportPreview?.(window.dtLastExportPreview);
+        actions.appendChild(openBtn);
+        if(window.dtLastExportSaved?.mime==="image/png"){
+          const saveBtn=document.createElement("button");saveBtn.type="button";saveBtn.textContent="Save again";saveBtn.onclick=()=>window.dtSaveExportPreview?.();
+          actions.appendChild(saveBtn);
+          const shareBtn=document.createElement("button");shareBtn.type="button";shareBtn.textContent="Share";shareBtn.onclick=()=>window.dtShareLastExport?.();
+          actions.appendChild(shareBtn);
+        }
+        res.appendChild(img);res.appendChild(hint);res.appendChild(actions);res.appendChild(cap);
       }else{
         res.textContent=msg;
       }
     }
     catch(e){res.className="dt-ex-result bad";res.textContent=e?.message||String(e)}
-    finally{btn.disabled=false;btn.textContent="Generate & share"}
+    finally{btn.disabled=false;btn.textContent="Generate export"}
   };
   exRefreshSummary();
 }
@@ -9719,7 +9805,7 @@ window.dtRemoveWorkoutSet=removeSet;
       btn.type="button";btn.className="workout-tab"+(wday===key?" active":"");
       btn.dataset.wday=key;
       btn.title=splitName(key);
-      btn.innerHTML=`<span class="dt-split-dot" style="background:${splitColor(key,i)};box-shadow:0 0 0 3px ${splitColor(key,i)}14"></span><span>${splitName(key)}</span>`;
+      btn.innerHTML=`<span class="dt-split-dot" style="background:${splitColor(key,i)};box-shadow:0 0 0 3px ${splitColor(key,i)}14"></span><span>${window.dtEscapeHtml?.(splitName(key))??splitName(key)}</span>`;
       btn.onclick=()=>selectSplit(key,btn);
       wrap.appendChild(btn);
     });
@@ -9790,7 +9876,7 @@ window.dtRemoveWorkoutSet=removeSet;
     ensureState();
     if(allKeys().length>=MAX_SPLITS)return;
     const m=ensureModal(),input=m.querySelector("#dtSplitName");
-    const name=input.value.trim().replace(/\s+/g," ").slice(0,28);
+    const name=(window.dtCleanUserText?.(input.value,28)||input.value.trim().replace(/\s+/g," ").slice(0,28));
     if(!name){input.focus();return}
     const key="split_"+Date.now().toString(36);
     state.workouts.customSplits.push({key,name,createdAt:new Date().toISOString()});
@@ -10057,11 +10143,11 @@ function daySessions(key){
       const details=ex.map(e=>{
         const logged=(e.sets||[]).filter(x=>x.kg||x.reps||x.effort);
         const top=logged.slice(0,3).map(x=>formatLift(x.kg,x.reps)).join(" · ");
-        return logged.length?`<div class="dt-hd-ex"><b>${e.name}</b><span>${top}${logged.length>3?" …":""}</span></div>`:"";
+        return logged.length?`<div class="dt-hd-ex"><b>${window.dtEscapeHtml?.(e.name)??e.name}</b><span>${window.dtEscapeHtml?.(top)??top}${logged.length>3?" …":""}</span></div>`:"";
       }).join("");
       return `<article class="dt-hd-session">
         <div class="dt-hd-session-top">
-          <div class="dt-hd-session-title"><b>${title}</b><small>${time}</small></div>
+          <div class="dt-hd-session-title"><b>${window.dtEscapeHtml?.(title)??title}</b><small>${time}</small></div>
           <div class="dt-hd-setcount">${sessionSets(s)} sets</div>
         </div>
         <div class="dt-hd-exercises">${details||'<div class="dt-hd-ex"><b>No detailed set data</b></div>'}</div>
@@ -10079,10 +10165,10 @@ function daySessions(key){
       const title=typeof workoutDayLabel==="function"?workoutDayLabel(rec.day):(rec.day||"Workout");
       return `<article class="dt-hd-session">
         <div class="dt-hd-session-top">
-          <div class="dt-hd-session-title"><b>${rec.name||"Saved activity"}</b><small>${title} · ${time}</small></div>
+          <div class="dt-hd-session-title"><b>${window.dtEscapeHtml?.(rec.name||"Saved activity")??(rec.name||"Saved activity")}</b><small>${window.dtEscapeHtml?.(title)??title} · ${time}</small></div>
           <div class="dt-hd-setcount">${logged.length} set${logged.length===1?"":"s"}</div>
         </div>
-        <div class="dt-hd-exercises"><div class="dt-hd-ex"><b>${rec.muscle||"Logged activity"}</b><span>${details||"No set details"}</span></div></div>
+        <div class="dt-hd-exercises"><div class="dt-hd-ex"><b>${window.dtEscapeHtml?.(rec.muscle||"Logged activity")??(rec.muscle||"Logged activity")}</b><span>${window.dtEscapeHtml?.(details||"No set details")??(details||"No set details")}</span></div></div>
       </article>`;
     }).join(""):"";
 
@@ -10193,19 +10279,19 @@ function daySessions(key){
     });
   }
 
-  function dtTBTodayKey(){ return new Date().toISOString().slice(0,10); }
+  function dtTBTodayKey(){ return window.dtLocalDateKey?.(new Date())||new Date().toLocaleDateString("en-CA"); }
 
   function dtTBAddDays(dateStr,n){
     const d=new Date(dateStr+"T00:00:00Z");
     d.setUTCDate(d.getUTCDate()+n);
-    return d.toISOString().slice(0,10);
+    return window.dtLocalDateKey?.(d)||d.toLocaleDateString("en-CA");
   }
 
   function dtTBISOWeekKey(dateStr){
     const d=new Date(dateStr+"T00:00:00Z");
     const day=(d.getUTCDay()+6)%7; // Monday=0 .. Sunday=6
     d.setUTCDate(d.getUTCDate()-day);
-    return d.toISOString().slice(0,10);
+    return window.dtLocalDateKey?.(d)||d.toLocaleDateString("en-CA");
   }
 
   function dtTBWeekList(){
@@ -11677,7 +11763,7 @@ nav.dt-v10-nav{
           const name=box.querySelector(".exname b")?.childNodes?.[0]?.textContent?.trim()
             || box.querySelector(".exname b")?.textContent?.trim() || "Activity";
           const key=box.dataset.exkey;
-          return `<div class="dt-hidden-row"><span class="name">${name}</span><button type="button" data-unhide="${key}">Unhide</button></div>`;
+          return `<div class="dt-hidden-row"><span class="name">${window.dtEscapeHtml?.(name)??name}</span><button type="button" data-unhide="${window.dtEscapeHtml?.(key)??key}">Unhide</button></div>`;
         }).join("");
         body.querySelectorAll("[data-unhide]").forEach(btn=>{
           btn.onclick=()=>unhideExercise(wday,btn.dataset.unhide);
@@ -12208,7 +12294,7 @@ body.dt-session-focus-open{overflow:hidden!important}
   function injectTimedHistory(key){
     const body=document.getElementById("dtHistoryDayBody");if(!body)return;body.querySelectorAll(".dt-session-history-time").forEach(x=>x.remove());
     const rows=timedForDay(key);if(!rows.length)return;
-    const frag=document.createDocumentFragment();rows.forEach(x=>{const d=document.createElement("div");d.className="dt-session-history-time";d.innerHTML=`<small>Timed session</small><b>${displayDay(x.day)} · ${fmtDuration(x.durationMs)}</b><span>${fmtClock(new Date(x.startedAt).getTime())} – ${fmtClock(new Date(x.endedAt).getTime())} · ${x.workingSets||0} sets</span>`;frag.appendChild(d)});body.prepend(frag);
+    const frag=document.createDocumentFragment();rows.forEach(x=>{const d=document.createElement("div");d.className="dt-session-history-time";d.innerHTML=`<small>Timed session</small><b>${window.dtEscapeHtml?.(displayDay(x.day))??displayDay(x.day)} · ${fmtDuration(x.durationMs)}</b><span>${fmtClock(new Date(x.startedAt).getTime())} – ${fmtClock(new Date(x.endedAt).getTime())} · ${x.workingSets||0} sets</span>`;frag.appendChild(d)});body.prepend(frag);
   }
   const baseOpenDay=window.dtOpenHistoryDay;
   if(typeof baseOpenDay==="function"&&!baseOpenDay.__sessionWrapped){
@@ -12228,7 +12314,11 @@ body.dt-session-focus-open{overflow:hidden!important}
     if(document.visibilityState==="visible"&&document.getElementById("dtSessionFocus")?.classList.contains("show"))requestWake();
   });
 
-  function boot(){ensure();ensureUI();patchCenterButton();renderAll();if(uiTimer)clearInterval(uiTimer);uiTimer=setInterval(renderAll,500)}
+  function dtSessionUiNeedsTick(){
+    const active=!!state.workouts?.sessionClock?.active,view=document.querySelector(".view.active")?.id;
+    return active||view==="workout"||document.getElementById("dtSessionFocus")?.classList.contains("show")||document.getElementById("dtSessionFinishSheet")?.classList.contains("show");
+  }
+  function boot(){ensure();ensureUI();patchCenterButton();renderAll();if(uiTimer)clearInterval(uiTimer);uiTimer=setInterval(()=>{if(dtSessionUiNeedsTick())renderAll()},500)}
   document.readyState==="loading"?document.addEventListener("DOMContentLoaded",boot):boot();setTimeout(boot,450);
 
   window.dtStartWorkoutSession=startSession;
@@ -12614,7 +12704,7 @@ nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
     const sets=rows.reduce((n,r)=>n+(r.sets||[]).filter(v=>
       String(v?.kg??"").trim()!==""||String(v?.reps??"").trim()!==""||String(v?.effort??"").trim()!==""
     ).length,0);
-    return {rows,sets,exercises:new Set(rows.map(x=>x.exerciseKey||`${x.name}|${x.type||""}`)).size};
+    return {rows,sets,exercises:new Set(rows.map(x=>x.exerciseKey||`${window.dtEscapeHtml?.(x.name)??x.name}|${x.type||""}`)).size};
   }
   function buildMuscleSummary(s,end=Date.now()){
     const stats=sessionStats(s,end),map={};
@@ -13048,7 +13138,7 @@ nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
     list.innerHTML="";
     left.forEach(x=>{
       const row=document.createElement("div");row.className="dt-remaining-row";row.dataset.key=x.key;
-      row.innerHTML=`<div class="dt-remaining-bg">SKIP TODAY</div><div class="dt-remaining-front"><div class="dt-remaining-copy"><b>${x.name}</b><span>${x.muscle||"Planned activity"}</span></div><button class="dt-skip-button" type="button">Skip</button></div>`;
+      row.innerHTML=`<div class="dt-remaining-bg">SKIP TODAY</div><div class="dt-remaining-front"><div class="dt-remaining-copy"><b>${window.dtEscapeHtml?.(x.name)??x.name}</b><span>${window.dtEscapeHtml?.(x.muscle||"Planned activity")??(x.muscle||"Planned activity")}</span></div><button class="dt-skip-button" type="button">Skip</button></div>`;
       row.querySelector(".dt-skip-button").onclick=()=>skipKey(x.key);bindSkipRow(row,x.key);list.appendChild(row);
     });
     m.querySelector("#dtRemainingFinish").disabled=left.length>0;
@@ -13070,9 +13160,9 @@ nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
     finishContext={...(finishContext||{}),diff};
     if(diff.changed){
       const list=document.getElementById("dtTemplateChanges");list.innerHTML=[
-        ...diff.added.map(x=>`<div class="dt-change-row add"><i>+</i><span>${x.name}</span></div>`),
-        ...diff.removed.map(x=>`<div class="dt-change-row remove"><i>−</i><span>${x.name}</span></div>`),
-        ...diff.updated.map(x=>`<div class="dt-change-row update"><i>~</i><span>${x.name}</span></div>`)
+        ...diff.added.map(x=>`<div class="dt-change-row add"><i>+</i><span>${window.dtEscapeHtml?.(x.name)??x.name}</span></div>`),
+        ...diff.removed.map(x=>`<div class="dt-change-row remove"><i>−</i><span>${window.dtEscapeHtml?.(x.name)??x.name}</span></div>`),
+        ...diff.updated.map(x=>`<div class="dt-change-row update"><i>~</i><span>${window.dtEscapeHtml?.(x.name)??x.name}</span></div>`)
       ].join("");
       document.getElementById("dtSessionTemplateChoice").classList.add("show");
     }else commitFinish("unchanged");
@@ -13125,7 +13215,7 @@ nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
     document.getElementById("dtCompleteExercises").textContent=summary.exerciseCount;
     document.getElementById("dtCompleteSets").textContent=summary.workingSets;
     const chips=document.getElementById("dtCompleteChips");
-    chips.innerHTML=(summary.muscles||[]).slice(0,4).map(x=>`<span class="dt-complete-chip">${x.label} ${x.pct||0}%</span>`).join("")||'<span class="dt-complete-chip">Session logged</span>';
+    chips.innerHTML=(summary.muscles||[]).slice(0,4).map(x=>`<span class="dt-complete-chip">${window.dtEscapeHtml?.(x.label)??x.label} ${Math.max(0,Math.min(100,Number(x.pct)||0))}%</span>`).join("")||'<span class="dt-complete-chip">Session logged</span>';
     document.getElementById("dtSessionComplete").classList.add("show");confetti();hapticTick(18);
     try{window.dtRenderSummaryBodies?.(summary,"dtComplete",true)}catch(_){}
   }
@@ -13215,7 +13305,11 @@ nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
 
   document.readyState==="loading"?document.addEventListener("DOMContentLoaded",renderV26):renderV26();
   setTimeout(renderV26,500);
-  setInterval(renderV26,500);
+  setInterval(()=>{
+    const active=!!state.workouts?.sessionClock?.active,view=document.querySelector(".view.active")?.id;
+    const liveUi=document.getElementById("dtSessionFocus")?.classList.contains("show")||document.getElementById("dtSessionRemaining")?.classList.contains("show")||document.getElementById("dtSessionTemplateChoice")?.classList.contains("show")||document.getElementById("dtSessionComplete")?.classList.contains("show");
+    if(active||view==="workout"||liveUi)renderV26();
+  },500);
 })();
 </script>
 
@@ -15282,5 +15376,356 @@ body.dt-reorder-active{-webkit-user-select:none!important;user-select:none!impor
   window.DT_INTEL_COACH_INSIGHTS_VERSION=V;
 })();
 </script>
+
+<script id="dt-v26-production-cleanup-constants">
+(()=>{try{window.DT_RECOVERY_META_KEY="dailyTrackerPremium_last_known_good_meta_v1";window.DT_DAMAGED_RAW_KEY="dailyTrackerPremium_damaged_recovery_raw_v1";}catch(_){}})();
+</script>
+
+<script id="dt-v26-production-cleanup-js">
+(()=>{
+"use strict";
+const VERSION="26.0-production-cleanup-v1";
+const BACKUP_TYPE="marc-full-backup",BACKUP_VERSION=1;
+const FORENSIC_TYPE="marc-recovery-forensic";
+const KEY_NAME="dailyTrackerPremium",DAMAGED_KEY=KEY_NAME+"_damaged_recovery_raw_v1",META_KEY=KEY_NAME+"_last_known_good_meta_v1";
+function clone(v){return JSON.parse(JSON.stringify(v))}
+function validState(v){return typeof window.dtIsValidStateRoot==="function"?window.dtIsValidStateRoot(v):!!v&&typeof v==="object"&&!Array.isArray(v)&&v.days&&v.money}
+function fileName(prefix){const d=new Date(),p=n=>String(n).padStart(2,"0");return `${prefix}_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.json`}
+function downloadJson(obj,name){const blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1200)}
+function fullBackupObject(){let chatCollapsed=null;try{chatCollapsed=localStorage.getItem("dt_chat_collapsed")}catch(_){}return {type:BACKUP_TYPE,version:BACKUP_VERSION,exportedAt:new Date().toISOString(),app:"M/ARC",state:clone(state),auxLocalStorage:{dt_chat_collapsed:chatCollapsed}}}
+function forensicObject(){
+  let raw=null,meta=null;try{raw=localStorage.getItem(DAMAGED_KEY)}catch(_){}try{meta=JSON.parse(localStorage.getItem(META_KEY)||"null")}catch(_){}
+  if(!raw)return null;return {type:FORENSIC_TYPE,version:1,exportedAt:new Date().toISOString(),damagedRaw:raw,recoveryMetadata:meta,bootRecovery:clone(window.DT_BOOT_RECOVERY||{})};
+}
+function validateBackupObject(obj){
+  if(!obj||typeof obj!=="object")throw new Error("Backup file is not a valid object.");
+  if(obj.type===FORENSIC_TYPE)throw new Error("Recovery-data exports are forensic files and cannot replace normal app state.");
+  if(obj.type!==BACKUP_TYPE||obj.version!==BACKUP_VERSION)throw new Error("This is not a supported M/ARC Full App Backup.");
+  if(!validState(obj.state))throw new Error("Backup app-state structure is invalid.");
+  return true;
+}
+function restoreObject(obj){
+  validateBackupObject(obj);const candidate=clone(obj.state);
+  const old=state;state=candidate;
+  try{dtEnsureFoundation?.();save({forceRecoveryScan:true,replaceRecoveryMeta:true});if(obj.auxLocalStorage&&Object.prototype.hasOwnProperty.call(obj.auxLocalStorage,"dt_chat_collapsed")){const v=obj.auxLocalStorage.dt_chat_collapsed;if(v==null)localStorage.removeItem("dt_chat_collapsed");else localStorage.setItem("dt_chat_collapsed",String(v))}}
+  catch(e){state=old;throw new Error("Restore could not be saved. Your previous saved copy is still preserved.")}
+  return true;
+}
+function ensureUi(){
+  const card=document.querySelector("#settings .settings-card");if(!card||document.getElementById("dtFullBackupBtn"))return;
+  const anchor=card.querySelector(".health-connect-card")||card.querySelector("#resetBtn");
+  const box=document.createElement("div");box.id="dtBackupTools";box.style.cssText="margin:14px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)";
+  box.innerHTML=`<button class="setting-row" id="dtFullBackupBtn" type="button" style="width:100%;background:transparent;border:0"><span><b>Full App Backup</b><small style="display:block;color:var(--muted);font-weight:600;margin-top:3px">Workouts, Money, health snapshot and settings</small></span><span>Export</span></button><button class="setting-row" id="dtFullRestoreBtn" type="button" style="width:100%;background:transparent;border-left:0;border-right:0"><span><b>Restore Full Backup</b><small style="display:block;color:var(--muted);font-weight:600;margin-top:3px">Validates before replacing local data</small></span><span>Import</span></button><input id="dtFullRestoreInput" type="file" accept="application/json,.json" hidden><button class="setting-row" id="dtRecoveryExportBtn" type="button" style="width:100%;background:transparent;border-left:0;border-right:0;display:none"><span><b>Export Recovery Data</b><small style="display:block;color:var(--muted);font-weight:600;margin-top:3px">Preserved damaged payload for recovery/support only</small></span><span>Export</span></button>`;
+  if(anchor?.parentNode)anchor.parentNode.insertBefore(box,anchor);else card.appendChild(box);
+  box.querySelector("#dtFullBackupBtn").onclick=()=>downloadJson(fullBackupObject(),fileName("MARC_Full_Backup"));
+  const input=box.querySelector("#dtFullRestoreInput");box.querySelector("#dtFullRestoreBtn").onclick=()=>input.click();
+  input.onchange=async()=>{const f=input.files?.[0];input.value="";if(!f)return;try{const obj=JSON.parse(await f.text());validateBackupObject(obj);if(!confirm("Restore this Full App Backup? Current on-device data will be replaced only after validation."))return;restoreObject(obj);alert("Backup restored successfully. M/ARC will reload now.");location.reload()}catch(e){alert(e?.message||String(e))}};
+  let hasRaw=false;try{hasRaw=!!localStorage.getItem(DAMAGED_KEY)}catch(_){}const forensic=box.querySelector("#dtRecoveryExportBtn");
+  if(hasRaw){forensic.style.display="";forensic.onclick=()=>{const obj=forensicObject();if(obj)downloadJson(obj,fileName("MARC_Recovery_Data"))}}
+}
+window.dtCreateFullBackupObject=fullBackupObject;
+window.dtValidateFullBackupObject=validateBackupObject;
+window.dtRestoreFullBackupObject=restoreObject;
+window.dtCreateRecoveryExportObject=forensicObject;
+window.DT_PRODUCTION_CLEANUP_VERSION=VERSION;
+document.readyState==="loading"?document.addEventListener("DOMContentLoaded",ensureUi):ensureUi();setTimeout(ensureUi,350);
+})();
+</script>
+
+<style id="dt-v26-hotfix-ui-css">
+/* V26 hotfixes: export readability + workout recovery summary */
+#dtExportModal .dt-ex-head>div,
+#dtExportModal .dt-ex-section,
+#dtExportModal .dt-ex-copy,
+#dtExportModal .dt-ex-title{min-width:0;word-break:break-word;overflow-wrap:anywhere}
+#dtExportModal .dt-ex-sheet{width:min(860px,100%);padding:20px 18px calc(24px + env(safe-area-inset-bottom))}
+#dtExportModal .dt-ex-title{font-size:26px;line-height:1.12}
+#dtExportModal .dt-ex-copy{font-size:11px;line-height:1.55}
+#dtExportModal .dt-ex-result{margin-top:12px;font-size:11px;line-height:1.55}
+#dtExportModal .dt-ex-preview{width:100%;display:block;border-radius:16px;border:1px solid #1c3745;margin:10px 0 8px;background:#050e15;box-shadow:0 12px 36px rgba(0,0,0,.28);cursor:zoom-in}
+#dtExportModal .dt-ex-preview-hint{font-size:10px;color:#6f8793;margin:0 0 8px}
+#dtExportModal .dt-ex-preview-actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+#dtExportModal .dt-ex-preview-actions button{padding:10px 12px;border-radius:12px;border:1px solid #294754;background:#0b1b24;color:#dce7ed;font:800 11px/1 system-ui}
+#dtExportModal .dt-ex-preview-actions button:active{transform:scale(.99)}
+#dtExportModal .dt-ex-actions{grid-template-columns:1fr 1.3fr}
+#dtExportModal .dt-ex-generate{white-space:normal}
+#dtExportModal .dt-ex-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
+
+.dt-export-preview-lightbox{position:fixed;inset:0;z-index:10800;display:none;align-items:center;justify-content:center;background:rgba(2,8,12,.94);padding:18px}
+.dt-export-preview-lightbox.show{display:flex}
+.dt-export-preview-lightbox-inner{width:min(1000px,100%);max-height:100%;display:flex;flex-direction:column;gap:10px}
+.dt-export-preview-lightbox-head{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#dbe7ec}
+.dt-export-preview-lightbox-head b{font-size:14px;min-width:0}
+.dt-export-preview-lightbox-head button{height:40px;border-radius:12px;border:1px solid #294553;background:#0b1b25;color:#eef6fa;font-size:16px;font-weight:850}
+.dt-export-preview-close{width:40px;flex:0 0 40px;font-size:21px!important}
+.dt-export-preview-zoom{display:flex;gap:6px;margin-left:auto}
+.dt-export-preview-zoom button{min-width:40px;padding:0 10px}
+.dt-export-preview-lightbox-body{overflow:auto;border:1px solid #1c3745;border-radius:18px;background:#041018;padding:10px;overscroll-behavior:contain;touch-action:pan-x pan-y pinch-zoom}
+.dt-export-preview-lightbox-body img{display:block;width:auto;max-width:none;height:auto;border-radius:12px}
+#dtTBFront .body-chart-muscle.dt-tb-role-animated,#dtTBBack .body-chart-muscle.dt-tb-role-animated{transform-box:fill-box;transform-origin:center}
+@media(prefers-reduced-motion:reduce){#dtTBFront .body-chart-muscle.dt-tb-role-animated,#dtTBBack .body-chart-muscle.dt-tb-role-animated{animation:none!important}}
+
+.dt-today-recovery{margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)}
+.dt-workout-complete-check{display:grid;place-items:center;width:88px;height:88px;margin:0 auto 6px;border-radius:50%;background:radial-gradient(circle at 30% 30%,rgba(84,224,151,.22),rgba(84,224,151,.12) 50%,rgba(84,224,151,.08) 72%,rgba(84,224,151,.04));color:#5be29f;font-size:44px;box-shadow:0 0 0 1px rgba(84,224,151,.14) inset,0 14px 34px rgba(21,91,58,.20)}
+.dt-workout-recovery-box{width:100%!important;height:auto!important;min-height:0!important;box-sizing:border-box!important;display:block!important;place-items:initial!important;margin:18px 0 0!important;padding:14px!important;border:1px solid rgba(84,224,151,.16)!important;border-radius:18px!important;background:linear-gradient(180deg,rgba(10,28,35,.95),rgba(8,20,28,.98))!important;text-align:left!important;font-size:inherit!important;font-weight:inherit!important;overflow:hidden}
+.dt-workout-recovery-box:empty{display:none!important}
+.dt-workout-recovery-title{font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#6fe1a7;margin-bottom:6px}
+.dt-workout-recovery-sub{font-size:11px;line-height:1.45;color:#a6bbc5;margin-bottom:10px}
+.dt-workout-recovery-meta{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;color:#7e95a1;font-size:10px}
+.dt-workout-recovery-meta b{color:#dce8ed;font-size:10px}
+.dt-workout-recovery-chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%}
+.dt-workout-recovery-chip{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"dot name pct" "dot time time";align-items:center;gap:2px 7px;min-width:0;padding:9px 10px;border-radius:14px;background:#0b1a23;border:1px solid #1c3543;font-size:10px;color:#a9bcc6}
+.dt-workout-recovery-chip>span:not(.dt-workout-recovery-dot){grid-area:name;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dt-workout-recovery-chip b{grid-area:pct;color:#e4edf2;font-weight:900;text-align:right}
+.dt-workout-recovery-chip small{grid-area:time;color:#7f95a0;font-weight:800;margin:0!important;line-height:1.2!important}
+.dt-workout-recovery-dot{grid-area:dot;width:7px;height:7px;border-radius:50%;flex:none}
+.dt-workout-recovery-ready{padding:10px 12px;border-radius:14px;background:rgba(84,224,151,.10);border:1px solid rgba(84,224,151,.16);color:#73e3ae;font-weight:800;text-align:center}
+.dt-today-recovery-title{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#6f8896;margin-bottom:8px}
+.dt-today-recovery-chips{display:flex;flex-wrap:wrap;gap:6px}
+.dt-today-recovery-chip{display:flex;align-items:center;gap:6px;padding:7px 10px;border-radius:999px;background:#0b1a23;border:1px solid #1c3543;font-size:10px;color:#a9bcc6}
+.dt-today-recovery-chip b{color:#e4edf2;font-weight:800}
+.dt-today-recovery-dot{width:7px;height:7px;border-radius:50%;flex:none}
+.dt-today-recovery-ready{color:#5ddc9d;font-size:11px;line-height:1.5}
+@media(max-width:480px){
+  .dt-export-preview-lightbox{padding:10px}
+  .dt-export-preview-lightbox-head{gap:6px}
+  .dt-export-preview-lightbox-head b{font-size:12px}
+  .dt-export-preview-zoom{gap:4px}
+  .dt-export-preview-zoom button{min-width:34px;height:36px;padding:0 8px;font-size:13px}
+  .dt-export-preview-close{width:36px!important;height:36px!important;flex-basis:36px!important}
+  .dt-workout-recovery-chips{grid-template-columns:1fr}
+  #dtExportModal .dt-ex-sheet{width:100%}
+  #dtExportModal .dt-ex-title{font-size:22px}
+  #dtExportModal .dt-ex-copy{font-size:10px}
+  #dtExportModal .dt-ex-summary{grid-template-columns:1fr}
+  #dtExportModal .dt-ex-actions{grid-template-columns:1fr}
+  #dtExportModal .dt-ex-formats,#dtExportModal .dt-ex-dates{grid-template-columns:1fr}
+}
+</style>
+<script id="dt-v26-hotfix-ui-js">
+(()=>{
+  "use strict";
+
+  function ensureLightbox(){
+    let box=document.getElementById('dtExportPreviewLightbox');
+    if(box)return box;
+    box=document.createElement('div');
+    box.id='dtExportPreviewLightbox';
+    box.className='dt-export-preview-lightbox';
+    box.innerHTML=`<div class="dt-export-preview-lightbox-inner"><div class="dt-export-preview-lightbox-head"><b>Visual report preview</b><div class="dt-export-preview-zoom"><button type="button" data-preview-zoom="out" aria-label="Zoom out">−</button><button type="button" data-preview-zoom="fit">Fit</button><button type="button" data-preview-zoom="in" aria-label="Zoom in">+</button></div><button class="dt-export-preview-close" type="button" aria-label="Close preview">×</button></div><div class="dt-export-preview-lightbox-body"><img alt="Export preview enlarged"></div></div>`;
+    box.addEventListener('click',e=>{if(e.target===box)box.classList.remove('show')});
+    box.querySelector('.dt-export-preview-close').onclick=()=>box.classList.remove('show');
+    const img=box.querySelector('img'),body=box.querySelector('.dt-export-preview-lightbox-body');
+    let scale=1;
+    const apply=()=>{ if(!img.naturalWidth)return; img.style.width=Math.max(1,Math.round(img.naturalWidth*scale))+'px'; };
+    const fit=()=>{ if(!img.naturalWidth)return; scale=Math.min(1,Math.max(.18,(body.clientWidth-4)/img.naturalWidth));apply();body.scrollTo({left:0,top:0}); };
+    box.querySelector('[data-preview-zoom="fit"]').onclick=fit;
+    box.querySelector('[data-preview-zoom="in"]').onclick=()=>{scale=Math.min(1.75,scale+.2);apply();};
+    box.querySelector('[data-preview-zoom="out"]').onclick=()=>{scale=Math.max(.18,scale-.2);apply();};
+    img.onload=()=>requestAnimationFrame(fit);
+    box._dtPreviewFit=fit;
+    document.body.appendChild(box);
+    return box;
+  }
+  window.dtOpenExportPreview=function(src){
+    if(!src)return;
+    const box=ensureLightbox();
+    const img=box.querySelector('img');
+    img.src=src;
+    box.classList.add('show');
+    requestAnimationFrame(()=>box._dtPreviewFit?.());
+  };
+
+  function plugin(name){
+    try{
+      const cap=window.Capacitor;if(!cap)return null;
+      if(!cap.Plugins)cap.Plugins={};
+      if(!cap.Plugins[name]&&typeof cap.registerPlugin==='function')cap.Plugins[name]=cap.registerPlugin(name);
+      return cap.Plugins[name]||null;
+    }catch(_){return null}
+  }
+  function isNative(){ try{return !!window.Capacitor?.isNativePlatform?.()}catch(_){return false} }
+  function dataUrlToBase64(src){ return String(src||'').split(',')[1]||''; }
+  window.dtSaveExportPreview=async function(){
+    const saved=window.dtLastExportSaved;
+    const src=window.dtLastExportPreview;
+    const fs=plugin('Filesystem');
+    if(isNative()&&fs&&src){
+      const folder='MARC Exports';
+      const name=saved?.name||`MARC_Visual_Progress_${(window.dtLocalDateKey?.(new Date())||'export')}.png`;
+      const path=`${folder}/${name}`;
+      await fs.writeFile({path,data:dataUrlToBase64(src),directory:'DOCUMENTS',recursive:true});
+      alert('Saved to device files • Documents/MARC Exports');
+      return true;
+    }
+    if(src){
+      const a=document.createElement('a');a.href=src;a.download=(saved?.name||'MARC_Visual_Progress.png');a.click();
+      return true;
+    }
+    return false;
+  };
+  window.dtShareLastExport=async function(){
+    const saved=window.dtLastExportSaved;
+    const share=plugin('Share');
+    const fs=plugin('Filesystem');
+    if(isNative()&&share&&fs&&saved?.base64){
+      const folder='MARC Exports';
+      const path=saved.path||`${folder}/${saved.name||'MARC_Visual_Progress.png'}`;
+      const directory=saved.directory||'DOCUMENTS';
+      await fs.writeFile({path,data:saved.base64,directory,recursive:true});
+      const uri=saved.uri||(await fs.getUri({path,directory})).uri;
+      await share.share({title:'M/ARC Training Export',text:'M/ARC workout progress export',files:[uri],dialogTitle:'Share export'});
+      return true;
+    }
+    if(navigator.share&&window.dtLastExportPreview){
+      try{
+        const res=await fetch(window.dtLastExportPreview);
+        const blob=await res.blob();
+        const file=new File([blob],saved?.name||'MARC_Visual_Progress.png',{type:'image/png'});
+        await navigator.share({title:'M/ARC Training Export',files:[file]});
+        return true;
+      }catch(_){ }
+    }
+    return window.dtSaveExportPreview();
+  };
+
+  function fmtHoursLeft(h){
+    if(h<1)return '<1h';
+    if(h<24)return `~${Math.round(h)}h`;
+    const d=h/24;
+    return `~${d.toFixed(d<2?1:0)}d`;
+  }
+
+  window.dtRenderTodayRecoverySummary=function(summary){
+    const host=document.getElementById('dtTodayRecovery');
+    if(!host)return;
+    const status=(typeof window.dtMuscleRecoveryStatus==='function')?window.dtMuscleRecoveryStatus():null;
+    if(!status||!Object.keys(status).length){ host.innerHTML=''; return; }
+    const top=(summary?.muscles||[]).map(m=>m.key).filter(Boolean);
+    const relevant=top.length?top.filter(k=>status[k]):Object.keys(status);
+    const recovering=relevant.map(k=>({key:k,...status[k]})).filter(x=>x.recovering).sort((a,b)=>a.pct-b.pct).slice(0,6);
+    if(!recovering.length){
+      host.innerHTML=`<div class="dt-today-recovery-title">Muscle recovery</div><div class="dt-today-recovery-ready">💪 Your main muscles from this session are already fully recovered.</div>`;
+      return;
+    }
+    const label=k=>typeof window.dtSummaryLabel==='function'?window.dtSummaryLabel(k):String(k).replace(/_/g,' ');
+    const chips=recovering.map(item=>{
+      const color=item.pct<40?'#ef725c':item.pct<75?'#f1c65b':'#5ddc9d';
+      return `<div class="dt-today-recovery-chip"><span class="dt-today-recovery-dot" style="background:${color}"></span>${label(item.key)} <b>${item.pct}%</b> · ${fmtHoursLeft(item.hoursLeft)}</div>`;
+    }).join('');
+    host.innerHTML=`<div class="dt-today-recovery-title">Muscle recovery after this workout</div><div class="dt-today-recovery-chips">${chips}</div>`;
+  };
+
+  window.dtRenderWorkoutRecoveryPanel=function(day){
+    const host=document.getElementById('dtWorkoutRecoveryBox');
+    if(!host)return;
+    const status=(typeof window.dtMuscleRecoveryStatus==='function')?window.dtMuscleRecoveryStatus():null;
+    if(!status||!Object.keys(status).length){
+      host.innerHTML='';
+      return;
+    }
+    const todayKey=(typeof window.dtLocalDateKey==='function')?window.dtLocalDateKey(new Date()):new Date().toLocaleDateString('en-CA');
+    let summary=(state.workouts?.dailySummaries||{})[`${todayKey}|${day}`]||null;
+    if(!summary && typeof window.dtBuildWorkoutSummary==='function'){
+      try{ summary=window.dtBuildWorkoutSummary(day)||null; }catch(_){ summary=null; }
+    }
+    const top=(summary?.muscles||[]).map(m=>m.key).filter(Boolean);
+    const relevant=(top.length?top.filter(k=>status[k]):Object.keys(status)).map(k=>({key:k,...status[k]}));
+    const recovering=relevant.filter(x=>x.recovering).sort((a,b)=>a.pct-b.pct).slice(0,6);
+    const label=k=>typeof window.dtSummaryLabel==='function'?window.dtSummaryLabel(k):String(k).replace(/_/g,' ');
+    if(!recovering.length){
+      host.innerHTML=`<div class="dt-workout-recovery-title">Muscle recovery dashboard</div><div class="dt-workout-recovery-sub">Everything from this session is currently fully recovered.</div><div class="dt-workout-recovery-ready">💪 Ready again</div>`;
+      return;
+    }
+    const minLeft=Math.max(0,...recovering.map(x=>x.hoursLeft||0));
+    const chips=recovering.map(item=>{
+      const color=item.pct<40?'#ef725c':item.pct<75?'#f1c65b':'#5ddc9d';
+      return `<div class="dt-workout-recovery-chip"><span class="dt-workout-recovery-dot" style="background:${color}"></span><span>${label(item.key)}</span><b>${item.pct}%</b><small>${fmtHoursLeft(item.hoursLeft)}</small></div>`;
+    }).join('');
+    host.innerHTML=`<div class="dt-workout-recovery-title">Muscle recovery dashboard</div><div class="dt-workout-recovery-sub">Estimated timeframes for the main muscles you trained today.</div><div class="dt-workout-recovery-meta"><span>Based on your logged sets and effort</span><b>Longest recovery: ${fmtHoursLeft(minLeft)}</b></div><div class="dt-workout-recovery-chips">${chips}</div>`;
+  };
+
+  /* Full UI audit hardening: keep the floating GPT control from covering
+     workout/history/stats content. Existing users are migrated once; they can
+     still reveal it using the edge handle and their choice is respected after. */
+  try{
+    const MIGRATION='dt_chat_nonoverlap_v1';
+    if(!localStorage.getItem(MIGRATION)){
+      if(typeof setChatCollapsed==='function')setChatCollapsed(true);
+      localStorage.setItem(MIGRATION,'1');
+    }
+  }catch(_){ }
+
+  /* Training Body uses the summary-body renderer, which correctly applies role
+     colours but did not emit the older muscle-map animation event. Animate this
+     card directly after its async SVG styling settles. */
+  function animateTrainingBody(){
+    const colors={
+      '#50dfa0':['#50dfa0','rgba(80,223,160,.70)',0],
+      '#43a7ff':['#43a7ff','rgba(67,167,255,.72)',.10],
+      '#a55cff':['#a55cff','rgba(165,92,255,.72)',.20]
+    };
+    document.querySelectorAll('#dtTBFront .body-chart-muscle,#dtTBBack .body-chart-muscle').forEach(path=>{
+      const fill=String(path.getAttribute('fill')||'').toLowerCase();
+      const cfg=colors[fill];
+      if(!cfg)return;
+      path.style.setProperty('--dt-target',cfg[0]);
+      path.style.setProperty('--dt-glow',cfg[1]);
+      path.style.setProperty('--dt-base','#3c4851');
+      path.style.transformBox='fill-box';
+      path.style.transformOrigin='center';
+      path.style.fill='#3c4851';
+      path.style.opacity='.48';
+      path.style.animation='none';
+      void path.getBoundingClientRect();
+      path.classList.add('dt-tb-role-animated');
+      path.style.animation=`dtMuscleReveal .82s cubic-bezier(.2,.75,.2,1) ${cfg[2]}s forwards, dtMusclePulse 3.4s ease-in-out ${cfg[2]+1.55}s infinite`;
+    });
+  }
+  let trainingBodyAnimTimer=0;
+  function scheduleTrainingBodyAnimation(delay=80){
+    clearTimeout(trainingBodyAnimTimer);
+    trainingBodyAnimTimer=setTimeout(animateTrainingBody,delay);
+  }
+  function observeTrainingBodyHosts(){
+    ['dtTBFront','dtTBBack'].forEach(id=>{
+      const host=document.getElementById(id);
+      if(!host||host.dataset.dtAnimObserved==='1')return;
+      host.dataset.dtAnimObserved='1';
+      new MutationObserver(()=>scheduleTrainingBodyAnimation(60)).observe(host,{childList:true,subtree:true});
+    });
+  }
+  function installTrainingBodyAnimation(){
+    observeTrainingBodyHosts();
+    const auditedBodyRender=window.dtRenderBodyCard;
+    if(typeof auditedBodyRender!=='function'||auditedBodyRender.__dtUiAuditWrapped){scheduleTrainingBodyAnimation(90);return;}
+    const wrapped=function(){
+      const r=auditedBodyRender.apply(this,arguments);
+      observeTrainingBodyHosts();
+      scheduleTrainingBodyAnimation(90);
+      return r;
+    };
+    wrapped.__dtUiAuditWrapped=true;
+    window.dtRenderBodyCard=wrapped;
+    scheduleTrainingBodyAnimation(90);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(installTrainingBodyAnimation,520));
+  setTimeout(installTrainingBodyAnimation,520);
+  setTimeout(installTrainingBodyAnimation,1250);
+
+  // Strengthen training-body refresh when the Today screen becomes visible.
+  document.addEventListener('click',e=>{
+    const btn=e.target.closest?.('.dt-tb-tab');
+    if(btn&&typeof window.dtRenderBodyCard==='function')setTimeout(()=>window.dtRenderBodyCard(),80);
+  },true);
+
+  // Restore and strengthen the summary card on load/navigation.
+  setTimeout(()=>{
+    try{
+      if(typeof window.dtRenderTodayWorkoutResult==='function')window.dtRenderTodayWorkoutResult();
+    }catch(_){ }
+  },300);
+})();
+</script>
+
 </body>
 </html>
