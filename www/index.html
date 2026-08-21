@@ -12929,8 +12929,13 @@ nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
   /* Route changes do not necessarily mutate child nodes, so refresh the
      compact/global rest placement immediately after bottom-nav taps. */
   document.addEventListener("click",e=>{
-    if(e.target.closest?.("nav.dt-v10-nav button"))setTimeout(()=>{renderRestUX();renderCenterRestRing()},0);
-  },true);
+    if(!e.target.closest?.("nav.dt-v10-nav button"))return;
+    /* Bubble phase runs after the nav button's own view-switch handler.
+       Update rest placement synchronously so there is no one-frame race
+       between the old exercise pill and the tiny cross-tab indicator. */
+    renderRestUX();renderCenterRestRing();
+    requestAnimationFrame(()=>{renderRestUX();renderCenterRestRing()});
+  });
 
   /* ---------------- finish workflow ---------------- */
   function ensureFinishUI(){
@@ -13158,8 +13163,22 @@ nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
   }
 
   /* ---------------- boot / integration ---------------- */
+  function bindViewRefresh(){
+    if(typeof window.switchView!=="function"||window.switchView.__v26SessionRefresh)return;
+    const old=window.switchView;
+    const wrapped=function(...a){
+      const r=old.apply(this,a);
+      /* View visibility is now final, so place the rest indicator in the
+         correct context immediately instead of waiting for the 500ms UI tick. */
+      renderRestUX();renderCenterRestRing();
+      requestAnimationFrame(()=>{renderRestUX();renderCenterRestRing()});
+      return r;
+    };
+    wrapped.__v26SessionRefresh=true;
+    window.switchView=wrapped;
+  }
   function rebindSessionControls(){
-    bindCenter();bindFocusPull();ensureFinishUI();
+    bindViewRefresh();bindCenter();bindFocusPull();ensureFinishUI();
     const finish=document.getElementById("dtSessionFinish");
     if(finish&&finish.dataset.v26Bound!=="1"){
       finish.dataset.v26Bound="1";finish.onclick=openFinishFlow;
@@ -13195,5 +13214,880 @@ nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
   setInterval(renderV26,500);
 })();
 </script>
+
+
+<style id="dt-v26-imbalance-css">
+/* M/ARC V26 Phase 5 — one conservative weekly balance nudge. */
+.dt-intel-imbalance-card{
+  margin-top:12px;padding:14px 15px;border:1px solid rgba(79,139,157,.22);border-radius:16px;
+  background:linear-gradient(150deg,rgba(8,26,35,.58),rgba(7,20,27,.34));
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.018),0 0 18px rgba(73,179,155,.035)
+}
+.dt-intel-imbalance-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.dt-intel-imbalance-head small{color:#65dda4;font:850 8px system-ui;letter-spacing:.13em;text-transform:uppercase}
+.dt-intel-imbalance-ratio{padding:4px 7px;border:1px solid rgba(91,171,148,.20);border-radius:999px;color:#8eb6b0;font:800 8px system-ui;background:rgba(22,70,60,.11)}
+.dt-intel-imbalance-card b{display:block;margin-top:7px;color:#e2edf1;font:850 13px/1.25 system-ui}
+.dt-intel-imbalance-card p{margin:5px 0 0;color:#7e969f;font:570 10px/1.48 system-ui}
+</style><script id="dt-v26-imbalance-js">
+(()=>{
+  "use strict";
+  const VERSION="26.0-imbalance-v3-render-guard";
+  const WEEKS=3,RATIO_GATE=2,MIN_TOTAL_SETS=12,MIN_ACTIVE_WEEKS=2,MIN_PERSIST_WEEKS=2;
+  const GROUPS={
+    push:["chest","shoulders","triceps"],
+    pull:["back","biceps","forearms"],
+    upper:["chest","shoulders","back","biceps","triceps","forearms"],
+    lower:["quads","glutes","hamstrings","calves"]
+  };
+  const finite=v=>Number.isFinite(Number(v))?Math.max(0,Number(v)):0;
+  function rowsFor(bucket,weeks=WEEKS){
+    if(typeof window.dtIntelMuscleWeeklyLoad!=="function")return null;
+
+    /* Phase 0 owns aggregation but intentionally does not own M/ARC's muscle
+       taxonomy. Pass it a predicate built from the already-existing canonical
+       classifier instead of a bucket string. */
+    const matcher=raw=>{
+      try{
+        if(typeof window.dtClassifyMuscle==="function"){
+          return window.dtClassifyMuscle(raw)?.bucket===bucket;
+        }
+      }catch(_){}
+      return false;
+    };
+
+    let raw;
+    try{raw=window.dtIntelMuscleWeeklyLoad(matcher,weeks)}catch(_){return null}
+    if(!Array.isArray(raw)&&Array.isArray(raw?.weeks))raw=raw.weeks;
+    if(!Array.isArray(raw))return null;
+
+    /* Claude Phase 0 returns sparse rows keyed by weekIndex (0=current week).
+       Normalize into a complete fixed window before any pairwise comparison,
+       so Chest weeks [0,2] can never be misaligned with Back weeks [0,1]. */
+    const rows=Array.from({length:weeks},(_,i)=>({
+      key:`weekIndex:${i}`,weekIndex:i,sets:0,volume:0
+    }));
+    raw.forEach((r,pos)=>{
+      const wi=Number.isFinite(Number(r?.weekIndex))?Number(r.weekIndex):pos;
+      if(wi<0||wi>=weeks)return;
+      rows[wi]={
+        key:String(r?.weekKey??r?.week??r?.weekStart??r?.startDate??r?.start??r?.date??`weekIndex:${wi}`),
+        weekIndex:wi,
+        sets:finite(r?.sets??r?.workingSets??r?.setCount),
+        volume:finite(r?.volume??r?.totalVolume??r?.load)
+      };
+    });
+    return rows;
+  }
+  function groupRows(name,weeks=WEEKS){
+    const buckets=GROUPS[name]||[];if(!buckets.length)return null;
+    const all=buckets.map(b=>rowsFor(b,weeks));if(all.some(x=>x===null))return null;
+    return Array.from({length:weeks},(_,i)=>all.reduce((o,arr)=>({sets:o.sets+arr[i].sets,volume:o.volume+arr[i].volume}),{sets:0,volume:0}));
+  }
+  function ratioText(ratio,weak){return weak<=0?"4×+":`${Math.round(ratio*10)/10}×`}
+  function pairCandidate(aName,bName,copy){
+    const a=groupRows(aName),b=groupRows(bName);if(!a||!b)return null;
+    const sum=x=>x.reduce((n,r)=>n+r.sets,0),aSets=sum(a),bSets=sum(b),total=aSets+bSets;
+    const active=Array.from({length:WEEKS},(_,i)=>a[i].sets+b[i].sets>=4).filter(Boolean).length;
+    if(total<MIN_TOTAL_SETS||active<MIN_ACTIVE_WEEKS)return null;
+    const dominant=aSets>=bSets?aName:bName,weak=dominant===aName?bName:aName;
+    const dSets=Math.max(aSets,bSets),wSets=Math.min(aSets,bSets),ratio=wSets>0?dSets/wSets:(dSets>=8?99:1);
+    if(ratio<RATIO_GATE)return null;
+    const d=dominant===aName?a:b,w=dominant===aName?b:a;
+    let persist=0;
+    for(let i=0;i<WEEKS;i++){
+      const combined=d[i].sets+w[i].sets;if(combined<4)continue;
+      const rr=w[i].sets>0?d[i].sets/w[i].sets:(d[i].sets>=4?99:1);
+      if(rr>=1.5)persist++;
+    }
+    if(persist<MIN_PERSIST_WEEKS)return null;
+    const severity=Math.min(6,ratio)*Math.min(1.5,total/24)*(persist/WEEKS);
+    const under=copy[weak],over=copy[dominant];
+    return {
+      id:`imbalance:${aName}_${bName}:${dominant}`,category:"imbalance",pair:`${aName}_${bName}`,
+      dominant,undertrained:weak,ratio:ratio===99?null:Math.round(ratio*10)/10,ratioLabel:ratioText(ratio,wSets),
+      weeks:WEEKS,totalSets:total,persistenceWeeks:persist,severity,
+      title:`${under} work is trailing`,
+      body:`${over} work has been ${ratioText(ratio,wSets)} ${under.toLowerCase()} work over the last ${WEEKS} weeks. Consider balancing your next sessions with more ${under.toLowerCase()} work.`
+    };
+  }
+  function compute(){
+    if(typeof window.dtIntelMuscleWeeklyLoad!=="function")return null;
+    const copy={push:"Push",pull:"Pull",upper:"Upper body",lower:"Lower body"};
+    const candidates=[pairCandidate("push","pull",copy),pairCandidate("upper","lower",copy)].filter(Boolean);
+    candidates.sort((a,b)=>b.severity-a.severity||b.totalSets-a.totalSets);
+    return candidates[0]||null;
+  }
+  let lastRenderSignature="";
+  function render(){
+    const host=document.getElementById("dtV24StatsHost");if(!host)return;
+    const n=compute();let card=document.getElementById("dtIntelImbalanceCard");
+    /* Checkpoint B: once the prioritization engine exists, Coach owns insight
+       presentation so this standalone nudge cannot duplicate it. */
+    if(typeof window.dtIntelTopInsights==="function"||!n){
+      if(card)card.remove();
+      lastRenderSignature="";
+      return;
+    }
+    let created=false;
+    if(!card){
+      card=document.createElement("section");card.id="dtIntelImbalanceCard";card.className="dt-intel-imbalance-card";
+      card.innerHTML='<div class="dt-intel-imbalance-head"><small>TRAINING BALANCE</small><span class="dt-intel-imbalance-ratio"></span></div><b></b><p></p>';
+      created=true;
+    }
+    const signature=JSON.stringify([n.ratioLabel,n.title,n.body]);
+    if(created||signature!==lastRenderSignature){
+      const ratio=card.querySelector(".dt-intel-imbalance-ratio"),title=card.querySelector("b"),body=card.querySelector("p");
+      if(ratio&&ratio.textContent!==n.ratioLabel)ratio.textContent=n.ratioLabel;
+      if(title&&title.textContent!==n.title)title.textContent=n.title;
+      if(body&&body.textContent!==n.body)body.textContent=n.body;
+      lastRenderSignature=signature;
+    }
+    const bf=document.getElementById("dtBodyFatCard");
+    if(bf&&bf.parentElement===host){
+      if(card.parentElement!==host||card.nextSibling!==bf)host.insertBefore(card,bf);
+    }else if(card.parentElement!==host)host.appendChild(card);
+  }
+  let queued=false;
+  new MutationObserver(()=>{if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;render()})}).observe(document.body,{childList:true,subtree:true});
+  setTimeout(render,600);setTimeout(render,1500);
+  window.dtIntelImbalanceNudge=compute;
+  window.dtRenderImbalanceNudge=render;
+  window.DT_INTEL_IMBALANCE_VERSION=VERSION;
+})();
+</script><script id="dt-v26-rest-personalization-js">
+(()=>{
+  "use strict";
+  const VERSION="26.0-rest-personalization";
+  const MIN_SAMPLES=8,MAX_SAMPLES=400,MAX_BUCKET_SAMPLES=40,ROUND_SEC=15,LEARNED_MIN=30,LEARNED_MAX=300;
+  let tracker=null,lastApplySignature="";
+  const finite=v=>Number.isFinite(Number(v))?Number(v):0;
+  const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+  const round15=s=>clamp(Math.round(s/ROUND_SEC)*ROUND_SEC,LEARNED_MIN,LEARNED_MAX);
+  function root(create=false){
+    if(!state.intelligence){if(!create)return null;state.intelligence={}}
+    if(!state.intelligence.restPersonalization){
+      if(!create)return null;
+      state.intelligence.restPersonalization={version:1,samples:[]};
+    }
+    const r=state.intelligence.restPersonalization;
+    if(!Array.isArray(r.samples))r.samples=[];
+    return r;
+  }
+  function median(values){
+    const a=values.map(Number).filter(Number.isFinite).sort((x,y)=>x-y);if(!a.length)return null;
+    const m=Math.floor(a.length/2);return a.length%2?a[m]:(a[m-1]+a[m])/2;
+  }
+  function profileFromSamples(bucket,samples){
+    const rows=(samples||[]).filter(x=>x?.bucket===bucket&&finite(x.durationSec)>=15).slice(-MAX_BUCKET_SAMPLES);
+    if(rows.length<MIN_SAMPLES)return {personalized:false,bucket,sampleSize:rows.length,suggestedSec:null,medianSec:null,confidence:"insufficient_data"};
+    const med=median(rows.map(x=>x.durationSec)),suggested=round15(med);
+    const confidence=rows.length>=20?"high":rows.length>=12?"medium":"low";
+    return {personalized:true,bucket,sampleSize:rows.length,suggestedSec:suggested,medianSec:Math.round(med),confidence};
+  }
+  function profile(bucket){return profileFromSamples(bucket,root(false)?.samples||[])}
+  function stableKey(e,i=0){
+    try{if(e?.[4])return String(e[4]);if(typeof exerciseKey==="function")return String(exerciseKey(e))}catch(_){}
+    return `${e?.[0]||"Exercise"}|${e?.[1]||""}|${i}`;
+  }
+  function bucketForExerciseKey(key,day,name){
+    if(!key&&!name)return null;let muscle="";
+    try{
+      const rows=state.workouts?.completedExercises||[];
+      for(let i=rows.length-1;i>=0;i--){const r=rows[i];if((key&&String(r.exerciseKey||"")===String(key))||(!key&&name&&r.name===name)){muscle=r.muscle||"";if(muscle)break}}
+    }catch(_){}
+    if(!muscle&&day){
+      try{const exs=effectiveExercises(day)||[];for(let i=0;i<exs.length;i++){const e=exs[i];if((key&&stableKey(e,i)===String(key))||(!key&&name&&e?.[0]===name)){muscle=e?.[2]||"";break}}}catch(_){}
+    }
+    if(!muscle&&name){
+      try{const q=String(name).toLowerCase();const lib=(window.DT_EXERCISE_LIBRARY||[]);const e=lib.find(x=>String(x?.name||"").toLowerCase()===q||String(x?.id||"").toLowerCase()===q);muscle=e?.primaryMuscles?.[0]||""}catch(_){}
+    }
+    if(!muscle)return null;
+    try{return window.dtClassifyMuscle?.(muscle)?.bucket||String(muscle).toLowerCase().replace(/\s+/g,"_")}catch(_){return String(muscle).toLowerCase().replace(/\s+/g,"_")}
+  }
+  function currentContext(){
+    const s=state.workouts?.sessionClock||null,r=s?.rest||{};let key=r.exerciseKey||null,name=r.exerciseName||null;
+    if(!key){try{key=document.querySelector("#wlist .exercise.open[data-exkey]")?.dataset.exkey||document.querySelector("#wlist .exercise[data-exkey]")?.dataset.exkey||null}catch(_){}}
+    if(!key){try{if(typeof effTarget!=="undefined"&&effTarget){const ex=(effectiveExercises(s?.day)||[])[effTarget.ei];if(ex){key=stableKey(ex,effTarget.ei);name=ex[0]}}}catch(_){}}
+    const bucket=bucketForExerciseKey(key,s?.day,name);return {s,r,key,name,bucket};
+  }
+  function effectiveDefault(exerciseKey,fallbackSec,day,name){
+    const fallback=clamp(Math.round(finite(fallbackSec)||90),15,600);
+    const resolvedDay=day||state.workouts?.sessionClock?.day||null;
+    const bucket=bucketForExerciseKey(exerciseKey,resolvedDay,name);if(!bucket)return {seconds:fallback,source:"base",bucket:null,confidence:"insufficient_data",sampleSize:0};
+    const p=profile(bucket);
+    /* Explicitly customized global defaults beat learned behavior. */
+    if(fallback!==90)return {seconds:fallback,source:"user_default",bucket,confidence:p.confidence,sampleSize:p.sampleSize,learnedSec:p.suggestedSec};
+    if(!p.personalized)return {seconds:fallback,source:"base",bucket,confidence:p.confidence,sampleSize:p.sampleSize};
+    return {seconds:p.suggestedSec,source:"learned",bucket,confidence:p.confidence,sampleSize:p.sampleSize,medianSec:p.medianSec};
+  }
+  function saveSample(sample){
+    if(!sample?.bucket||finite(sample.durationSec)<15)return false;
+    const r=root(true);if(r.samples.some(x=>x.id===sample.id))return false;
+    r.samples.push(sample);r.samples=r.samples.slice(-MAX_SAMPLES);r.updatedAt=new Date().toISOString();
+    try{save()}catch(e){console.warn("Rest intelligence sample save failed",e)}
+    return true;
+  }
+  function discardTracker(){tracker=null;lastApplySignature=""}
+  function maybeStartTracker(s,r,ctx){
+    if(!s?.active||!r?.running||!ctx.key||!ctx.bucket)return;
+    const sig=`${s.startedAtMs}|${ctx.key}|${r.lastActiveAtMs||r.endsAtMs}`;
+    if(tracker?.sig===sig)return;
+    const started=finite(r.lastActiveAtMs)||Math.max(0,finite(r.endsAtMs)-finite(r.durationMs));
+    tracker={sig,sessionStartedAtMs:s.startedAtMs,exerciseKey:ctx.key,exerciseName:ctx.name||r.exerciseName||"",bucket:ctx.bucket,startedAtMs:started||Date.now(),targetEndMs:finite(r.endsAtMs),pauseStartedMs:0,pauseMs:0,interrupted:false};
+  }
+  function maybeApplyLearned(s,r,ctx){
+    if(!tracker||!r.running||!ctx.bucket)return;
+    const fallback=finite(state.workouts?.sessionSettings?.restDefaultSec)||90;
+    const d=effectiveDefault(ctx.key,fallback,s.day,ctx.name);
+    if(d.source!=="learned")return;
+    const sig=`${tracker.sig}|${d.seconds}`;if(lastApplySignature===sig)return;
+    const current=Math.max(1,Math.round((finite(r.endsAtMs)-Date.now())/1000));
+    const delta=d.seconds-current;
+    if(Math.abs(delta)>=5&&typeof window.dtAdjustRestTimer==="function"){
+      window.dtAdjustRestTimer(delta);tracker.targetEndMs=Date.now()+d.seconds*1000;
+    }
+    lastApplySignature=sig;
+  }
+  function poll(){
+    const s=state.workouts?.sessionClock||null;
+    if(!s?.active){discardTracker();return}
+    const r=s.rest||{},ctx=currentContext();
+    if(r.running){
+      maybeStartTracker(s,r,ctx);
+      if(tracker){tracker.targetEndMs=finite(r.endsAtMs)||tracker.targetEndMs;if(s.status!=="running"||r.pausedBySession)tracker.interrupted=true;if(tracker.pauseStartedMs){tracker.pauseMs+=Math.max(0,Date.now()-tracker.pauseStartedMs);tracker.pauseStartedMs=0}}
+      maybeApplyLearned(s,r,ctx);
+    }else if(r.paused&&tracker){
+      if(!tracker.pauseStartedMs)tracker.pauseStartedMs=Date.now();
+      if(r.pausedBySession||s.status!=="running")tracker.interrupted=true;
+    }else if(tracker){
+      const natural=finite(r.completeUntilMs)>Date.now()-5500;
+      if(natural&&!tracker.interrupted){
+        if(tracker.pauseStartedMs){tracker.pauseMs+=Math.max(0,Date.now()-tracker.pauseStartedMs);tracker.pauseStartedMs=0}
+        const activeMs=Math.max(0,tracker.targetEndMs-tracker.startedAtMs-tracker.pauseMs);
+        const sec=Math.round(activeMs/1000);
+        if(sec>=15&&sec<=600)saveSample({id:`${tracker.sig}|${Math.round(tracker.targetEndMs)}`,bucket:tracker.bucket,exerciseKey:tracker.exerciseKey,exerciseName:tracker.exerciseName,durationSec:sec,completedAt:new Date(Math.min(Date.now(),tracker.targetEndMs||Date.now())).toISOString(),source:"countdown_complete"});
+      }
+      discardTracker();
+    }
+    renderLearnedReady();renderLearnedRing();
+  }
+  function renderLearnedReady(){
+    const s=state.workouts?.sessionClock,r=s?.rest;if(!s?.active||r?.running||r?.paused)return;
+    const ctx=currentContext(),fallback=finite(state.workouts?.sessionSettings?.restDefaultSec)||90,d=effectiveDefault(ctx.key,fallback,s.day,ctx.name);
+    if(d.source!=="learned")return;
+    const label=document.getElementById("dtRestLabel"),time=document.getElementById("dtRestTime");
+    if(label&&time&&document.getElementById("dtSessionFocus")?.classList.contains("show")){
+      const m=Math.floor(d.seconds/60),ss=String(d.seconds%60).padStart(2,"0");label.textContent=`Personalized · ${d.sampleSize} rests`;time.textContent=`${m}:${ss}`;
+    }
+  }
+  function renderLearnedRing(){
+    if(!tracker)return;const s=state.workouts?.sessionClock,r=s?.rest,b=document.querySelector('nav.dt-v10-nav [data-v10="log"]');if(!r?.running||!b)return;
+    const total=Math.max(1000,tracker.targetEndMs-tracker.startedAtMs-tracker.pauseMs),rem=Math.max(0,finite(r.endsAtMs)-Date.now());
+    const progress=clamp(1-rem/total,0,1);b.style.setProperty("--dt-rest-angle",`${Math.round(progress*360)}deg`);
+  }
+  function clearLearning(){
+    if(state.intelligence?.restPersonalization){delete state.intelligence.restPersonalization;try{save()}catch(_){}}
+    discardTracker();
+  }
+  /* Existing reset modal calls a closed-over reset function, so clear this
+     sidecar after the confirmed reset without editing the locked reset code. */
+  document.addEventListener("click",e=>{
+    if(e.target.closest?.("#dtWorkoutResetModal .dt-data-confirm,#dtDemoDataModal .dt-data-demo"))setTimeout(clearLearning,0);
+  },true);
+  const oldReset=window.dtResetWorkoutData;
+  if(typeof oldReset==="function"&&!oldReset.__v26RestIntel){
+    const wrapped=function(...a){const out=oldReset.apply(this,a);clearLearning();return out};wrapped.__v26RestIntel=true;window.dtResetWorkoutData=wrapped;
+  }
+  setInterval(poll,250);
+  setTimeout(poll,500);
+  window.dtIntelRestProfile=profile;
+  window.dtIntelRestProfileFromSamples=profileFromSamples;
+  window.dtIntelRestDefaultForExercise=effectiveDefault;
+  window.dtIntelRestSamples=()=>JSON.parse(JSON.stringify(root(false)?.samples||[]));
+  window.dtIntelRestPoll=poll;
+  window.DT_REST_PERSONALIZATION_VERSION=VERSION;
+})();
+</script><style id="dt-v26-coach-card-css">
+/* M/ARC V26 Phase 7b — presentation only; renders nothing without insights. */
+#dtCoachInsightsHost{margin-top:12px;display:grid;gap:8px}
+.dt-coach-heading{display:flex;align-items:center;gap:8px;padding:0 2px 2px;color:#6f8995;font:850 8px system-ui;letter-spacing:.13em;text-transform:uppercase}
+.dt-coach-heading::before{content:"";width:6px;height:6px;border-radius:50%;background:#55dda0;box-shadow:0 0 8px rgba(85,221,160,.32)}
+.dt-coach-insight{
+  padding:13px 14px;border:1px solid rgba(74,121,141,.22);border-radius:15px;
+  background:linear-gradient(150deg,rgba(7,23,31,.58),rgba(7,19,26,.34));
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.015)
+}
+.dt-coach-insight-top{display:flex;align-items:center;gap:9px}
+.dt-coach-category{font:850 8px system-ui;letter-spacing:.09em;text-transform:uppercase;color:#6eb5e8}
+.dt-coach-insight b{display:block;margin-top:6px;color:#e1edf1;font:850 13px/1.3 system-ui}
+.dt-coach-insight p{margin:5px 0 0;color:#7d959f;font:560 10px/1.48 system-ui}
+.dt-coach-insight[data-category="recovery"] .dt-coach-category{color:#67dda4}
+.dt-coach-insight[data-category="readiness"] .dt-coach-category{color:#76c8ee}
+.dt-coach-insight[data-category="plateau"] .dt-coach-category{color:#e0b86f}
+.dt-coach-insight[data-category="imbalance"] .dt-coach-category{color:#b492e8}
+</style><script id="dt-v26-coach-card-js">
+(()=>{
+  "use strict";
+  const VERSION="26.0-coach-card-v2-render-guard";
+  const ALLOWED=new Set(["plateau","recovery","readiness","imbalance"]);
+  function insights(){
+    if(typeof window.dtIntelTopInsights!=="function")return [];
+    let raw;try{raw=window.dtIntelTopInsights(2)}catch(_){return []}
+    if(!Array.isArray(raw))return [];
+    return raw.filter(x=>x&&typeof x.title==="string"&&x.title.trim()&&typeof x.body==="string"&&x.body.trim()&&ALLOWED.has(x.category)).slice(0,2);
+  }
+  let lastRenderSignature="";
+  function render(){
+    const stats=document.getElementById("stats"),host=document.getElementById("dtV24StatsHost");if(!stats||!host)return;
+    const rows=insights();let wrap=document.getElementById("dtCoachInsightsHost");
+    if(!rows.length){
+      if(wrap)wrap.remove();
+      lastRenderSignature="";
+      return;
+    }
+    let created=false;
+    if(!wrap){wrap=document.createElement("section");wrap.id="dtCoachInsightsHost";created=true}
+    const signature=JSON.stringify(rows.map(x=>[x.category,x.title,x.body]));
+    if(created||signature!==lastRenderSignature){
+      const frag=document.createDocumentFragment();
+      const heading=document.createElement("div");heading.className="dt-coach-heading";heading.textContent="M/ARC COACH";frag.appendChild(heading);
+      rows.forEach(x=>{
+        const card=document.createElement("article");card.className="dt-coach-insight";card.dataset.category=x.category;
+        const top=document.createElement("div");top.className="dt-coach-insight-top";
+        const cat=document.createElement("span");cat.className="dt-coach-category";cat.textContent=x.category;
+        const title=document.createElement("b");title.textContent=x.title;
+        const body=document.createElement("p");body.textContent=x.body;
+        top.append(cat);card.append(top,title,body);frag.appendChild(card);
+      });
+      wrap.replaceChildren(frag);
+      lastRenderSignature=signature;
+    }
+    const imbalance=document.getElementById("dtIntelImbalanceCard"),bf=document.getElementById("dtBodyFatCard");
+    const before=(imbalance&&imbalance.parentElement===host)?imbalance:(bf&&bf.parentElement===host?bf:null);
+    if(before){
+      if(wrap.parentElement!==host||wrap.nextSibling!==before)host.insertBefore(wrap,before);
+    }else if(wrap.parentElement!==host)host.appendChild(wrap);
+  }
+  let queued=false;
+  new MutationObserver(()=>{if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;render()})}).observe(document.body,{childList:true,subtree:true});
+  setTimeout(render,700);setTimeout(render,1600);
+  window.dtRenderCoachInsights=render;
+  window.dtCoachInsightRows=insights;
+  window.DT_COACH_CARD_VERSION=VERSION;
+})();
+</script>
+<script id="dt-v25-7-merge-marker-js">
+window.DT_MARC_MERGED_VERSION="25.7-session-history-stats-stable";
+</script>
+
+<script id="dt-v26-intel-core-js">
+(()=>{
+  "use strict";
+  const V="26.0-intel-core";
+
+  /* ---------------------------------------------------------
+     M/ARC V26 Coach Intelligence -- Phase 0: Core Engine.
+     Pure, read-only functions over existing state
+     (state.workouts.completedExercises). No UI, no state writes,
+     no dependency on any locked module. Everything downstream
+     (plateau detection, progression velocity, recovery calibration,
+     imbalance nudges) reads from these functions rather than
+     re-deriving history parsing logic independently.
+     --------------------------------------------------------- */
+
+  const DT_EFFORT_MULT = window.DT_EFFORT_MULT || {easy:.90, ideal:1.00, max:1.10};
+  const DT_DURATION_EXERCISE_NAMES = new Set(["plank","side plank","farmer's carry","farmers carry","wall sit"]);
+
+  function dtIntelExerciseHistory(exerciseKey, opts={}){
+    const {sinceDays, limit} = opts;
+    const source = (state?.workouts?.completedExercises) || [];
+    let all = source
+      .filter(x => x && x.exerciseKey === exerciseKey)
+      .map(x => {
+        const dateStr = x.finalizedAt || x.startedAt;
+        const date = dateStr ? new Date(dateStr) : null;
+        const sets = Array.isArray(x.sets) ? x.sets : [];
+        const isDuration = DT_DURATION_EXERCISE_NAMES.has(String(x.name||"").toLowerCase().trim());
+        const validSets = sets.filter(s => s && Number(s.reps) > 0);
+
+        let topWeight = null, totalVolume = 0;
+        const effortScores = [];
+        validSets.forEach(s => {
+          const kg = Number(s.kg);
+          const reps = Number(s.reps);
+          if(isDuration){
+            totalVolume += reps; // reps field holds seconds for duration exercises
+          } else if(Number.isFinite(kg) && kg > 0){
+            totalVolume += kg * reps;
+            if(topWeight === null || kg > topWeight) topWeight = kg;
+          } else {
+            // bodyweight, reps-counted exercise (kg absent/0, not duration) -- reps is the progress signal
+            totalVolume += reps;
+          }
+          const mult = DT_EFFORT_MULT[s.effort];
+          if(mult !== undefined) effortScores.push(mult);
+        });
+
+        const avgEffort = effortScores.length ? effortScores.reduce((a,b)=>a+b,0)/effortScores.length : null;
+
+        return {date, dateStr, topWeight, totalVolume, avgEffort, effortScore: avgEffort, sets: validSets, isDuration};
+      })
+      .filter(r => r.date instanceof Date && !isNaN(r.date))
+      .sort((a,b) => a.date - b.date);
+
+    if(Number.isFinite(sinceDays)){
+      const cutoff = Date.now() - sinceDays*24*60*60*1000;
+      all = all.filter(r => r.date.getTime() >= cutoff);
+    }
+    if(Number.isFinite(limit)){
+      all = all.slice(-limit);
+    }
+    return all;
+  }
+
+  // Generic recency-weighted trend over whatever points it's given. This
+  // function does NOT decide how much history is relevant -- it faithfully
+  // characterizes the exact window of points passed in. A long-ago climb
+  // followed by a recent plateau, if passed in full, will correctly read as
+  // "up" (net historical improvement is real and recency-weighted toward it).
+  // Callers that want "is this exercise stalled RECENTLY" (e.g. Phase 1's
+  // plateau detector) must pass only a recent window -- use
+  // dtIntelRollingWindow(history, 6) or similar before calling this, not the
+  // full history. This is a deliberate separation of concerns: this function
+  // stays simple and predictable; "how much recent history counts" is
+  // domain knowledge that belongs to each caller.
+  function dtIntelTrend(points, opts={}){
+    const flatThreshold = Number.isFinite(opts.flatThreshold) ? opts.flatThreshold : 0.01; // 1%/week
+    const valid = (points||[]).filter(p => p && Number.isFinite(p.x) && Number.isFinite(p.y));
+    const n = valid.length;
+
+    if(n < 4) return {direction:"insufficient_data", confidence:null, slope:null, relativeSlopePerWeek:null, dataPoints:n};
+
+    const sorted = [...valid].sort((a,b)=>a.x-b.x);
+    const w = n>1 ? sorted.map((_,i)=> 0.5 + (i/(n-1))*1.0) : [1];
+    const sumW = w.reduce((a,b)=>a+b,0);
+    const xMean = sorted.reduce((a,p,i)=>a+p.x*w[i],0)/sumW;
+    const yMean = sorted.reduce((a,p,i)=>a+p.y*w[i],0)/sumW;
+
+    let num=0, den=0;
+    sorted.forEach((p,i)=>{
+      num += w[i]*(p.x-xMean)*(p.y-yMean);
+      den += w[i]*(p.x-xMean)*(p.x-xMean);
+    });
+    const slope = den !== 0 ? num/den : 0;
+    const relativeSlopePerWeek = yMean !== 0 ? (slope * (7*24*60*60*1000)) / yMean : 0;
+
+    let direction;
+    if(Math.abs(relativeSlopePerWeek) < flatThreshold) direction = "flat";
+    else direction = relativeSlopePerWeek > 0 ? "up" : "down";
+
+    let confidence;
+    if(n <= 6) confidence = "low";
+    else if(n <= 11) confidence = "medium";
+    else confidence = "high";
+
+    return {direction, confidence, slope, relativeSlopePerWeek, dataPoints:n};
+  }
+
+  function dtIntelEffortSeries(exerciseKey){
+    const history = dtIntelExerciseHistory(exerciseKey);
+    return history
+      .filter(r => r.avgEffort !== null)
+      .map(r => ({x: r.date.getTime(), y: r.avgEffort, dateStr: r.dateStr}));
+  }
+
+  function dtIntelRollingWindow(array, n){
+    if(!Array.isArray(array)) return [];
+    if(!Number.isFinite(n) || n <= 0) return [];
+    return array.slice(-n);
+  }
+
+  // muscleBucketMatcher: function(rawMuscleString) -> boolean. Callers decide
+  // their own bucket-matching rules (e.g. via dtClassifyMuscle from the
+  // History muscle-icon module) rather than this function owning a muscle
+  // taxonomy. This exists specifically so features like weekly-imbalance
+  // nudges never need to read Training Body's internals (locked, and does
+  // not expose this on window) or reimplement muscle-share math themselves.
+  function dtIntelMuscleWeeklyLoad(muscleBucketMatcher, weeksBack){
+    const source = (state?.workouts?.completedExercises) || [];
+    const cutoff = Date.now() - weeksBack*7*24*60*60*1000;
+    const weeks = {};
+
+    source.forEach(x => {
+      if(!x || typeof muscleBucketMatcher !== "function" || !muscleBucketMatcher(x.muscle)) return;
+      const dateStr = x.finalizedAt || x.startedAt;
+      const date = dateStr ? new Date(dateStr) : null;
+      if(!(date instanceof Date) || isNaN(date) || date.getTime() < cutoff) return;
+
+      const ageMs = Date.now() - date.getTime();
+      const weekIndex = Math.floor(ageMs / (7*24*60*60*1000));
+      const sets = Array.isArray(x.sets) ? x.sets.filter(s=>s && Number(s.reps)>0) : [];
+      if(!sets.length) return;
+
+      if(!weeks[weekIndex]) weeks[weekIndex] = {weekIndex, sets:0, volume:0};
+      weeks[weekIndex].sets += sets.length;
+      sets.forEach(s=>{
+        const kg = Number(s.kg);
+        const reps = Number(s.reps);
+        weeks[weekIndex].volume += (Number.isFinite(kg) && kg>0) ? kg*reps : reps;
+      });
+    });
+
+    return Object.values(weeks).sort((a,b)=>a.weekIndex-b.weekIndex);
+  }
+
+  window.dtIntelExerciseHistory=dtIntelExerciseHistory;
+  window.dtIntelTrend=dtIntelTrend;
+  window.dtIntelEffortSeries=dtIntelEffortSeries;
+  window.dtIntelRollingWindow=dtIntelRollingWindow;
+  window.dtIntelMuscleWeeklyLoad=dtIntelMuscleWeeklyLoad;
+  window.DT_INTEL_CORE_VERSION=V;
+})();
+</script>
+
+
+<script id="dt-v26-plateau-js">
+(()=>{
+  "use strict";
+  const V="26.0-plateau";
+
+  /* ---------------------------------------------------------
+     M/ARC V26 Coach Intelligence -- Phase 1: Plateau Detection.
+     Depends on Phase 0 (dtIntelExerciseHistory / dtIntelRollingWindow /
+     dtIntelTrend). Detects whether an exercise's progression has
+     stalled or reversed using a fixed 8-session recent window,
+     never more than one suggestion per exercise.
+
+     Design notes (see module comments for full reasoning):
+     - Weight flat but volume still climbing is real progress, not
+       a plateau -- explicitly checked, not an oversight.
+     - The 8-session window is deliberate hysteresis: a couple of
+       off sessions inside a longer progression will not falsely
+       flag a plateau. A stall has to persist to dominate the window.
+     - Confidence gate requires 7+ sessions in the window (medium
+       tier or better) before flagging anything at all.
+     --------------------------------------------------------- */
+
+  function computePlateauStatusForExercise(exerciseKey, opts={}){
+    const windowSize = opts.windowSize || 8;
+    const history = (window.dtIntelExerciseHistory && window.dtIntelExerciseHistory(exerciseKey)) || [];
+    const recent = (window.dtIntelRollingWindow && window.dtIntelRollingWindow(history, windowSize)) || [];
+
+    const hasWeightData = recent.some(r => r.topWeight !== null);
+    const volumePoints = recent.map(r => ({x: r.date.getTime(), y: r.totalVolume}));
+    const volumeTrend = window.dtIntelTrend ? window.dtIntelTrend(volumePoints) : {direction:"insufficient_data"};
+
+    function gated(trend){
+      return trend.direction !== "insufficient_data" && trend.confidence !== "low" && trend.confidence !== null;
+    }
+
+    if(!hasWeightData){
+      if(!gated(volumeTrend)) return {status:"insufficient_data", basis:null};
+      if(volumeTrend.direction === "flat") return {status:"plateaued", suggestion:"rep_range_shift", basis:"volume"};
+      if(volumeTrend.direction === "down") return {status:"declining", suggestion:"deload", basis:"volume"};
+      return {status:"progressing", basis:"volume"};
+    }
+
+    const weightPoints = recent.filter(r => r.topWeight !== null).map(r => ({x: r.date.getTime(), y: r.topWeight}));
+    const weightTrend = window.dtIntelTrend ? window.dtIntelTrend(weightPoints) : {direction:"insufficient_data"};
+
+    if(!gated(weightTrend)) return {status:"insufficient_data", basis:null};
+    if(weightTrend.direction === "up") return {status:"progressing", basis:"weight"};
+
+    if(weightTrend.direction === "flat"){
+      if(gated(volumeTrend) && volumeTrend.direction === "up") return {status:"progressing", basis:"volume_despite_flat_weight"};
+      return {status:"plateaued", suggestion:"rep_range_shift", basis:"weight_flat"};
+    }
+
+    return {status:"declining", suggestion:"deload", basis:"weight_down"};
+  }
+
+  function dtIntelAllPlateaus(opts={}){
+    const source = (state?.workouts?.completedExercises) || [];
+    const keys = [...new Set(source.map(x=>x?.exerciseKey).filter(Boolean))];
+    const results = {};
+    keys.forEach(key => {
+      const r = computePlateauStatusForExercise(key, opts);
+      if(r.status === "plateaued" || r.status === "declining") results[key] = r;
+    });
+    return results;
+  }
+
+  function mergePlateauStore(existingStore, currentFlags){
+    const now = new Date().toISOString();
+    const next = {};
+    Object.keys(currentFlags).forEach(key => {
+      const existing = existingStore ? existingStore[key] : null;
+      next[key] = {
+        status: currentFlags[key].status,
+        suggestion: currentFlags[key].suggestion,
+        basis: currentFlags[key].basis,
+        detectedAt: (existing && existing.detectedAt) ? existing.detectedAt : now,
+      };
+    });
+    return next;
+  }
+
+  // Explicit, callable refresh -- writes state.intelligence.plateaus and
+  // persists via save(). Not auto-invoked on a timer; whichever later
+  // phase/UI consumes this decides when it's worth recomputing (e.g. once
+  // per Stats page open), so this never runs on every render for a
+  // feature with no visible output yet.
+  function dtIntelRefreshPlateauState(opts={}){
+    if(!state.intelligence) state.intelligence = {};
+    const current = dtIntelAllPlateaus(opts);
+    state.intelligence.plateaus = mergePlateauStore(state.intelligence.plateaus, current);
+    if(typeof save === "function") save();
+    return state.intelligence.plateaus;
+  }
+
+  window.dtIntelPlateauStatus=computePlateauStatusForExercise;
+  window.dtIntelAllPlateaus=dtIntelAllPlateaus;
+  window.dtIntelRefreshPlateauState=dtIntelRefreshPlateauState;
+  window.DT_INTEL_PLATEAU_VERSION=V;
+})();
+</script>
+
+
+<script id="dt-v26-progression-js">
+(()=>{
+  "use strict";
+  const V="26.0-progression";
+
+  /* ---------------------------------------------------------
+     M/ARC V26 Coach Intelligence -- Phase 2: Progression Velocity.
+     Depends on Phase 0 (dtIntelExerciseHistory / dtIntelRollingWindow /
+     dtIntelTrend) and the existing dtFindLibraryEntry (read-only,
+     unmodified). This is entirely additive alongside
+     dtSuggestStartWeight -- that function covers never-logged
+     exercises via library matching; this one covers exercises the
+     user has already logged, using their own personal progression
+     rate for the movement pattern rather than a generic default.
+     Nothing here changes dtSuggestStartWeight's behavior or call sites.
+     --------------------------------------------------------- */
+
+  function medianOf(values){
+    const sorted = [...values].sort((a,b)=>a-b);
+    const mid = Math.floor(sorted.length/2);
+    return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid-1]+sorted[mid])/2;
+  }
+
+  // dtFindLibraryEntry (in the existing V25 smart-coach module) is scoped inside
+  // that module's own IIFE and is not a global -- cannot be called from here.
+  // This is a small, self-contained exact-match lookup instead, using the same
+  // DT_EXERCISE_LIBRARY access pattern that module itself uses (top-level const
+  // in a classic script is shared across script tags, just not attached to
+  // window). Exact match is sufficient for this use case: sample.name is
+  // always the precise name the user already logged under, not free-typed
+  // input, so the fuzzy alias/substring matching dtSuggestStartWeight needs
+  // isn't necessary here.
+  function dtIntelFindLibraryEntryExact(name){
+    try{
+      const lib = window.DT_EXERCISE_LIBRARY || (typeof DT_EXERCISE_LIBRARY !== "undefined" ? DT_EXERCISE_LIBRARY : null);
+      if(!lib) return null;
+      const norm = String(name||"").toLowerCase().trim();
+      if(!norm) return null;
+      return lib.find(x => String(x?.name||"").toLowerCase().trim() === norm) || null;
+    }catch(e){ return null; }
+  }
+
+  function personalVelocityForPattern(movementPattern){
+    const source = (state?.workouts?.completedExercises) || [];
+    const keysSeen = new Set(source.map(x=>x?.exerciseKey).filter(Boolean));
+
+    const rates = [];
+    keysSeen.forEach(key => {
+      const sample = source.find(x=>x.exerciseKey===key);
+      if(!sample) return;
+      const entry = dtIntelFindLibraryEntryExact(sample.name);
+      if(!entry || entry.movementPattern !== movementPattern) return;
+
+      const history = window.dtIntelExerciseHistory ? window.dtIntelExerciseHistory(key) : [];
+      const recent = window.dtIntelRollingWindow ? window.dtIntelRollingWindow(history, 8) : [];
+      const weightPoints = recent.filter(r=>r.topWeight!==null).map(r=>({x:r.date.getTime(), y:r.topWeight}));
+      const trend = window.dtIntelTrend ? window.dtIntelTrend(weightPoints) : {direction:"insufficient_data"};
+      if(trend.direction === "insufficient_data" || trend.confidence === null || trend.confidence === "low") return;
+
+      const confWeight = trend.confidence === "high" ? 3 : 2;
+      rates.push({rate: trend.relativeSlopePerWeek, weight: confWeight});
+    });
+
+    if(!rates.length) return null;
+    const totalWeight = rates.reduce((a,r)=>a+r.weight,0);
+    const weightedAvgRate = rates.reduce((a,r)=>a+r.rate*r.weight,0) / totalWeight;
+    return {rate: weightedAvgRate, sampleCount: rates.length};
+  }
+
+  function dtIntelSuggestNextIncrement(exerciseKey){
+    const history = window.dtIntelExerciseHistory ? window.dtIntelExerciseHistory(exerciseKey) : [];
+    const weightedHistory = history.filter(r => r.topWeight !== null);
+    if(!weightedHistory.length) return {suggestedKg:null, confidence:"none", basis:"no_weighted_history"};
+
+    // Baseline is the median of the last 3 sessions, not just the single most recent one --
+    // a single fluke session (data-entry error, one-off PR) should not anchor the suggestion
+    // at an inflated level.
+    const recentTail = weightedHistory.slice(-3).map(r => r.topWeight);
+    const currentTop = medianOf(recentTail);
+
+    const source = (state?.workouts?.completedExercises) || [];
+    const sample = source.find(x=>x.exerciseKey===exerciseKey);
+    const entry = sample ? dtIntelFindLibraryEntryExact(sample.name) : null;
+    if(!entry || !entry.movementPattern) return {suggestedKg:null, confidence:"none", basis:"no_movement_pattern", currentTop};
+
+    const velocity = personalVelocityForPattern(entry.movementPattern);
+    if(!velocity) return {suggestedKg:null, confidence:"none", basis:"no_personal_data", currentTop, movementPattern: entry.movementPattern};
+
+    if(velocity.rate <= 0){
+      return {suggestedKg:null, confidence:"none", basis:"no_positive_velocity", currentTop, movementPattern: entry.movementPattern};
+    }
+
+    const dampening = 0.5;
+    const suggestedDelta = currentTop * velocity.rate * dampening;
+    const suggestedKg = Math.round((currentTop + suggestedDelta) * 2) / 2;
+
+    if(suggestedKg <= currentTop){
+      return {suggestedKg:null, confidence:"none", basis:"delta_rounds_to_zero", currentTop, movementPattern: entry.movementPattern};
+    }
+
+    const confidence = velocity.sampleCount >= 3 ? "medium" : "low";
+    return {suggestedKg, confidence, basis:"personal_velocity", currentTop, movementPattern: entry.movementPattern, sampleCount: velocity.sampleCount};
+  }
+
+  window.dtIntelSuggestNextIncrement=dtIntelSuggestNextIncrement;
+  window.DT_INTEL_PROGRESSION_VERSION=V;
+})();
+</script>
+
+
+<style id="dt-v26-legacy-ui-enhance-css">
+/* ============================================================
+   M/ARC V26 — LEGACY UI ENHANCEMENT SIDECAR
+   Scope: Health auto-sync presentation + Body Composition layout
+   Additive only. Does not modify V26 intelligence modules.
+   ============================================================ */
+#dtHealthAutoSyncBadge{flex:none;min-width:48px;text-align:center}
+#dtHealthAutoSyncBadge.off{background:#1b1f24;color:#8f9aa4;border-color:#303a43}
+#lastHealthSync{margin-top:4px}
+
+#dtV24StatsHost .dt-bf-card{
+  width:100%;min-width:0;margin:0!important;
+  padding:20px 20px 18px!important;overflow:hidden;
+}
+#dtV24StatsHost .dt-bf-head{min-width:0;margin:0 0 14px!important}
+#dtV24StatsHost .dt-bf-head .label{
+  margin:0 0 5px!important;
+  font:800 10px/1.2 Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif!important;
+  letter-spacing:.14em!important;text-transform:uppercase;color:#8199a5!important;
+}
+#dtV24StatsHost .dt-bf-head h2{
+  margin:0!important;
+  font:850 18px/1.22 Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif!important;
+  letter-spacing:-.25px;color:var(--text);
+}
+#dtV24StatsHost .dt-bf-togglerow,#dtV24StatsHost .dt-bf-inputs{width:100%;min-width:0}
+#dtV24StatsHost .dt-bf-inputs>label{min-width:0}
+#dtV24StatsHost .dt-bf-inputs input{display:block;max-width:100%;min-width:0}
+#dtV24StatsHost .dt-bf-calc-btn{
+  min-height:48px;border-radius:14px;
+  font:850 12px/1 Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+}
+#dtV24StatsHost .dt-bf-note{max-width:100%;overflow-wrap:anywhere}
+@media(max-width:380px){
+  #dtV24StatsHost .dt-bf-card{padding:18px 16px 16px!important}
+  #dtV24StatsHost .dt-bf-inputs{gap:7px}
+}
+</style>
+
+<script id="dt-v26-legacy-ui-enhance-js">
+(()=>{
+  "use strict";
+  const V="26.0-legacy-ui-autosync-bodycomp-v1";
+  const ACTIVE_REFRESH_MS=5*60*1000;
+  const MIN_ATTEMPT_GAP_MS=15000;
+  let inFlight=false,lastAttempt=0,permissionFlowPending=false;
+
+  function healthState(){
+    if(!state.health)state.health={};
+    if(state.health.autoSyncEnabled===undefined)state.health.autoSyncEnabled=true;
+    return state.health;
+  }
+  function saveHealthPreference(){
+    try{save()}catch(e){console.warn("Health auto-sync preference save failed",e)}
+  }
+  function autoRow(){
+    const oldBtn=document.getElementById("syncHealthNow");
+    if(oldBtn)return oldBtn.closest(".health-connect-row");
+    return document.getElementById("dtHealthAutoSyncBadge")?.closest(".health-connect-row")||null;
+  }
+  function updateAutoSyncUI(){
+    const h=healthState(),row=autoRow();if(!row)return;
+    const title=row.querySelector("b");if(title&&title.textContent!=="Auto Sync")title.textContent="Auto Sync";
+    const note=row.querySelector("#lastHealthSync");
+    if(note){
+      const nextText=h.lastSync
+        ?`Last synced ${new Date(h.lastSync).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})}`
+        :(h.autoSyncEnabled?"Syncs automatically when the app opens or resumes":"Automatic syncing is off");
+      if(note.textContent!==nextText)note.textContent=nextText;
+    }
+    const oldBtn=document.getElementById("syncHealthNow");if(oldBtn)oldBtn.remove();
+    let badge=document.getElementById("dtHealthAutoSyncBadge");
+    if(!badge){badge=document.createElement("span");badge.id="dtHealthAutoSyncBadge";badge.className="health-badge";row.appendChild(badge)}
+    const nextBadge=h.autoSyncEnabled?"On":"Off";
+    if(badge.textContent!==nextBadge)badge.textContent=nextBadge;
+    const shouldOff=!h.autoSyncEnabled;
+    if(badge.classList.contains("off")!==shouldOff)badge.classList.toggle("off",shouldOff);
+  }
+  async function triggerAutoSync(reason,{allowDisconnected=false,force=false}={}){
+    const h=healthState();
+    if(!h.autoSyncEnabled)return false;
+    if(document.visibilityState&&document.visibilityState!=="visible")return false;
+    if(!allowDisconnected&&!h.connected)return false;
+    if(typeof window.syncRealHealth!=="function")return false;
+    const now=Date.now();if(inFlight)return false;if(!force&&now-lastAttempt<MIN_ATTEMPT_GAP_MS)return false;
+    lastAttempt=now;inFlight=true;
+    try{await window.syncRealHealth();updateAutoSyncUI();return true}
+    catch(e){console.warn(`Automatic Health Connect sync failed (${reason})`,e);updateAutoSyncUI();return false}
+    finally{inFlight=false}
+  }
+  function wrapHealthControls(){
+    const h=healthState(),connect=document.getElementById("connectTestWatch");
+    if(connect&&!connect.dataset.dtAutoSyncWrapped){
+      const old=connect.onclick;
+      connect.onclick=function(e){
+        h.autoSyncEnabled=true;permissionFlowPending=true;saveHealthPreference();updateAutoSyncUI();
+        const result=typeof old==="function"?old.call(this,e):undefined;
+        setTimeout(()=>triggerAutoSync("permission-return",{allowDisconnected:true,force:true}),1200);
+        return result;
+      };
+      connect.dataset.dtAutoSyncWrapped="1";
+    }
+    const disconnect=document.getElementById("disconnectWatch");
+    if(disconnect&&!disconnect.dataset.dtAutoSyncWrapped){
+      const old=disconnect.onclick;
+      disconnect.onclick=function(e){
+        const result=typeof old==="function"?old.call(this,e):undefined;
+        healthState().autoSyncEnabled=false;permissionFlowPending=false;saveHealthPreference();updateAutoSyncUI();return result;
+      };
+      disconnect.dataset.dtAutoSyncWrapped="1";
+    }
+  }
+  function onVisible(reason){
+    if(document.visibilityState&&document.visibilityState!=="visible")return;
+    wrapHealthControls();updateAutoSyncUI();
+    const allowDisconnected=permissionFlowPending;permissionFlowPending=false;
+    triggerAutoSync(reason,{allowDisconnected,force:allowDisconnected});
+  }
+  function boot(){
+    healthState();wrapHealthControls();updateAutoSyncUI();setTimeout(()=>onVisible("startup"),900);
+    document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")onVisible("resume")});
+    window.addEventListener("pageshow",()=>onVisible("pageshow"));window.addEventListener("focus",()=>onVisible("focus"));
+    setInterval(()=>{if(document.visibilityState==="visible")triggerAutoSync("active-refresh")},ACTIVE_REFRESH_MS);
+  }
+  document.readyState==="loading"?document.addEventListener("DOMContentLoaded",boot):boot();
+  window.dtHealthAutoSyncNow=(force=false)=>triggerAutoSync("external",{allowDisconnected:false,force:!!force});
+  window.DT_LEGACY_UI_ENHANCE_VERSION=V;
+})();
+</script>
+
 </body>
 </html>
