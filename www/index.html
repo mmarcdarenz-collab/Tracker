@@ -1088,7 +1088,7 @@ nav button.active{color:var(--green);background:#10231a}
 </section>
 
 <section id="history" class="view">
-  <h1>History 📅</h1>
+  <h1 class="dt-history-title" aria-label="History"><span class="dt-history-word">History</span><span class="dt-live-calendar" aria-hidden="true"><span class="dt-cal-month">AUG</span><span class="dt-cal-day">21</span></span></h1>
   <div class="subtitle">Your recent consistency</div>
 
   <div class="card history-card">
@@ -11038,10 +11038,13 @@ nav.dt-v10-nav{
       const trainedTime=new Date(date).getTime();
       if(!isFinite(trainedTime))return;
       const hoursSince=(now-trainedTime)/3600000;
-      const totalHours=dtRecoveryBaseHours(effortMult);
+      // Personalized override (V26 Phase 3), read-only, additive: falls back to
+      // the base formula whenever no override exists or Phase 3 hasn't loaded.
+      const override=(typeof window.dtIntelRecoveryOverride==="function")?window.dtIntelRecoveryOverride(mKey):null;
+      const totalHours=(override&&Number.isFinite(override.hours))?override.hours:dtRecoveryBaseHours(effortMult);
       const pct=Math.max(0,Math.min(100,Math.round((hoursSince/totalHours)*100)));
       const hoursLeft=Math.max(0,totalHours-hoursSince);
-      out[mKey]={pct,hoursLeft,recovering:pct<100};
+      out[mKey]={pct,hoursLeft,recovering:pct<100,personalized:!!override,confidence:override?.confidence||null};
     });
     return out;
   }
@@ -11117,6 +11120,7 @@ nav.dt-v10-nav{
   setTimeout(renderRecoveryStrip,2500);
 
   window.dtMuscleRecoveryStatus=dtMuscleRecoveryStatus;
+  window.dtRecoveryBaseHours=dtRecoveryBaseHours;
   window.DT_RECOVERY_VERSION=V;
 })();
 </script>
@@ -13231,7 +13235,7 @@ nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
 </style><script id="dt-v26-imbalance-js">
 (()=>{
   "use strict";
-  const VERSION="26.0-imbalance-v3-render-guard";
+  const VERSION="26.0-imbalance-v4-priority-suppress";
   const WEEKS=3,RATIO_GATE=2,MIN_TOTAL_SETS=12,MIN_ACTIVE_WEEKS=2,MIN_PERSIST_WEEKS=2;
   const GROUPS={
     push:["chest","shoulders","triceps"],
@@ -13320,31 +13324,42 @@ nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
   let lastRenderSignature="";
   function render(){
     const host=document.getElementById("dtV24StatsHost");if(!host)return;
-    const n=compute();let card=document.getElementById("dtIntelImbalanceCard");
+    let card=document.getElementById("dtIntelImbalanceCard");
     /* Checkpoint B: once the prioritization engine exists, Coach owns insight
-       presentation so this standalone nudge cannot duplicate it. */
-    if(typeof window.dtIntelTopInsights==="function"||!n){
+       presentation. Suppress BEFORE compute so hidden legacy presentation does
+       zero Phase-5 intelligence work on unrelated DOM mutations. */
+    if(typeof window.dtIntelTopInsights==="function"){
       if(card)card.remove();
       lastRenderSignature="";
       return;
     }
-    let created=false;
-    if(!card){
+    const n=compute();
+    if(!n){
+      if(card)card.remove();
+      lastRenderSignature="";
+      return;
+    }
+
+    const signature=JSON.stringify([n.ratioLabel,n.title,n.body,n.dominant,n.undertrained,n.persistenceWeeks]);
+    const created=!card;
+    if(created){
       card=document.createElement("section");card.id="dtIntelImbalanceCard";card.className="dt-intel-imbalance-card";
       card.innerHTML='<div class="dt-intel-imbalance-head"><small>TRAINING BALANCE</small><span class="dt-intel-imbalance-ratio"></span></div><b></b><p></p>';
-      created=true;
     }
-    const signature=JSON.stringify([n.ratioLabel,n.title,n.body]);
+
+    /* MutationObserver watches childList changes. Avoid replacing text nodes
+       when the rendered insight is identical to the previous frame. */
     if(created||signature!==lastRenderSignature){
       const ratio=card.querySelector(".dt-intel-imbalance-ratio"),title=card.querySelector("b"),body=card.querySelector("p");
-      if(ratio&&ratio.textContent!==n.ratioLabel)ratio.textContent=n.ratioLabel;
-      if(title&&title.textContent!==n.title)title.textContent=n.title;
-      if(body&&body.textContent!==n.body)body.textContent=n.body;
+      if(ratio.textContent!==n.ratioLabel)ratio.textContent=n.ratioLabel;
+      if(title.textContent!==n.title)title.textContent=n.title;
+      if(body.textContent!==n.body)body.textContent=n.body;
       lastRenderSignature=signature;
     }
+
     const bf=document.getElementById("dtBodyFatCard");
     if(bf&&bf.parentElement===host){
-      if(card.parentElement!==host||card.nextSibling!==bf)host.insertBefore(card,bf);
+      if(card.parentElement!==host||card.nextElementSibling!==bf)host.insertBefore(card,bf);
     }else if(card.parentElement!==host)host.appendChild(card);
   }
   let queued=false;
@@ -13528,7 +13543,7 @@ nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
 </style><script id="dt-v26-coach-card-js">
 (()=>{
   "use strict";
-  const VERSION="26.0-coach-card-v2-render-guard";
+  const VERSION="26.0-coach-card-v3-active-gate";
   const ALLOWED=new Set(["plateau","recovery","readiness","imbalance"]);
   function insights(){
     if(typeof window.dtIntelTopInsights!=="function")return [];
@@ -13539,33 +13554,43 @@ nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
   let lastRenderSignature="";
   function render(){
     const stats=document.getElementById("stats"),host=document.getElementById("dtV24StatsHost");if(!stats||!host)return;
+    /* The intelligence stack can be non-trivial on long histories. Stats owns
+       this presentation, so unrelated mutations in hidden Today/Workout views
+       must not trigger a full Coach evaluation in the background. Opening Stats
+       rebuilds dtV24StatsHost, which produces the childList mutation that causes
+       the first active render. */
+    if(!stats.classList.contains("active"))return;
     const rows=insights();let wrap=document.getElementById("dtCoachInsightsHost");
     if(!rows.length){
       if(wrap)wrap.remove();
       lastRenderSignature="";
       return;
     }
-    let created=false;
-    if(!wrap){wrap=document.createElement("section");wrap.id="dtCoachInsightsHost";created=true}
-    const signature=JSON.stringify(rows.map(x=>[x.category,x.title,x.body]));
+
+    const signature=JSON.stringify(rows.map(x=>[x.category,x.title,x.body,x.exerciseKey||"",x.muscleBucket||""]));
+    const created=!wrap;
+    if(created){wrap=document.createElement("section");wrap.id="dtCoachInsightsHost"}
+
+    /* Rebuild only when the visible Coach payload changes. Repeated observer
+       callbacks with the same 1-2 insights must be DOM no-ops. */
     if(created||signature!==lastRenderSignature){
-      const frag=document.createDocumentFragment();
-      const heading=document.createElement("div");heading.className="dt-coach-heading";heading.textContent="M/ARC COACH";frag.appendChild(heading);
+      wrap.replaceChildren();
+      const heading=document.createElement("div");heading.className="dt-coach-heading";heading.textContent="M/ARC COACH";wrap.appendChild(heading);
       rows.forEach(x=>{
         const card=document.createElement("article");card.className="dt-coach-insight";card.dataset.category=x.category;
         const top=document.createElement("div");top.className="dt-coach-insight-top";
         const cat=document.createElement("span");cat.className="dt-coach-category";cat.textContent=x.category;
         const title=document.createElement("b");title.textContent=x.title;
         const body=document.createElement("p");body.textContent=x.body;
-        top.append(cat);card.append(top,title,body);frag.appendChild(card);
+        top.append(cat);card.append(top,title,body);wrap.appendChild(card);
       });
-      wrap.replaceChildren(frag);
       lastRenderSignature=signature;
     }
+
     const imbalance=document.getElementById("dtIntelImbalanceCard"),bf=document.getElementById("dtBodyFatCard");
     const before=(imbalance&&imbalance.parentElement===host)?imbalance:(bf&&bf.parentElement===host?bf:null);
     if(before){
-      if(wrap.parentElement!==host||wrap.nextSibling!==before)host.insertBefore(wrap,before);
+      if(wrap.parentElement!==host||wrap.nextElementSibling!==before)host.insertBefore(wrap,before);
     }else if(wrap.parentElement!==host)host.appendChild(wrap);
   }
   let queued=false;
@@ -13598,11 +13623,30 @@ window.DT_MARC_MERGED_VERSION="25.7-session-history-stats-stable";
   const DT_EFFORT_MULT = window.DT_EFFORT_MULT || {easy:.90, ideal:1.00, max:1.10};
   const DT_DURATION_EXERCISE_NAMES = new Set(["plank","side plank","farmer's carry","farmers carry","wall sit"]);
 
+  // Duplicate completedExercises records (same id, or -- if no id -- identical
+  // exerciseKey + timestamp + set payload) must never be counted as
+  // independent sessions. This can otherwise let a single real session
+  // satisfy a multi-session confidence gate if duplicate records exist
+  // anywhere upstream (double-save, sync replay, etc.).
+  function dedupKeyFor(record){
+    if(record.id) return `id:${record.id}`;
+    const dateStr = record.finalizedAt || record.startedAt || "";
+    const setsSignature = JSON.stringify((Array.isArray(record.sets)?record.sets:[]).map(s=>[s?.kg,s?.reps,s?.effort]));
+    return `composite:${record.exerciseKey}|${dateStr}|${setsSignature}`;
+  }
+
   function dtIntelExerciseHistory(exerciseKey, opts={}){
     const {sinceDays, limit} = opts;
     const source = (state?.workouts?.completedExercises) || [];
+    const seen = new Set();
     let all = source
-      .filter(x => x && x.exerciseKey === exerciseKey)
+      .filter(x => {
+        if(!x || x.exerciseKey !== exerciseKey) return false;
+        const key = dedupKeyFor(x);
+        if(seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
       .map(x => {
         const dateStr = x.finalizedAt || x.startedAt;
         const date = dateStr ? new Date(dateStr) : null;
@@ -13630,7 +13674,7 @@ window.DT_MARC_MERGED_VERSION="25.7-session-history-stats-stable";
 
         const avgEffort = effortScores.length ? effortScores.reduce((a,b)=>a+b,0)/effortScores.length : null;
 
-        return {date, dateStr, topWeight, totalVolume, avgEffort, effortScore: avgEffort, sets: validSets, isDuration};
+        return {id: x.id, date, dateStr, topWeight, totalVolume, avgEffort, effortScore: avgEffort, sets: validSets, isDuration};
       })
       .filter(r => r.date instanceof Date && !isNaN(r.date))
       .sort((a,b) => a.date - b.date);
@@ -13691,9 +13735,22 @@ window.DT_MARC_MERGED_VERSION="25.7-session-history-stats-stable";
 
   function dtIntelEffortSeries(exerciseKey){
     const history = dtIntelExerciseHistory(exerciseKey);
-    return history
-      .filter(r => r.avgEffort !== null)
-      .map(r => ({x: r.date.getTime(), y: r.avgEffort, dateStr: r.dateStr}));
+    const observations = [];
+    history.forEach((r, sessionIndex) => {
+      (r.sets||[]).forEach((s, setIndex) => {
+        const mult = DT_EFFORT_MULT[s?.effort];
+        if(mult === undefined) return; // invalid/missing effort skipped, not coerced to a guess
+        observations.push({
+          x: r.date.getTime(),
+          y: mult,
+          dateStr: r.dateStr,
+          sessionId: r.id != null ? r.id : `session:${sessionIndex}`,
+          setIndex,
+          effort: s.effort,
+        });
+      });
+    });
+    return observations;
   }
 
   function dtIntelRollingWindow(array, n){
@@ -13929,6 +13986,27 @@ window.DT_MARC_MERGED_VERSION="25.7-session-history-stats-stable";
     const recentTail = weightedHistory.slice(-3).map(r => r.topWeight);
     const currentTop = medianOf(recentTail);
 
+    // Safety gate: a positive pooled rate from OTHER exercises in the same movement
+    // pattern must never override THIS exercise's own negative or flat evidence.
+    // Phase 1 (plateau/decline) owns that signal -- this function only sizes an
+    // increment when the target itself shows positive progression. Uses the same
+    // recent-window convention as Phase 1 (dtIntelRollingWindow before dtIntelTrend),
+    // per Phase 0's documented calling contract.
+    const targetRecent = window.dtIntelRollingWindow ? window.dtIntelRollingWindow(weightedHistory, 8) : weightedHistory.slice(-8);
+    const targetWeightPoints = targetRecent.map(r => ({x: r.date.getTime(), y: r.topWeight}));
+    const targetTrend = window.dtIntelTrend ? window.dtIntelTrend(targetWeightPoints) : {direction:"insufficient_data"};
+
+    if(targetTrend.direction === "insufficient_data"){
+      return {suggestedKg:null, confidence:"none", basis:"insufficient_target_evidence", currentTop};
+    }
+    if(targetTrend.direction === "down"){
+      return {suggestedKg:null, confidence:"none", basis:"target_declining", currentTop, targetTrend: targetTrend.direction};
+    }
+    if(targetTrend.direction === "flat"){
+      return {suggestedKg:null, confidence:"none", basis:"target_plateaued", currentTop, targetTrend: targetTrend.direction};
+    }
+    // Only targetTrend.direction === "up" reaches here.
+
     const source = (state?.workouts?.completedExercises) || [];
     const sample = source.find(x=>x.exerciseKey===exerciseKey);
     const entry = sample ? dtIntelFindLibraryEntryExact(sample.name) : null;
@@ -13957,6 +14035,7 @@ window.DT_MARC_MERGED_VERSION="25.7-session-history-stats-stable";
   window.DT_INTEL_PROGRESSION_VERSION=V;
 })();
 </script>
+
 
 
 <style id="dt-v26-legacy-ui-enhance-css">
@@ -14089,5 +14168,1119 @@ window.DT_MARC_MERGED_VERSION="25.7-session-history-stats-stable";
 })();
 </script>
 
+<style id="dt-v26-history-reorder-css">
+/* ChatGPT-owned legacy UI enhancement: live History calendar + hold/drag activity reorder. */
+#history > h1.dt-history-title{
+  display:flex;align-items:center;gap:10px;min-height:42px;
+}
+#history > h1.dt-history-title .dt-history-word{display:inline-block}
+.dt-live-calendar{
+  --dt-cal-accent:#58dda2;
+  position:relative;display:inline-grid;grid-template-rows:13px 1fr;
+  width:38px;height:40px;flex:0 0 38px;overflow:hidden;
+  border:1px solid rgba(81,130,153,.42);border-radius:11px;
+  background:linear-gradient(180deg,rgba(21,48,61,.92),rgba(8,25,35,.96));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 8px 22px rgba(0,0,0,.18);
+  vertical-align:middle;transform-origin:50% 65%;
+}
+.dt-live-calendar::before,.dt-live-calendar::after{
+  content:"";position:absolute;top:-2px;width:3px;height:7px;border-radius:99px;
+  background:#6d8897;opacity:.9;z-index:2;
+}
+.dt-live-calendar::before{left:10px}.dt-live-calendar::after{right:10px}
+.dt-live-calendar .dt-cal-month{
+  display:grid;place-items:center;height:13px;
+  background:rgba(88,221,162,.10);border-bottom:1px solid rgba(88,221,162,.16);
+  color:#6ee3ae;font:900 6.5px/1 Inter,system-ui,-apple-system,sans-serif;
+  letter-spacing:.11em;text-transform:uppercase;
+}
+.dt-live-calendar .dt-cal-day{
+  display:grid;place-items:center;color:#eff7fa;
+  font:850 17px/1 Inter,system-ui,-apple-system,sans-serif;
+  letter-spacing:-.035em;padding-bottom:1px;
+}
+.dt-live-calendar.dt-cal-animate{animation:dtHistoryCalIn .42s cubic-bezier(.2,.78,.22,1)}
+@keyframes dtHistoryCalIn{
+  0%{opacity:.18;transform:translateY(-5px) scale(.92) rotate(-4deg)}
+  56%{opacity:1;transform:translateY(1px) scale(1.045) rotate(1.1deg)}
+  100%{opacity:1;transform:none}
+}
+@media (prefers-reduced-motion:reduce){.dt-live-calendar.dt-cal-animate{animation:none}}
+
+/* Exercise reorder — visual order only. The exercise's original data identity remains untouched. */
+#workout #wlist > .exercise[data-exkey].dt-reorderable{
+  position:relative;will-change:transform;
+  transition:transform .16s cubic-bezier(.2,.76,.22,1),box-shadow .16s ease,border-color .16s ease,opacity .16s ease;
+}
+#workout #wlist > .exercise[data-exkey].dt-reorder-dragging{
+  z-index:40;transform:translate3d(0,var(--dt-reorder-y,0px),0) scale(1.012);
+  border-color:rgba(88,221,162,.56)!important;
+  box-shadow:0 18px 42px rgba(0,0,0,.34),0 0 0 1px rgba(88,221,162,.08),0 0 26px rgba(88,221,162,.10)!important;
+  opacity:.985;transition:none!important;
+}
+#workout #wlist > .exercise[data-exkey].dt-reorder-dragging::after{
+  content:"MOVE  ↕";position:absolute;left:50%;top:10px;z-index:9;transform:translateX(-50%);
+  min-width:58px;height:22px;padding:0 9px;border-radius:999px;box-sizing:border-box;
+  display:grid;place-items:center;background:rgba(16,56,43,.96);border:1px solid rgba(88,221,162,.48);
+  color:#72e6b0;font:900 7px/1 Inter,system-ui,sans-serif;letter-spacing:.12em;white-space:nowrap;
+  box-shadow:0 5px 16px rgba(0,0,0,.24);pointer-events:none;
+}
+#workout #wlist.dt-reorder-list-active > .exercise[data-exkey]:not(.dt-reorder-dragging){
+  transition:transform .14s cubic-bezier(.2,.76,.22,1),opacity .14s ease;
+}
+#workout #wlist.dt-reorder-list-active{position:relative}
+body.dt-reorder-active{-webkit-user-select:none!important;user-select:none!important;overscroll-behavior-y:contain!important}
+</style>
+
+<script id="dt-v26-history-reorder-js">
+(()=>{
+  "use strict";
+  const V="26.0-history-livecal-reorder-v1.2-bounded";
+
+  /* -------------------- HISTORY LIVE CALENDAR -------------------- */
+  let lastDateSignature="";
+  function ensureLiveHistoryCalendar(animate=false){
+    const h1=document.querySelector("#history > h1");
+    if(!h1)return;
+    if(!h1.classList.contains("dt-history-title")){
+      h1.classList.add("dt-history-title");
+      h1.textContent="";
+      const word=document.createElement("span");word.className="dt-history-word";word.textContent="History";
+      const cal=document.createElement("span");cal.className="dt-live-calendar";cal.setAttribute("aria-hidden","true");
+      cal.innerHTML='<span class="dt-cal-month"></span><span class="dt-cal-day"></span>';
+      h1.append(word,cal);
+    }
+    const now=new Date();
+    const month=now.toLocaleDateString("en-AU",{month:"short"}).toUpperCase();
+    const day=String(now.getDate());
+    const signature=`${now.getFullYear()}-${now.getMonth()+1}-${day}`;
+    const cal=h1.querySelector(".dt-live-calendar");
+    if(!cal)return;
+    if(signature!==lastDateSignature){
+      const m=cal.querySelector(".dt-cal-month"),d=cal.querySelector(".dt-cal-day");
+      if(m&&m.textContent!==month)m.textContent=month;
+      if(d&&d.textContent!==day)d.textContent=day;
+      h1.setAttribute("aria-label",`History, ${now.toLocaleDateString("en-AU",{day:"numeric",month:"long",year:"numeric"})}`);
+      lastDateSignature=signature;
+      animate=true;
+    }
+    if(animate&&document.querySelector("#history.view.active")){
+      cal.classList.remove("dt-cal-animate");
+      void cal.offsetWidth;
+      cal.classList.add("dt-cal-animate");
+    }
+  }
+
+  if(typeof window.renderHistory==="function"&&!window.renderHistory.__dtLiveCalendarWrapped){
+    const baseRenderHistory=window.renderHistory;
+    const wrapped=function(){
+      const r=baseRenderHistory.apply(this,arguments);
+      ensureLiveHistoryCalendar(true);
+      return r;
+    };
+    wrapped.__dtLiveCalendarWrapped=true;
+    window.renderHistory=wrapped;
+  }
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden)ensureLiveHistoryCalendar(false)});
+
+  /* -------------------- EXERCISE VISUAL ORDER -------------------- */
+  function ensureOrderState(){
+    if(!state.workouts)state.workouts={sessions:[],drafts:{}};
+    if(!state.workouts.activityOrder)state.workouts.activityOrder={};
+    return state.workouts.activityOrder;
+  }
+  function dataKeyForExercise(e,index){
+    try{
+      if(e?.[4])return String(e[4]);
+      if(typeof exerciseKey==="function")return String(exerciseKey(e));
+    }catch(_){ }
+    return `${e?.[0]||"Exercise"}|${e?.[1]||""}|${index}`;
+  }
+  function currentProgramKeys(day){
+    try{return (effectiveExercises(day)||[]).map((e,i)=>dataKeyForExercise(e,i));}
+    catch(_){return []}
+  }
+  function normalizeOrder(day){
+    const store=ensureOrderState();
+    const program=currentProgramKeys(day);
+    const valid=new Set(program);
+    const prior=Array.isArray(store[day])?store[day]:[];
+    const next=[];
+    prior.forEach(k=>{if(valid.has(k)&&!next.includes(k))next.push(k)});
+    program.forEach(k=>{if(!next.includes(k))next.push(k)});
+    if(prior.length!==next.length||prior.some((k,i)=>k!==next[i]))store[day]=next;
+    return store[day]||next;
+  }
+  function boxKey(box){return String(box?.dataset?.exerciseKey||box?.dataset?.exkey||"")}
+  function isCardVisible(box){return !!box&&box.style.display!=="none"}
+  function visibleCards(list){
+    return [...list.querySelectorAll(":scope > .exercise[data-exkey]")].filter(isCardVisible);
+  }
+  function renumberVisible(list){
+    let n=0;
+    [...list.querySelectorAll(":scope > .exercise[data-exkey]")].forEach(box=>{
+      if(!isCardVisible(box))return;
+      n++;
+      const badge=box.querySelector(".exnum");
+      if(badge&&badge.textContent!==String(n))badge.textContent=String(n);
+    });
+  }
+  function saveRenderedOrder(day,list){
+    const store=ensureOrderState();
+    const full=normalizeOrder(day).slice();
+    const rendered=[...list.querySelectorAll(":scope > .exercise[data-exkey]")].map(boxKey).filter(Boolean);
+    const renderedSet=new Set(rendered);
+    let ri=0;
+    const next=full.map(k=>renderedSet.has(k)?rendered[ri++]:k);
+    while(ri<rendered.length){if(!next.includes(rendered[ri]))next.push(rendered[ri]);ri++}
+    store[day]=next;
+    try{save()}catch(err){console.warn("Activity order save failed",err)}
+  }
+  function applySavedOrder(){
+    const list=document.getElementById("wlist");
+    if(!list)return;
+    const cards=[...list.querySelectorAll(":scope > .exercise[data-exkey]")];
+    cards.forEach(bindReorder);
+    if(!cards.length)return;
+    const order=normalizeOrder(wday);
+    const byKey=new Map(cards.map(c=>[boxKey(c),c]));
+    const target=order.map(k=>byKey.get(k)).filter(Boolean);
+    cards.forEach(c=>{if(!target.includes(c))target.push(c)});
+    const current=cards.map(boxKey).join("\u001f");
+    const desired=target.map(boxKey).join("\u001f");
+    if(current!==desired)target.forEach(c=>list.appendChild(c));
+    renumberVisible(list);
+  }
+
+  let activeDrag=null;
+  function cancelTimer(g){if(g?.timer){clearTimeout(g.timer);g.timer=0}}
+  function previousVisible(box){
+    let n=box.previousElementSibling;
+    while(n){if(n.matches?.(".exercise[data-exkey]")&&isCardVisible(n))return n;n=n.previousElementSibling}
+    return null;
+  }
+  function nextVisible(box){
+    let n=box.nextElementSibling;
+    while(n){if(n.matches?.(".exercise[data-exkey]")&&isCardVisible(n))return n;n=n.nextElementSibling}
+    return null;
+  }
+  function dragViewport(){
+    const h=Math.max(320,window.innerHeight||document.documentElement.clientHeight||640);
+    /* Keep clear of the app's fixed bottom nav and give the top edge breathing room. */
+    return {top:Math.min(118,Math.max(76,h*.12)),bottom:Math.max(190,h-132)};
+  }
+  function baseRectForDrag(g){
+    const r=g.box.getBoundingClientRect();
+    const dy=Number.isFinite(g.visualDelta)?g.visualDelta:0;
+    return {top:r.top-dy,bottom:r.bottom-dy,height:r.height};
+  }
+  function clampDelta(g,raw){
+    const lr=g.list.getBoundingClientRect();
+    const br=baseRectForDrag(g);
+    const vp=dragViewport();
+
+    /* Hard program bounds: never render outside the actual activity list. */
+    let minTop=lr.top;
+    let maxBottom=lr.bottom;
+
+    /* For long lists, also pin the held card inside the usable viewport while
+       the list scrolls underneath it. Short lists remain purely list-bounded. */
+    if(lr.height>Math.max(br.height+24,vp.bottom-vp.top)){
+      minTop=Math.max(minTop,vp.top);
+      maxBottom=Math.min(maxBottom,vp.bottom);
+    }
+
+    let min=minTop-br.top;
+    let max=maxBottom-br.bottom;
+    if(max<min){
+      /* A very tall/open card can exceed the viewport corridor. Fall back to
+         the list itself rather than forcing an impossible/jumpy clamp. */
+      min=lr.top-br.top;
+      max=lr.bottom-br.bottom;
+    }
+    const value=Math.max(min,Math.min(max,raw));
+    return Number.isFinite(value)?value:0;
+  }
+  function setVisualDelta(g,raw){
+    const value=clampDelta(g,raw);
+    g.visualDelta=value;
+    g.box.style.setProperty("--dt-reorder-y",`${value}px`);
+    return value;
+  }
+  function startDrag(g,y){
+    if(activeDrag||!g?.box?.isConnected)return;
+    cancelTimer(g);
+    /* One card has nowhere to move. Two cards are fully supported. */
+    if(visibleCards(g.list).length<2)return;
+    g.active=true;g.startY=y;g.lastY=y;g.visualDelta=0;g.suppressUntil=Date.now()+900;activeDrag=g;
+    g.box.classList.add("dt-reorder-dragging");
+    g.list.classList.add("dt-reorder-list-active");
+    document.body.classList.add("dt-reorder-active");
+    g.box.setAttribute("aria-grabbed","true");
+    setVisualDelta(g,0);
+    try{navigator.vibrate?.(18)}catch(_){ }
+    startAutoScroll(g);
+  }
+  function updateDrag(g,y){
+    if(!g?.active||!g.box.isConnected||!g.list.isConnected)return;
+    g.lastY=y;
+    setVisualDelta(g,y-g.startY);
+    let guard=0,moved=true;
+    while(moved&&guard++<24){
+      moved=false;
+      const rect=g.box.getBoundingClientRect();
+      /* Reorder by the user's finger/pointer crossing sibling midpoints.
+         The card itself may be clamped at a boundary while the intent continues. */
+      const probeY=y;
+      const prev=previousVisible(g.box);
+      if(prev){
+        const pr=prev.getBoundingClientRect();
+        if(probeY<pr.top+pr.height/2){
+          const beforeTop=rect.top;
+          g.list.insertBefore(g.box,prev);
+          const afterTop=g.box.getBoundingClientRect().top;
+          g.startY+=afterTop-beforeTop;
+          setVisualDelta(g,y-g.startY);
+          moved=true;continue;
+        }
+      }
+      const next=nextVisible(g.box);
+      if(next){
+        const nr=next.getBoundingClientRect();
+        if(probeY>nr.top+nr.height/2){
+          const beforeTop=rect.top;
+          g.list.insertBefore(g.box,next.nextElementSibling);
+          const afterTop=g.box.getBoundingClientRect().top;
+          g.startY+=afterTop-beforeTop;
+          setVisualDelta(g,y-g.startY);
+          moved=true;
+        }
+      }
+    }
+    /* A final clamp is essential when the item is already first/last and the
+       user keeps pulling beyond the list. */
+    setVisualDelta(g,y-g.startY);
+    renumberVisible(g.list);
+  }
+  function startAutoScroll(g){
+    cancelAnimationFrame(g.scrollRaf||0);
+    const tick=()=>{
+      if(!g.active||!g.box.isConnected||!g.list.isConnected)return;
+      const y=g.lastY;
+      const vp=dragViewport();
+      const lr=g.list.getBoundingClientRect();
+      let amount=0;
+
+      if(y<vp.top&&lr.top<vp.top-1){
+        const desired=-Math.min(14,Math.max(3,(vp.top-y)*.16));
+        amount=-Math.min(Math.abs(desired),Math.max(0,vp.top-lr.top));
+      }else if(y>vp.bottom&&lr.bottom>vp.bottom+1){
+        const desired=Math.min(14,Math.max(3,(y-vp.bottom)*.16));
+        amount=Math.min(desired,Math.max(0,lr.bottom-vp.bottom));
+      }
+
+      if(Math.abs(amount)>.01){
+        const before=window.scrollY;
+        window.scrollBy(0,amount);
+        const actual=window.scrollY-before;
+        if(actual){
+          /* Keep the held card visually anchored while document content scrolls. */
+          g.startY-=actual;
+          updateDrag(g,g.lastY);
+        }
+      }
+      g.scrollRaf=requestAnimationFrame(tick);
+    };
+    g.scrollRaf=requestAnimationFrame(tick);
+  }
+  function finishDrag(g){
+    if(!g)return;
+    cancelTimer(g);
+    cancelAnimationFrame(g.scrollRaf||0);
+    if(g.active){
+      g.active=false;
+      saveRenderedOrder(wday,g.list);
+      g.box.classList.remove("dt-reorder-dragging");
+      g.list.classList.remove("dt-reorder-list-active");
+      document.body.classList.remove("dt-reorder-active");
+      g.box.setAttribute("aria-grabbed","false");
+      g.box.style.removeProperty("--dt-reorder-y");
+      g.visualDelta=0;
+      renumberVisible(g.list);
+      activeDrag=null;
+      g.suppressUntil=Date.now()+520;
+    }
+  }
+  function bindReorder(box){
+    if(!box||box.dataset.dtReorderBound==="1")return;
+    box.dataset.dtReorderBound="1";box.classList.add("dt-reorderable");box.setAttribute("aria-grabbed","false");
+    const list=box.parentElement;
+    let touchGesture=null,mouseGesture=null;
+    const blockedTarget=t=>!!t.closest?.(".exercise-menu-btn,.exercise-chevron,.effort,.loginput,.addset,.exercise-done-btn");
+    box.addEventListener("click",e=>{
+      const g=touchGesture||mouseGesture;
+      if((g&&Date.now()<g.suppressUntil)||(box.dataset.dtReorderSuppressUntil&&Date.now()<+box.dataset.dtReorderSuppressUntil)){
+        e.preventDefault();e.stopImmediatePropagation();
+      }
+    },true);
+
+    box.addEventListener("touchstart",e=>{
+      if(e.touches.length!==1||blockedTarget(e.target)||!e.target.closest?.(".exercise-head"))return;
+      const t=e.touches[0];
+      const g={box,list,touchId:t.identifier,startX:t.clientX,startY:t.clientY,lastY:t.clientY,active:false,timer:0,scrollRaf:0,suppressUntil:0,visualDelta:0};
+      touchGesture=g;
+      g.timer=setTimeout(()=>startDrag(g,g.lastY),390);
+    },{passive:true});
+    box.addEventListener("touchmove",e=>{
+      const g=touchGesture;if(!g)return;
+      const t=[...e.touches].find(x=>x.identifier===g.touchId);if(!t)return;
+      g.lastY=t.clientY;
+      if(!g.active){
+        if(Math.hypot(t.clientX-g.startX,t.clientY-g.startY)>10){cancelTimer(g);touchGesture=null}
+        return;
+      }
+      if(e.cancelable)e.preventDefault();
+      updateDrag(g,t.clientY);
+    },{passive:false});
+    const touchEnd=e=>{
+      const g=touchGesture;if(!g)return;
+      if(e?.changedTouches?.length&&![...e.changedTouches].some(x=>x.identifier===g.touchId))return;
+      finishDrag(g);
+      if(g.suppressUntil)box.dataset.dtReorderSuppressUntil=String(g.suppressUntil);
+      touchGesture=null;
+    };
+    box.addEventListener("touchend",touchEnd,{passive:true});
+    box.addEventListener("touchcancel",touchEnd,{passive:true});
+
+    box.addEventListener("pointerdown",e=>{
+      if(e.pointerType!=="mouse"||e.button!==0||blockedTarget(e.target)||!e.target.closest?.(".exercise-head"))return;
+      const g={box,list,pid:e.pointerId,startX:e.clientX,startY:e.clientY,lastY:e.clientY,active:false,timer:0,scrollRaf:0,suppressUntil:0,visualDelta:0};
+      mouseGesture=g;g.timer=setTimeout(()=>startDrag(g,g.lastY),330);
+    });
+    box.addEventListener("pointermove",e=>{
+      const g=mouseGesture;if(!g||e.pointerId!==g.pid)return;
+      g.lastY=e.clientY;
+      if(!g.active){if(Math.hypot(e.clientX-g.startX,e.clientY-g.startY)>7){cancelTimer(g);mouseGesture=null}return}
+      e.preventDefault();updateDrag(g,e.clientY);
+    });
+    const mouseEnd=e=>{
+      const g=mouseGesture;if(!g||e.pointerId!==g.pid)return;
+      finishDrag(g);
+      if(g.suppressUntil)box.dataset.dtReorderSuppressUntil=String(g.suppressUntil);
+      mouseGesture=null;
+    };
+    box.addEventListener("pointerup",mouseEnd);box.addEventListener("pointercancel",mouseEnd);
+  }
+
+  if(typeof window.renderWorkout==="function"&&!window.renderWorkout.__dtReorderWrapped){
+    const baseRenderWorkout=window.renderWorkout;
+    const wrapped=function(){
+      const r=baseRenderWorkout.apply(this,arguments);
+      requestAnimationFrame(applySavedOrder);
+      return r;
+    };
+    wrapped.__dtReorderWrapped=true;
+    window.renderWorkout=wrapped;
+  }
+
+  const boot=()=>{
+    ensureLiveHistoryCalendar(false);
+    applySavedOrder();
+  };
+  document.readyState==="loading"?document.addEventListener("DOMContentLoaded",boot,{once:true}):boot();
+  setTimeout(boot,180);
+  window.dtApplyExerciseOrder=applySavedOrder;
+  window.DT_HISTORY_REORDER_VERSION=V;
+})();
+</script>
+
+<script id="dt-v26-recovery-cal-js">
+(()=>{
+  "use strict";
+  const V="26.0-recovery-cal-v2-session-aggregate";
+
+  /* ---------------------------------------------------------
+     M/ARC V26 Coach Intelligence -- Phase 3: Recovery Calibration.
+     Learns, per muscle (using the same dtInferMeta vocabulary the
+     existing Recovery Strip already keys on), whether retraining
+     early actually correlates with degraded performance for this
+     specific user. Purely on-demand -- no persisted state, since
+     everything here is cheaply recomputable from completedExercises
+     and there's no "since when" memory need the way Phase 1 has.
+
+     Deliberate safety choice: this module NEVER suggests less rest
+     than the base formula, even when evidence would technically
+     support it. Recommending less rest carries real overtraining/
+     injury risk; recommending more rest does not, so the asymmetry
+     is intentional. It only ever widens the window, and only when
+     there is clear, well-sampled evidence of degraded performance.
+     --------------------------------------------------------- */
+
+  function dedupKeyFor(record){
+    if(record.id) return `id:${record.id}`;
+    const dateStr = record.finalizedAt || record.startedAt || "";
+    const setsSignature = JSON.stringify((Array.isArray(record.sets)?record.sets:[]).map(s=>[s?.kg,s?.reps,s?.effort]));
+    return `composite:${record.exerciseKey}|${dateStr}|${setsSignature}`;
+  }
+
+  function buildMuscleTrainingInstances(){
+    const inferMeta = window.dtInferMeta;
+    const effortMultTable = window.DT_EFFORT_MULT || {easy:.9, ideal:1, max:1.1};
+    const roleWeights = window.DT_ROLE_WEIGHTS || {primary:1, secondary:.55, stabilizer:.25};
+    const source = (state?.workouts?.completedExercises) || [];
+    const seen = new Set();
+
+    // One completedExercises record is one EXERCISE, not one workout session.
+    // Several exercises can train the same muscle in the same workout, so treating
+    // every record as a separate recovery event creates false 0-30 minute
+    // "retraining" gaps. Aggregate by the app's existing session convention:
+    // local dayKey + workout day/split. This matches other V26 session counting.
+    const byMuscleSession = {};
+
+    source.forEach(rec => {
+      if(!rec) return;
+      const key = dedupKeyFor(rec);
+      if(seen.has(key)) return;
+      seen.add(key);
+
+      const meta = (typeof inferMeta === "function") ? inferMeta(rec.name, rec.muscle) : null;
+      if(!meta) return;
+      const dateStr = rec.finalizedAt || rec.startedAt || rec.dayKey;
+      const date = dateStr ? new Date(dateStr) : null;
+      if(!date || isNaN(date)) return;
+
+      const sets = (rec.sets||[]).filter(s => (+s.reps||0) > 0);
+      if(!sets.length) return;
+
+      let volume = 0;
+      const effortScores = [];
+      sets.forEach(s => {
+        const kg = Number(s.kg), reps = Number(s.reps);
+        volume += (Number.isFinite(kg) && kg>0) ? kg*reps : reps;
+        const mult = effortMultTable[s.effort];
+        if(mult !== undefined) effortScores.push(mult);
+      });
+      const avgEffort = effortScores.length ? effortScores.reduce((a,b)=>a+b,0)/effortScores.length : 1;
+
+      const localDay = String(rec.dayKey || date.toISOString().slice(0,10)).slice(0,10);
+      const workoutDay = String(rec.day || "");
+      const sessionKey = `${localDay}|${workoutDay}`;
+
+      const roles = {primary: meta.primaryMuscles||[], secondary: meta.secondaryMuscles||[], stabilizer: meta.stabilizerMuscles||[]};
+      Object.entries(roles).forEach(([role, muscles]) => {
+        (muscles||[]).forEach(mKey => {
+          if(!byMuscleSession[mKey]) byMuscleSession[mKey] = new Map();
+          const sessions = byMuscleSession[mKey];
+          if(!sessions.has(sessionKey)){
+            sessions.set(sessionKey,{
+              date,
+              volume:0,
+              effortWeighted:0,
+              effortWeight:0,
+            });
+          }
+          const agg = sessions.get(sessionKey);
+          if(date > agg.date) agg.date = date; // use session's latest completion as its timestamp
+          const roleWeight = roleWeights[role] || 0.5;
+          agg.volume += volume * roleWeight;
+          const effortWeight = Math.max(1, sets.length) * roleWeight;
+          agg.effortWeighted += avgEffort * effortWeight;
+          agg.effortWeight += effortWeight;
+        });
+      });
+    });
+
+    const byMuscle = {};
+    Object.entries(byMuscleSession).forEach(([mKey, sessions]) => {
+      byMuscle[mKey] = [...sessions.values()]
+        .map(s => ({
+          date:s.date,
+          volume:s.volume,
+          effortMult:s.effortWeight>0 ? s.effortWeighted/s.effortWeight : 1,
+        }))
+        .sort((a,b)=>a.date-b.date);
+    });
+    return byMuscle;
+  }
+
+  // dtRecoveryBaseHours lives inside dt-v25-recovery-js's own IIFE and is not
+  // a global by default -- exported via window.dtRecoveryBaseHours as part of
+  // this phase's small integration edit to that module (see below). Falls
+  // back to a local copy of the same tiny formula if that module hasn't
+  // loaded yet, so this never silently no-ops on load-order timing.
+  function baseHoursFallback(effortMult){
+    const t = Math.max(0, Math.min(1, (effortMult-0.9)/0.2));
+    return 24 + t*48;
+  }
+  function recoveryBaseHours(effortMult){
+    return (typeof window.dtRecoveryBaseHours === "function")
+      ? window.dtRecoveryBaseHours(effortMult)
+      : baseHoursFallback(effortMult);
+  }
+
+  function computeOverride(instances, opts={}){
+    const minSamplesPerGroup = opts.minSamplesPerGroup || 5;
+    const degradeThreshold = opts.degradeThreshold || 0.88;
+    const maxWidenMultiplier = opts.maxWidenMultiplier || 1.5;
+    const rollingWindow = opts.rollingWindow || 5;
+
+    if(!instances || instances.length < minSamplesPerGroup*2 + 1) return null;
+
+    const classified = [];
+    for(let i=1;i<instances.length;i++){
+      const prev = instances[i-1], curr = instances[i];
+      const hoursSince = (curr.date - prev.date) / 3600000;
+      if(!Number.isFinite(hoursSince) || hoursSince < 0) continue;
+      const baseHours = recoveryBaseHours(prev.effortMult);
+      const isShortRest = hoursSince < baseHours;
+
+      const priorWindow = instances.slice(Math.max(0,i-rollingWindow), i);
+      const baselineVolume = priorWindow.length ? priorWindow.reduce((a,x)=>a+x.volume,0)/priorWindow.length : null;
+      if(!baselineVolume || baselineVolume <= 0) continue;
+
+      classified.push({isShortRest, relativePerformance: curr.volume / baselineVolume});
+    }
+
+    const shortRest = classified.filter(x=>x.isShortRest).map(x=>x.relativePerformance);
+    const fullRest = classified.filter(x=>!x.isShortRest).map(x=>x.relativePerformance);
+    if(shortRest.length < minSamplesPerGroup || fullRest.length < minSamplesPerGroup) return null;
+
+    const avg = arr => arr.reduce((a,b)=>a+b,0)/arr.length;
+    const shortAvg = avg(shortRest), fullAvg = avg(fullRest);
+    if(fullAvg <= 0) return null;
+    const ratio = shortAvg / fullAvg;
+
+    if(ratio >= degradeThreshold) return null; // no meaningful degradation -- defer to base formula
+
+    const deficitSeverity = Math.min(1, (degradeThreshold - ratio) / degradeThreshold);
+    const widenFactor = 1 + deficitSeverity * (maxWidenMultiplier - 1);
+    const confidence = (shortRest.length>=10 && fullRest.length>=10) ? "high"
+      : (shortRest.length>=7 && fullRest.length>=7) ? "medium" : "low";
+
+    return {widenFactor, sampleSize:{shortRest: shortRest.length, fullRest: fullRest.length}, confidence, ratio};
+  }
+
+  function dtIntelRecoveryOverride(muscleKey, opts={}){
+    try{
+      const instances = buildMuscleTrainingInstances()[muscleKey] || [];
+      if(!instances.length) return null;
+      const override = computeOverride(instances, opts);
+      if(!override) return null;
+      const lastInstance = instances[instances.length-1];
+      const baseHours = recoveryBaseHours(lastInstance.effortMult);
+      const hours = Math.round(baseHours * override.widenFactor);
+      return {hours, confidence: override.confidence, sampleSize: override.sampleSize};
+    }catch(e){ return null; }
+  }
+
+  window.dtIntelRecoveryOverride=dtIntelRecoveryOverride;
+  window.DT_INTEL_RECOVERY_CAL_VERSION=V;
+})();
+</script>
+
+
+
+<script id="dt-v26-effort-drift-js">
+(()=>{
+  "use strict";
+  const V="26.0-effort-drift-v1.1-evidence-balance";
+
+  /* ---------------------------------------------------------
+     M/ARC V26 Coach Intelligence -- Phase 4: Effort Drift.
+
+     Read-only consumer of Phase 0 dtIntelEffortSeries(). The Phase 0
+     contract is intentionally set-level: one observation per valid set.
+     This module keeps every valid set as an observation for the primary
+     distribution-drift calculation.
+
+     Confidence is calibrated separately against SESSION-LEVEL evidence
+     balance. This prevents one unusually long session from becoming more
+     "confident" merely because it contributed many more sets than the
+     surrounding sessions.
+
+     Output is an internal coaching signal for Phase 7a. It does not render
+     UI and does not write state.
+     --------------------------------------------------------- */
+
+  const VALID_EFFORTS=new Set(["easy","ideal","max"]);
+
+  function mean(arr){
+    return arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:null;
+  }
+
+  function distribution(points){
+    const counts={easy:0,ideal:0,max:0};
+    points.forEach(p=>{if(VALID_EFFORTS.has(p.effort))counts[p.effort]++});
+    const n=points.length||1;
+    return {
+      easy:counts.easy/n,
+      ideal:counts.ideal/n,
+      max:counts.max/n,
+      counts,
+      total:points.length,
+    };
+  }
+
+  function sanitizeSeries(raw){
+    return (Array.isArray(raw)?raw:[])
+      .filter(p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&VALID_EFFORTS.has(p.effort))
+      .map((p,i)=>({
+        x:Number(p.x),
+        y:Number(p.y),
+        dateStr:p.dateStr||null,
+        sessionId:p.sessionId!=null?String(p.sessionId):`session:${i}`,
+        setIndex:Number.isFinite(Number(p.setIndex))?Number(p.setIndex):i,
+        effort:p.effort,
+      }))
+      .sort((a,b)=>a.x-b.x||a.setIndex-b.setIndex);
+  }
+
+  function groupSessions(points){
+    const map=new Map();
+    points.forEach(p=>{
+      const key=p.sessionId;
+      if(!map.has(key))map.set(key,{sessionId:key,x:p.x,dateStr:p.dateStr,points:[]});
+      const s=map.get(key);
+      s.x=Math.min(s.x,p.x);
+      if(!s.dateStr&&p.dateStr)s.dateStr=p.dateStr;
+      s.points.push(p);
+    });
+    return [...map.values()].sort((a,b)=>a.x-b.x);
+  }
+
+  function sessionMean(session){
+    return mean((session?.points||[]).map(p=>p.y));
+  }
+
+  function evidenceBalance(sessions){
+    const counts=sessions.map(s=>(s.points||[]).length);
+    const total=counts.reduce((a,b)=>a+b,0);
+    if(!counts.length||!total){
+      return {maxSessionShare:null,effectiveSessions:0,totalSets:total};
+    }
+    const shares=counts.map(n=>n/total);
+    const sumSq=shares.reduce((a,s)=>a+s*s,0);
+    return {
+      maxSessionShare:Math.max(...shares),
+      effectiveSessions:sumSq>0?1/sumSq:0,
+      totalSets:total,
+    };
+  }
+
+  function directionalSupport(sessions,baseline,status,threshold){
+    const deltas=sessions.map(s=>sessionMean(s)-baseline);
+    let supporting=0;
+    deltas.forEach(delta=>{
+      if(status==="harder"&&delta>=threshold)supporting++;
+      else if(status==="easier"&&delta<=-threshold)supporting++;
+      else if(status==="stable"&&Math.abs(delta)<threshold)supporting++;
+    });
+    return {
+      supportingSessions:supporting,
+      totalSessions:sessions.length,
+      ratio:sessions.length?supporting/sessions.length:0,
+    };
+  }
+
+  function capConfidence(confidence,cap){
+    const rank={low:0,medium:1,high:2};
+    return rank[confidence]<=rank[cap]?confidence:cap;
+  }
+
+  function insufficient(recentPoints,recentSessions){
+    return {
+      status:"insufficient_data",
+      direction:"insufficient_data",
+      confidence:null,
+      basis:null,
+      dataPoints:recentPoints.length,
+      sessions:recentSessions.length,
+      delta:null,
+      priorMean:null,
+      recentMean:null,
+      priorDistribution:null,
+      recentDistribution:null,
+      windowSessions:recentSessions.length,
+      evidenceBalance:null,
+    };
+  }
+
+  function dtIntelEffortDrift(exerciseKey,opts={}){
+    const raw=typeof window.dtIntelEffortSeries==="function"?window.dtIntelEffortSeries(exerciseKey):[];
+    const points=sanitizeSeries(raw);
+    const sessions=groupSessions(points);
+
+    const sessionWindow=Number.isFinite(opts.sessionWindow)?Math.max(4,Math.floor(opts.sessionWindow)):6;
+    const minSessions=Number.isFinite(opts.minSessions)?Math.max(4,Math.floor(opts.minSessions)):4;
+    const minSets=Number.isFinite(opts.minSets)?Math.max(8,Math.floor(opts.minSets)):8;
+    const threshold=Number.isFinite(opts.threshold)?Math.max(0,opts.threshold):0.025;
+
+    const recentSessions=sessions.slice(-sessionWindow);
+    const recentPoints=recentSessions.flatMap(s=>s.points);
+
+    if(recentSessions.length<minSessions||recentPoints.length<minSets){
+      return insufficient(recentPoints,recentSessions);
+    }
+
+    // Split by SESSION boundaries so one session never appears in both periods,
+    // while retaining every valid set as an independent observation inside its
+    // period. Mixed easy/ideal/max sets stay visible to the primary calculation.
+    const split=Math.floor(recentSessions.length/2);
+    const priorSessions=recentSessions.slice(0,split);
+    const newerSessions=recentSessions.slice(split);
+    const prior=priorSessions.flatMap(s=>s.points);
+    const newer=newerSessions.flatMap(s=>s.points);
+
+    if(priorSessions.length<2||newerSessions.length<2||prior.length<3||newer.length<3){
+      return insufficient(recentPoints,recentSessions);
+    }
+
+    const priorMean=mean(prior.map(p=>p.y));
+    const recentMean=mean(newer.map(p=>p.y));
+    const delta=recentMean-priorMean;
+    const priorDistribution=distribution(prior);
+    const recentDistribution=distribution(newer);
+
+    let status="stable",direction="flat";
+    if(delta>=threshold){status="harder";direction="up"}
+    else if(delta<=-threshold){status="easier";direction="down"}
+
+    // Base confidence still reflects the amount of longitudinal evidence.
+    let confidence="medium";
+    if(recentSessions.length>=6&&recentPoints.length>=18)confidence="high";
+    else if(recentSessions.length<5||recentPoints.length<10)confidence="low";
+
+    // Evidence-balance calibration: set weighting remains the PRIMARY signal,
+    // but confidence must not increase merely because one session contains an
+    // unusually large share of the sets. Session means are used only to audit
+    // concentration/consistency, not to replace the set-level drift estimate.
+    const priorBalance=evidenceBalance(priorSessions);
+    const recentBalance=evidenceBalance(newerSessions);
+    const support=directionalSupport(newerSessions,priorMean,status,threshold);
+    const maxSessionShare=Math.max(priorBalance.maxSessionShare||0,recentBalance.maxSessionShare||0);
+    const effectiveFloor=Math.min(priorBalance.effectiveSessions,recentBalance.effectiveSessions);
+
+    if(maxSessionShare>0.65||effectiveFloor<1.60||support.ratio<0.50){
+      confidence=capConfidence(confidence,"low");
+    }else if(maxSessionShare>0.50||effectiveFloor<1.90||support.ratio<(2/3)){
+      confidence=capConfidence(confidence,"medium");
+    }
+
+    return {
+      status,
+      direction,
+      confidence,
+      basis:"set_effort_distribution",
+      dataPoints:recentPoints.length,
+      sessions:recentSessions.length,
+      delta,
+      priorMean,
+      recentMean,
+      priorDistribution,
+      recentDistribution,
+      windowSessions:recentSessions.length,
+      priorSessionCount:priorSessions.length,
+      recentSessionCount:newerSessions.length,
+      threshold,
+      evidenceBalance:{
+        priorMaxSessionShare:priorBalance.maxSessionShare,
+        recentMaxSessionShare:recentBalance.maxSessionShare,
+        priorEffectiveSessions:priorBalance.effectiveSessions,
+        recentEffectiveSessions:recentBalance.effectiveSessions,
+        maxSessionShare,
+        directionalSupport:support.ratio,
+        supportingRecentSessions:support.supportingSessions,
+        totalRecentSessions:support.totalSessions,
+      },
+    };
+  }
+
+  window.dtIntelEffortDrift=dtIntelEffortDrift;
+  window.DT_EFFORT_DRIFT_VERSION=V;
+})();
+</script>
+
+<script id="dt-v26-coach-insights-js">
+(()=>{
+  "use strict";
+  const V="26.0-coach-insights-v1.2-current-recovery";
+
+  /* ---------------------------------------------------------
+     M/ARC V26 Coach Intelligence -- Phase 7a: Insight Prioritization.
+
+     v1.2 integration hardening:
+     - keeps Claude's priority model and public API;
+     - resolves user-visible target labels so Coach advice is actionable;
+     - surfaces personalized recovery only when the existing Recovery Strip says
+       that muscle is CURRENTLY still recovering;
+     - resolves recovery-vs-exercise conflicts across the app's two target
+       vocabularies (fine-grained muscle vs exercise key);
+     - computes Phase-4 effort drift once per exercise per evaluation instead
+       of twice;
+     - reads state defensively without writing to it.
+     --------------------------------------------------------- */
+
+  const CATEGORY_BASE_PRIORITY={
+    recovery:400,
+    decline:320,
+    plateau:300,
+    imbalance:200,
+    readiness:100,
+  };
+
+  function safeCall(fn,...args){
+    if(typeof fn!=="function")return null;
+    try{return fn(...args)}catch(_){return null}
+  }
+
+  function completedRecords(){
+    try{
+      const root=(typeof state!=="undefined")?state:window.state;
+      const rows=root?.workouts?.completedExercises;
+      return Array.isArray(rows)?rows:[];
+    }catch(_){return []}
+  }
+
+  function cleanText(value,fallback=""){
+    const s=String(value??"").replace(/\s+/g," ").trim();
+    return s||fallback;
+  }
+
+  function fallbackExerciseLabel(exerciseKey){
+    const raw=cleanText(exerciseKey,"Exercise");
+    const first=raw.split("|")[0]||raw;
+    if(first.startsWith("custom:"))return "Custom exercise";
+    return first.replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase());
+  }
+
+  function muscleLabel(muscleKey){
+    const fromApp=safeCall(window.dtSummaryLabel,muscleKey);
+    if(typeof fromApp==="string"&&fromApp.trim())return fromApp.trim();
+    return cleanText(muscleKey,"Muscle group").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase());
+  }
+
+  function inferMetaForRecord(rec){
+    const meta=safeCall(window.dtInferMeta,rec?.name,rec?.muscle);
+    if(!meta||typeof meta!=="object")return {primaryMuscles:[],secondaryMuscles:[],stabilizerMuscles:[]};
+    const clean=arr=>Array.isArray(arr)?[...new Set(arr.map(x=>cleanText(x)).filter(Boolean))]:[];
+    return {
+      primaryMuscles:clean(meta.primaryMuscles),
+      secondaryMuscles:clean(meta.secondaryMuscles),
+      stabilizerMuscles:clean(meta.stabilizerMuscles),
+    };
+  }
+
+  function buildContext(){
+    const records=completedRecords();
+    const latestByExercise=new Map();
+    const latestMetaByExercise=new Map();
+    const exerciseKeys=[];
+    const seenExercise=new Set();
+
+    records.forEach(rec=>{
+      if(!rec)return;
+      const key=cleanText(rec.exerciseKey);
+      const meta=inferMetaForRecord(rec);
+      if(key){
+        latestByExercise.set(key,rec);
+        latestMetaByExercise.set(key,meta);
+        if(!seenExercise.has(key)){seenExercise.add(key);exerciseKeys.push(key)}
+      }
+    });
+
+    const primaryMusclesByExercise=new Map();
+    const exerciseLabels=new Map();
+    exerciseKeys.forEach(key=>{
+      const rec=latestByExercise.get(key);
+      const meta=latestMetaByExercise.get(key)||{primaryMuscles:[]};
+      primaryMusclesByExercise.set(key,meta.primaryMuscles||[]);
+      exerciseLabels.set(key,cleanText(rec?.name,fallbackExerciseLabel(key)));
+    });
+
+    /* Phase 4 can be moderately expensive because it consumes historical
+       set-level data. Evaluate it once per exercise and reuse the result for
+       both standalone readiness qualification and medium-confidence
+       corroboration. */
+    const driftByExercise=new Map();
+    exerciseKeys.forEach(key=>driftByExercise.set(key,safeCall(window.dtIntelEffortDrift,key)));
+
+    const recoveryStatus=safeCall(window.dtMuscleRecoveryStatus);
+
+    return {
+      records,
+      exerciseKeys,
+      latestByExercise,
+      primaryMusclesByExercise,
+      exerciseLabels,
+      driftByExercise,
+      recoveryStatus:(recoveryStatus&&typeof recoveryStatus==="object")?recoveryStatus:{},
+    };
+  }
+
+  function exerciseLabel(ctx,exerciseKey){
+    return ctx.exerciseLabels.get(exerciseKey)||fallbackExerciseLabel(exerciseKey);
+  }
+
+  function collectPlateauCandidates(ctx){
+    const all=safeCall(window.dtIntelAllPlateaus);
+    if(!all||typeof all!=="object")return [];
+    const candidates=[];
+    Object.keys(all).sort().forEach(exerciseKey=>{
+      const p=all[exerciseKey];
+      if(!p||(p.status!=="plateaued"&&p.status!=="declining"))return;
+      const isDecline=p.status==="declining";
+      const label=exerciseLabel(ctx,exerciseKey);
+      candidates.push({
+        target:`exercise:${exerciseKey}`,
+        category:"plateau",
+        basePriority:isDecline?CATEGORY_BASE_PRIORITY.decline:CATEGORY_BASE_PRIORITY.plateau,
+        severity:isDecline?2:1,
+        title:isDecline?`${label}: progress has slipped`:`${label}: progress has stalled`,
+        body:isDecline
+          ?`Your recent ${label} trend has moved down. Consider a lighter deload before building back up.`
+          :`${label} hasn't moved in a while. A different rep range might help break through.`,
+        exerciseKey,
+        primaryMuscles:ctx.primaryMusclesByExercise.get(exerciseKey)||[],
+      });
+    });
+    return candidates;
+  }
+
+  function collectRecoveryCandidates(ctx){
+    const candidates=[];
+    Object.keys(ctx.recoveryStatus).sort().forEach(muscleKey=>{
+      const status=ctx.recoveryStatus[muscleKey];
+      if(!status||status.recovering!==true||status.personalized!==true)return;
+      const confidence=status.confidence;
+      if(confidence==="low"||confidence==null)return;
+      const label=muscleLabel(muscleKey);
+      const pct=Number.isFinite(Number(status.pct))?Math.max(0,Math.min(99,Math.round(Number(status.pct)))):null;
+      candidates.push({
+        target:`muscle:${muscleKey}`,
+        category:"recovery",
+        basePriority:CATEGORY_BASE_PRIORITY.recovery+(confidence==="high"?10:0),
+        severity:confidence==="high"?2:1,
+        title:`${label} is still recovering`,
+        body:pct==null
+          ?`Your personalized recovery estimate shows ${label.toLowerCase()} still needs more time before you train it again.`
+          :`Your personalized recovery estimate shows ${label.toLowerCase()} is about ${pct}% recovered. Give it more time before training it again.`,
+        muscleKey,
+      });
+    });
+    return candidates;
+  }
+
+  function collectReadinessCandidates(ctx){
+    const candidates=[];
+    ctx.exerciseKeys.forEach(exerciseKey=>{
+      const drift=ctx.driftByExercise.get(exerciseKey);
+      if(!drift||drift.status==="insufficient_data"||drift.confidence!=="high"||drift.status==="stable")return;
+      if(drift.status!=="easier"&&drift.status!=="harder")return;
+      const isEasier=drift.status==="easier";
+      const label=exerciseLabel(ctx,exerciseKey);
+      candidates.push({
+        target:`exercise:${exerciseKey}`,
+        category:"readiness",
+        basePriority:CATEGORY_BASE_PRIORITY.readiness+(isEasier?5:0),
+        severity:isEasier?2:1,
+        title:isEasier?`${label}: effort is trending lower`:`${label}: you've been pushing harder`,
+        body:isEasier
+          ?`Your logged effort on ${label} has eased recently. Worth checking in on how you're feeling.`
+          :`Your logged effort on ${label} has increased recently. Keep an eye on recovery.`,
+        exerciseKey,
+        primaryMuscles:ctx.primaryMusclesByExercise.get(exerciseKey)||[],
+      });
+    });
+    return candidates;
+  }
+
+  function collectImbalanceCandidates(){
+    const nudge=safeCall(window.dtIntelImbalanceNudge);
+    if(!nudge||typeof nudge!=="object")return [];
+    const title=cleanText(nudge.title);
+    const body=cleanText(nudge.body);
+    if(!title||!body)return [];
+    const sev=Number.isFinite(Number(nudge.severity))?Math.max(0,Number(nudge.severity)):0;
+    const rawId=cleanText(nudge.id);
+    const pair=cleanText(nudge.pair,"training_balance");
+    return [{
+      target:rawId||`imbalance:${pair}`,
+      category:"imbalance",
+      basePriority:CATEGORY_BASE_PRIORITY.imbalance+Math.min(20,sev*3),
+      severity:sev,
+      title,
+      body,
+      pair,
+    }];
+  }
+
+  function applyCorroboration(candidates,ctx){
+    return candidates.map(c=>{
+      if(!c.exerciseKey)return c;
+      const drift=ctx.driftByExercise.get(c.exerciseKey);
+      if(drift&&drift.confidence==="medium"&&drift.status!=="stable"&&drift.status!=="insufficient_data"){
+        return {...c,basePriority:c.basePriority+3,corroborated:true};
+      }
+      return c;
+    });
+  }
+
+  function resolveRecoveryConflicts(candidates){
+    /* Recovery uses dtInferMeta's muscle vocabulary while plateau/readiness use
+       exercise keys, so string target dedupe alone cannot see that e.g. a Chest
+       Press plateau and a chest recovery override describe the same primary
+       training area. If a qualified recovery candidate exists for an exercise's
+       PRIMARY muscle, keep the more conservative root-cause recovery signal and
+       suppress the lower-priority exercise symptom. Secondary/stabilizer overlap
+       is intentionally not enough to suppress an exercise insight. */
+    const recoveryMuscles=new Set(candidates.filter(c=>c.category==="recovery"&&c.muscleKey).map(c=>c.muscleKey));
+    if(!recoveryMuscles.size)return candidates;
+    return candidates.filter(c=>{
+      if(c.category!=="plateau"&&c.category!=="readiness")return true;
+      const primary=Array.isArray(c.primaryMuscles)?c.primaryMuscles:[];
+      return !primary.some(k=>recoveryMuscles.has(k));
+    });
+  }
+
+  function compareCandidates(a,b){
+    return b.basePriority-a.basePriority||
+      b.severity-a.severity||
+      (a.target<b.target?-1:a.target>b.target?1:0);
+  }
+
+  function dedupeAndRank(candidates){
+    const byTarget=new Map();
+    candidates.forEach(c=>{
+      if(!c||!cleanText(c.target))return;
+      const existing=byTarget.get(c.target);
+      if(!existing||compareCandidates(c,existing)<0)byTarget.set(c.target,c);
+    });
+    return [...byTarget.values()].sort(compareCandidates);
+  }
+
+  function toPublicInsight(c){
+    return {id:c.target,category:c.category,title:c.title,body:c.body};
+  }
+
+  function dtIntelTopInsights(maxCount){
+    const n=Number.isFinite(maxCount)?Math.max(0,Math.floor(maxCount)):2;
+    if(n===0)return [];
+
+    const ctx=buildContext();
+    let candidates=[
+      ...collectPlateauCandidates(ctx),
+      ...collectRecoveryCandidates(ctx),
+      ...collectReadinessCandidates(ctx),
+      ...collectImbalanceCandidates(),
+    ];
+    candidates=applyCorroboration(candidates,ctx);
+    candidates=resolveRecoveryConflicts(candidates);
+    return dedupeAndRank(candidates).slice(0,n).map(toPublicInsight);
+  }
+
+  window.dtIntelTopInsights=dtIntelTopInsights;
+  window.DT_INTEL_COACH_INSIGHTS_VERSION=V;
+})();
+</script>
 </body>
 </html>
