@@ -46,7 +46,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import hashlib, json
-          expected = "7e04ffedb0ba9c2b470116f10152647a152191b37ed84e18ff9726d0f335e30e"
+          expected = "e7b5cfd156c426fd00f9443ca1222433daf811ee019dc2cf9997c04bdc681cef"
           for name in ("package.json", "capacitor.config.json"):
               json.loads(Path(name).read_text())
               print(f"{name}: JSON parse PASS")
@@ -91,6 +91,26 @@ jobs:
             echo "::warning::package-lock.json is missing. Falling back to npm install; dependency resolution is not perfectly reproducible."
             npm install
           fi
+
+      - name: Ensure Capacitor discovers required native plugins
+        run: |
+          set -euo pipefail
+          CAP_MAJOR="$(node -p "require('./node_modules/@capacitor/core/package.json').version.split('.')[0]")"
+          echo "Capacitor major: $CAP_MAJOR"
+          # cap sync inspects package.json when includePlugins is not explicitly configured.
+          # Save these dependencies in the ephemeral Actions workspace so plugin discovery is deterministic.
+          npm install --save-exact --package-lock=false "@capacitor/local-notifications@$CAP_MAJOR" "@capacitor/filesystem@$CAP_MAJOR" "@capacitor/share@$CAP_MAJOR"
+          node - <<'NODE'
+          const pkg=require('./package.json');
+          const coreMajor=require('./node_modules/@capacitor/core/package.json').version.split('.')[0];
+          for(const name of ['@capacitor/local-notifications','@capacitor/filesystem','@capacitor/share']){
+            const declared=pkg.dependencies?.[name]||pkg.devDependencies?.[name];
+            if(!declared)throw new Error(`${name} is not declared in package.json after install`);
+            const installed=require(`./node_modules/${name}/package.json`).version;
+            if(installed.split('.')[0]!==coreMajor)throw new Error(`${name} major ${installed} does not match Capacitor ${coreMajor}`);
+            console.log(`${name}: declared ${declared}, installed ${installed} PASS`);
+          }
+          NODE
 
       - name: Create Android project
         run: npx cap add android
@@ -146,6 +166,18 @@ jobs:
           cp native/MainActivity.java "$PKG/MainActivity.java"
           cp native/PermissionsRationaleActivity.java "$PKG/PermissionsRationaleActivity.java"
           python3 native/patch_manifest.py android/app/src/main/AndroidManifest.xml
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("android/app/src/main/AndroidManifest.xml")
+          s=p.read_text()
+          perm='<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />'
+          if perm not in s:
+              marker='<application'
+              i=s.find(marker)
+              if i<0: raise SystemExit("<application> not found in AndroidManifest.xml")
+              s=s[:i]+"    "+perm+"\n    "+s[i:]
+              p.write_text(s)
+          PY
 
       - name: Apply public version
         env:
@@ -177,6 +209,12 @@ jobs:
           grep -n 'androidx.health.connect:connect-client:1.1.0' android/app/build.gradle
           grep -n 'registerPlugin(HealthConnectNativePlugin.class)' android/app/src/main/java/com/mrcdrnzz/dailytracker/MainActivity.java
           grep -n 'android.permission.health.READ_SLEEP' android/app/src/main/AndroidManifest.xml
+          grep -n 'android.permission.SCHEDULE_EXACT_ALARM' android/app/src/main/AndroidManifest.xml
+          test -f android/app/src/main/assets/capacitor.plugins.json
+          grep -qi 'LocalNotifications' android/app/src/main/assets/capacitor.plugins.json
+          grep -qi 'Filesystem' android/app/src/main/assets/capacitor.plugins.json
+          grep -qi 'Share' android/app/src/main/assets/capacitor.plugins.json
+          echo "Local Notifications + Filesystem + Share native plugin registry PASS"
           grep -n "versionCode $VERSION_CODE" android/app/build.gradle
           grep -n "versionName \"$VERSION_NAME\"" android/app/build.gradle
 
