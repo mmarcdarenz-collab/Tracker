@@ -1001,8 +1001,11 @@ nav button.active{color:var(--green);background:#10231a}
 
 </style>
 
-<link rel="icon" type="image/png" href="marc-icon.png">
-<script src="xlsx.full.min.js"></script>
+<meta name="theme-color" content="#071018">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="M/ARC">
+<link rel="manifest" href="manifest.webmanifest">
 </head>
 <body>
 <div class="app">
@@ -8450,6 +8453,44 @@ function exAnalyze(records){
 }
 
 /* ---------- XLSX ---------- */
+let exXlsxLoadPromise=null;
+function exLoadScriptOnce(src){
+  return new Promise((resolve,reject)=>{
+    const existing=[...document.scripts].find(s=>s.src===src);
+    if(existing){
+      if(window.XLSX)return resolve(true);
+      existing.addEventListener("load",()=>resolve(true),{once:true});
+      existing.addEventListener("error",()=>reject(new Error("Excel library failed to load.")),{once:true});
+      return;
+    }
+    const s=document.createElement("script");
+    s.src=src;s.async=true;s.crossOrigin="anonymous";
+    s.onload=()=>resolve(true);
+    s.onerror=()=>{s.remove();reject(new Error("Excel library failed to load."));};
+    document.head.appendChild(s);
+  });
+}
+async function exEnsureXLSX(){
+  if(window.XLSX)return true;
+  if(exXlsxLoadPromise)return exXlsxLoadPromise;
+  exXlsxLoadPromise=(async()=>{
+    const urls=[
+      "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
+      "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"
+    ];
+    let last=null;
+    for(const url of urls){
+      try{
+        await exLoadScriptOnce(url);
+        if(window.XLSX)return true;
+      }catch(e){last=e;}
+    }
+    throw new Error(navigator.onLine
+      ?"Excel export library could not be loaded. Visual Report export is still available."
+      :"Excel export is unavailable offline until the Excel engine has been loaded once online. Visual Report export still works offline.");
+  })();
+  try{return await exXlsxLoadPromise;}finally{if(!window.XLSX)exXlsxLoadPromise=null;}
+}
 function exSheetFromRows(rows,headers){
   const data=[headers,...rows.map(r=>headers.map(h=>r[h]??""))];
   return XLSX.utils.aoa_to_sheet(data);
@@ -8984,6 +9025,7 @@ async function exGenerate(format,start,end){
   if(!rec.length)throw new Error("No workout records found in this date range.");
   const safe=`${start}_to_${end}`;
   if(format==="xlsx"){
+    await exEnsureXLSX();
     const wb=exWorkbook(analysis,start,end);
     const b64=XLSX.write(wb,{bookType:"xlsx",type:"base64",compression:true});
     return exShareBytes(b64,`MARC_Training_${safe}.xlsx`,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -15384,14 +15426,70 @@ body.dt-reorder-active{-webkit-user-select:none!important;user-select:none!impor
 <script id="dt-v26-production-cleanup-js">
 (()=>{
 "use strict";
-const VERSION="26.0-production-cleanup-v1";
+const VERSION="26.0-production-cleanup-v1.1-native-backup";
 const BACKUP_TYPE="marc-full-backup",BACKUP_VERSION=1;
 const FORENSIC_TYPE="marc-recovery-forensic";
 const KEY_NAME="dailyTrackerPremium",DAMAGED_KEY=KEY_NAME+"_damaged_recovery_raw_v1",META_KEY=KEY_NAME+"_last_known_good_meta_v1";
 function clone(v){return JSON.parse(JSON.stringify(v))}
 function validState(v){return typeof window.dtIsValidStateRoot==="function"?window.dtIsValidStateRoot(v):!!v&&typeof v==="object"&&!Array.isArray(v)&&v.days&&v.money}
 function fileName(prefix){const d=new Date(),p=n=>String(n).padStart(2,"0");return `${prefix}_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.json`}
-function downloadJson(obj,name){const blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1200)}
+function dtBackupPlugin(name){
+  try{
+    const cap=window.Capacitor;if(!cap)return null;
+    if(!cap.Plugins)cap.Plugins={};
+    if(!cap.Plugins[name]&&typeof cap.registerPlugin==="function")cap.Plugins[name]=cap.registerPlugin(name);
+    return cap.Plugins[name]||null;
+  }catch(_){return null}
+}
+function dtBackupIsNative(){try{return !!window.Capacitor?.isNativePlatform?.()}catch(_){return false}}
+function dtJsonBase64(obj){
+  const json=JSON.stringify(obj,null,2);
+  return new Promise((resolve,reject)=>{
+    try{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(String(reader.result||"").split(",")[1]||"");
+      reader.onerror=()=>reject(reader.error||new Error("Could not prepare backup file."));
+      reader.readAsDataURL(new Blob([json],{type:"application/json;charset=utf-8"}));
+    }catch(e){reject(e)}
+  });
+}
+function dtWebDownloadJson(obj,name){
+  const blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1200);
+  return {native:false,name};
+}
+async function saveJsonFile(obj,name){
+  const fs=dtBackupPlugin("Filesystem");
+  if(dtBackupIsNative()&&fs){
+    const folder="MARC Backups",path=`${folder}/${name}`,directory="DOCUMENTS";
+    const data=await dtJsonBase64(obj);
+    if(!data)throw new Error("Backup file could not be prepared.");
+    const written=await fs.writeFile({path,data,directory,recursive:true});
+    const uri=written?.uri||(await fs.getUri({path,directory})).uri;
+    window.dtLastBackupSaved={name,path,directory,uri};
+    return {native:true,name,path,directory,uri};
+  }
+  return dtWebDownloadJson(obj,name);
+}
+function dtSetBackupAction(id,text,state=""){
+  const el=document.getElementById(id);if(!el)return;
+  el.textContent=text;el.dataset.state=state||"";
+}
+async function dtExportBackupObject(obj,name,actionId,label){
+  dtSetBackupAction(actionId,"Saving…","busy");
+  try{
+    const result=await saveJsonFile(obj,name);
+    dtSetBackupAction(actionId,"Saved","ok");
+    if(result.native)alert(`${label} saved successfully.\n\nDocuments/MARC Backups/${name}`);
+    else setTimeout(()=>dtSetBackupAction(actionId,"Export"),1400);
+    return result;
+  }catch(e){
+    console.warn(label+" export failed",e);
+    dtSetBackupAction(actionId,"Retry","error");
+    alert(`${label} could not be saved. ${e?.message||e}`);
+    throw e;
+  }
+}
 function fullBackupObject(){let chatCollapsed=null;try{chatCollapsed=localStorage.getItem("dt_chat_collapsed")}catch(_){}return {type:BACKUP_TYPE,version:BACKUP_VERSION,exportedAt:new Date().toISOString(),app:"M/ARC",state:clone(state),auxLocalStorage:{dt_chat_collapsed:chatCollapsed}}}
 function forensicObject(){
   let raw=null,meta=null;try{raw=localStorage.getItem(DAMAGED_KEY)}catch(_){}try{meta=JSON.parse(localStorage.getItem(META_KEY)||"null")}catch(_){}
@@ -15414,14 +15512,17 @@ function restoreObject(obj){
 function ensureUi(){
   const card=document.querySelector("#settings .settings-card");if(!card||document.getElementById("dtFullBackupBtn"))return;
   const anchor=card.querySelector(".health-connect-card")||card.querySelector("#resetBtn");
-  const box=document.createElement("div");box.id="dtBackupTools";box.style.cssText="margin:14px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)";
-  box.innerHTML=`<button class="setting-row" id="dtFullBackupBtn" type="button" style="width:100%;background:transparent;border:0"><span><b>Full App Backup</b><small style="display:block;color:var(--muted);font-weight:600;margin-top:3px">Workouts, Money, health snapshot and settings</small></span><span>Export</span></button><button class="setting-row" id="dtFullRestoreBtn" type="button" style="width:100%;background:transparent;border-left:0;border-right:0"><span><b>Restore Full Backup</b><small style="display:block;color:var(--muted);font-weight:600;margin-top:3px">Validates before replacing local data</small></span><span>Import</span></button><input id="dtFullRestoreInput" type="file" accept="application/json,.json" hidden><button class="setting-row" id="dtRecoveryExportBtn" type="button" style="width:100%;background:transparent;border-left:0;border-right:0;display:none"><span><b>Export Recovery Data</b><small style="display:block;color:var(--muted);font-weight:600;margin-top:3px">Preserved damaged payload for recovery/support only</small></span><span>Export</span></button>`;
+  const box=document.createElement("div");box.id="dtBackupTools";box.className="dt-backup-tools";
+  box.innerHTML=`<button class="setting-row dt-backup-row" id="dtFullBackupBtn" type="button"><span class="dt-backup-copy"><b>Full App Backup</b><small>Workouts, Money, health snapshot and settings</small></span><span class="dt-backup-action" id="dtFullBackupAction">Export</span></button><button class="setting-row dt-backup-row" id="dtFullRestoreBtn" type="button"><span class="dt-backup-copy"><b>Restore Full Backup</b><small>Validates before replacing local data</small></span><span class="dt-backup-action" id="dtFullRestoreAction">Import</span></button><input id="dtFullRestoreInput" type="file" accept="application/json,.json" hidden><button class="setting-row dt-backup-row" id="dtRecoveryExportBtn" type="button" style="display:none"><span class="dt-backup-copy"><b>Export Recovery Data</b><small>Preserved damaged payload for recovery/support only</small></span><span class="dt-backup-action" id="dtRecoveryExportAction">Export</span></button>`;
   if(anchor?.parentNode)anchor.parentNode.insertBefore(box,anchor);else card.appendChild(box);
-  box.querySelector("#dtFullBackupBtn").onclick=()=>downloadJson(fullBackupObject(),fileName("MARC_Full_Backup"));
+  box.querySelector("#dtFullBackupBtn").onclick=async()=>{
+    const btn=box.querySelector("#dtFullBackupBtn");if(btn.disabled)return;btn.disabled=true;
+    try{await dtExportBackupObject(fullBackupObject(),fileName("MARC_Full_Backup"),"dtFullBackupAction","Full App Backup")}catch(_){}finally{btn.disabled=false}
+  };
   const input=box.querySelector("#dtFullRestoreInput");box.querySelector("#dtFullRestoreBtn").onclick=()=>input.click();
-  input.onchange=async()=>{const f=input.files?.[0];input.value="";if(!f)return;try{const obj=JSON.parse(await f.text());validateBackupObject(obj);if(!confirm("Restore this Full App Backup? Current on-device data will be replaced only after validation."))return;restoreObject(obj);alert("Backup restored successfully. M/ARC will reload now.");location.reload()}catch(e){alert(e?.message||String(e))}};
+  input.onchange=async()=>{const f=input.files?.[0];input.value="";if(!f)return;dtSetBackupAction("dtFullRestoreAction","Checking…","busy");try{const obj=JSON.parse(await f.text());validateBackupObject(obj);dtSetBackupAction("dtFullRestoreAction","Ready","ok");if(!confirm("Restore this Full App Backup? Current on-device data will be replaced only after validation.")){dtSetBackupAction("dtFullRestoreAction","Import");return}restoreObject(obj);dtSetBackupAction("dtFullRestoreAction","Restored","ok");alert("Backup restored successfully. M/ARC will reload now.");location.reload()}catch(e){dtSetBackupAction("dtFullRestoreAction","Retry","error");alert(e?.message||String(e))}};
   let hasRaw=false;try{hasRaw=!!localStorage.getItem(DAMAGED_KEY)}catch(_){}const forensic=box.querySelector("#dtRecoveryExportBtn");
-  if(hasRaw){forensic.style.display="";forensic.onclick=()=>{const obj=forensicObject();if(obj)downloadJson(obj,fileName("MARC_Recovery_Data"))}}
+  if(hasRaw){forensic.style.display="";forensic.onclick=async()=>{const obj=forensicObject();if(!obj)return;const btn=forensic;if(btn.disabled)return;btn.disabled=true;try{await dtExportBackupObject(obj,fileName("MARC_Recovery_Data"),"dtRecoveryExportAction","Recovery Data")}catch(_){}finally{btn.disabled=false}}}
 }
 window.dtCreateFullBackupObject=fullBackupObject;
 window.dtValidateFullBackupObject=validateBackupObject;
@@ -15431,6 +15532,19 @@ window.DT_PRODUCTION_CLEANUP_VERSION=VERSION;
 document.readyState==="loading"?document.addEventListener("DOMContentLoaded",ensureUi):ensureUi();setTimeout(ensureUi,350);
 })();
 </script>
+
+<style id="dt-v26-backup-native-ui-css">
+.dt-backup-tools{display:block;margin:0;padding:0}
+.dt-backup-tools .dt-backup-row{width:100%;min-height:68px;background:transparent;border-left:0;border-right:0;border-top:0;color:var(--text);font:inherit;text-align:left;gap:14px;cursor:pointer}
+.dt-backup-tools .dt-backup-row:disabled{opacity:.72}
+.dt-backup-copy{display:block;min-width:0;flex:1}
+.dt-backup-copy b{display:block;color:var(--text);font-size:14px;font-weight:800}
+.dt-backup-copy small{display:block;color:var(--muted);font-size:11px;font-weight:600;line-height:1.4;margin-top:4px}
+.dt-backup-action{flex:none;color:var(--blue);font-size:12px;font-weight:850;text-align:right}
+.dt-backup-action[data-state="ok"]{color:var(--green)}
+.dt-backup-action[data-state="error"]{color:var(--red)}
+.dt-backup-action[data-state="busy"]{color:var(--muted)}
+</style>
 
 <style id="dt-v26-hotfix-ui-css">
 /* V26 hotfixes: export readability + workout recovery summary */
@@ -15727,5 +15841,66 @@ document.readyState==="loading"?document.addEventListener("DOMContentLoaded",ens
 })();
 </script>
 
+
+<script id="dt-marc-real-session-import-20260822">
+(()=>{
+  "use strict";
+  const IMPORT_PARAM="marc_session",IMPORT_TOKEN="20260822-push",IMPORT_ID="marc-real-20260822-push-v1",DAY_KEY="2026-08-22";
+  const params=new URLSearchParams(location.search);if(params.get(IMPORT_PARAM)!==IMPORT_TOKEN)return;
+  const rows=[
+    ["Chest Press","Machine","Chest","Chest Press|Machine","2026-08-22T01:15:00+10:00",[[47,10,"ideal"],[54,8,"ideal"],[54,6,"max"]]],
+    ["Incline Machine Press","","Upper Chest","Incline Machine Press|","2026-08-22T01:03:00+10:00",[[25,10,"ideal"],[27.5,8,"ideal"],[30,6,"max"]]],
+    ["Shoulder Press","Machine","Shoulders","Shoulder Press|Machine","2026-08-22T01:29:00+10:00",[[39,10,"easy"],[46,8,"ideal"],[53,5,"max"]]],
+    ["Pec Fly","Machine","Chest","Pec Fly|Machine","2026-08-22T01:43:00+10:00",[[40,10,"ideal"],[47,8,"ideal"],[54,4,"max"]]],
+    ["Lateral Raise","Dumbbells","Side Delts","Lateral Raise|Dumbbells","2026-08-22T02:03:00+10:00",[[6,10,"easy"],[6,10,"easy"],[7,10,"ideal"]]],
+    ["Dumbbell Front Raise","Dumbbells","Front Delts","Dumbbell Front Raise|Dumbbells","2026-08-22T02:17:00+10:00",[[8,10,"easy"],[9,10,"easy"],[10,10,"max"]]],
+    ["Triceps Pushdown","Cable","Triceps","Triceps Pushdown|Cable","2026-08-22T02:28:00+10:00",[[12.5,10,"easy"],[17.5,10,"easy"],[24.5,6,"max"]]]
+  ].map((r,i)=>({id:`${IMPORT_ID}|${i}`,day:"push",dayKey:DAY_KEY,name:r[0],type:r[1],muscle:r[2],exerciseKey:r[3],startedAt:r[4],finalizedAt:r[4],sets:r[5].map(([kg,reps,effort])=>({kg:String(kg),reps:String(reps),effort}))}));
+  const norm=v=>String(v||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+  const sig=sets=>(sets||[]).map(s=>`${Number(s.kg)}x${Number(s.reps)}:${String(s.effort||"").toLowerCase()}`).join("|");
+  const same=(a,b)=>String(a?.dayKey||"").slice(0,10)===DAY_KEY&&norm(a?.name)===norm(b.name)&&sig(a?.sets)===sig(b.sets);
+  const clone=v=>JSON.parse(JSON.stringify(v));
+  const localKey=v=>{try{return typeof window.dtLocalDateKey==="function"?window.dtLocalDateKey(new Date(v)):String(v||"").slice(0,10)}catch(_){return String(v||"").slice(0,10)}};
+  function buildSummary(records){
+    const weights=window.DT_ROLE_WEIGHTS||{primary:1,secondary:.55,stabilizer:.25},effort=window.DT_EFFORT_MULT||{easy:.9,ideal:1,max:1.1},map={};let workingSets=0;
+    const add=(keys,role,f)=>{const unique=[...new Set(keys||[])];if(!unique.length)return;const share=(weights[role]*f)/unique.length;unique.forEach(key=>{if(!map[key])map[key]={key,score:0,roleScores:{primary:0,secondary:0,stabilizer:0}};map[key].score+=share;map[key].roleScores[role]+=share})};
+    records.forEach(rec=>{const meta=window.dtInferMeta?.(rec.name,rec.muscle)||{primaryMuscles:[],secondaryMuscles:[],stabilizerMuscles:[]};const valid=(rec.sets||[]).filter(s=>Number(s.reps)>0&&Number(s.kg)>=0);workingSets+=valid.length;valid.forEach(s=>{const f=effort[s.effort]??1;add(meta.primaryMuscles,"primary",f);add(meta.secondaryMuscles,"secondary",f);add(meta.stabilizerMuscles,"stabilizer",f)})});
+    let muscles=Object.values(map).sort((a,b)=>b.score-a.score);if(typeof window.dtIntegerPercentages==="function")muscles=window.dtIntegerPercentages(muscles);else{const total=muscles.reduce((a,m)=>a+m.score,0)||1;muscles=muscles.map(m=>({...m,pct:Math.round(m.score/total*100)}))}
+    muscles=muscles.map(m=>{const role=Object.entries(m.roleScores).sort((a,b)=>b[1]-a[1]||({primary:0,secondary:1,stabilizer:2}[a[0]]-{primary:0,secondary:1,stabilizer:2}[b[0]]))[0]?.[0]||"primary";return {...m,role,label:window.dtSummaryLabel?.(m.key)||String(m.key).replace(/_/g," ")}}).sort((a,b)=>b.pct-a.pct||b.score-a.score);
+    return {id:`${DAY_KEY}|push`,day:"push",dayKey:DAY_KEY,title:"PUSH DAY",completedAt:"2026-08-22T02:29:00+10:00",exerciseCount:7,workingSets,muscles,source:"marc-real-session-import"};
+  }
+  try{
+    if(typeof state==="undefined"||!state.workouts)throw new Error("Workout state is not ready.");
+    state.workouts.completedExercises=Array.isArray(state.workouts.completedExercises)?state.workouts.completedExercises:[];state.workouts.sessions=Array.isArray(state.workouts.sessions)?state.workouts.sessions:[];state.workouts.dailySummaries=state.workouts.dailySummaries&&typeof state.workouts.dailySummaries==="object"?state.workouts.dailySummaries:{};state.days=state.days&&typeof state.days==="object"?state.days:{};state.appMeta=state.appMeta&&typeof state.appMeta==="object"?state.appMeta:{};state.appMeta.realSessionImports=Array.isArray(state.appMeta.realSessionImports)?state.appMeta.realSessionImports:[];
+    let added=0;rows.forEach(rec=>{if(!state.workouts.completedExercises.some(existing=>same(existing,rec))){state.workouts.completedExercises.push(clone(rec));added++}});
+    const summaryId=`${DAY_KEY}|push`,summary=buildSummary(rows);if(!state.workouts.dailySummaries[summaryId])state.workouts.dailySummaries[summaryId]=summary;
+    const sessionExists=state.workouts.sessions.some(s=>{if(s?.summaryId===summaryId)return true;if(s?.day!=="push"||localKey(s.date)!==DAY_KEY)return false;try{return typeof workoutSessionSets==="function"&&workoutSessionSets(s)===21}catch(_){return false}});
+    if(!sessionExists){const byKey=new Map(rows.map(r=>[String(r.exerciseKey),r])),byName=new Map(rows.map(r=>[norm(r.name),r]));let aligned=[];try{const current=typeof effectiveExercises==="function"?effectiveExercises("push"):[];aligned=current.map(e=>{const key=String(e?.[4]||(typeof exerciseKey==="function"?exerciseKey(e):"")),hit=byKey.get(key)||byName.get(norm(e?.[0]));return {sets:hit?clone(hit.sets):[]}})}catch(_){aligned=[]}const snapshot=rows.map(r=>({name:r.name,type:r.type,muscle:r.muscle,sets:clone(r.sets)}));state.workouts.sessions.push({summaryId,day:"push",date:"2026-08-22T02:29:00+10:00",snapshot,exercises:aligned.length?aligned:snapshot.map(x=>({sets:clone(x.sets)})),source:"marc-real-session-import"})}
+    if(!state.days[DAY_KEY])state.days[DAY_KEY]={work:false,workout:false,water:false,protein:false,sleep:false,restDay:false};state.days[DAY_KEY].workout=true;if(!state.appMeta.realSessionImports.includes(IMPORT_ID))state.appMeta.realSessionImports.push(IMPORT_ID);
+    if(typeof save==="function")save({forceRecoveryScan:true});params.delete(IMPORT_PARAM);history.replaceState(null,"",`${location.pathname}${params.toString()?`?${params}`:""}${location.hash||""}`);try{renderHistory?.();renderWorkoutHistory?.();renderToday?.();renderTodayDashboardExtras?.();window.dtRenderBodyCard?.()}catch(_){}window.DT_MARC_REAL_SESSION_IMPORT={id:IMPORT_ID,dayKey:DAY_KEY,added,alreadyPresent:added===0};
+    console.info(added?"M/ARC: 22 Aug Push Day imported (7 activities / 21 sets).":"M/ARC: 22 Aug Push Day already present; no duplicate added.");
+  }catch(err){console.error("M/ARC real session import failed",err);window.DT_MARC_REAL_SESSION_IMPORT={id:IMPORT_ID,error:String(err?.message||err)}}
+})();
+</script>
+
+<script id="dt-pwa-offline-registration">
+(()=>{
+  "use strict";
+  window.DT_PWA_OFFLINE_VERSION="26.0-pwa-offline-v2";
+  if(!("serviceWorker" in navigator))return;
+  window.addEventListener("load",()=>{
+    navigator.serviceWorker.register("./sw.js",{scope:"./"})
+      .then(reg=>{
+        try{reg.update()}catch(_){}
+        window.DT_PWA_SERVICE_WORKER_REGISTERED=true;
+        const setReady=()=>{window.DT_PWA_OFFLINE_READY=!!navigator.serviceWorker.controller;};
+        navigator.serviceWorker.ready.then(setReady).catch(()=>{});
+        navigator.serviceWorker.addEventListener("controllerchange",setReady);
+        setReady();
+      })
+      .catch(err=>{console.warn("M/ARC offline service worker registration failed",err)});
+  });
+})();
+</script>
 </body>
 </html>
