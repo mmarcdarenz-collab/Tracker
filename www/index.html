@@ -7863,9 +7863,12 @@ function renderReminderSettings(){
       </div>
     </div>
     <div class="dt-rem-preview"><b>M/ARC · Training day</b><span>${slotName(trainingAssignments()[0]?.slot||"push")} is ready when you are.</span></div>
+    <div class="dt-rem-line dt-rest-alert-test"><div><b>Rest-complete alerts</b><small>${n.restAlertLastStatus||"Android APK · precise alert when Rest reaches zero."}</small></div><div class="dt-rem-test-actions"><button id="dtRestExactBtn" class="dt-rem-test" type="button">Precise alerts</button><button id="dtRestAlertTest" class="dt-rem-test" type="button">Test 5s</button></div></div>
     <div class="dt-rem-status">${n.lastStatus||"Ready"}</div>
   </div>
   <div class="dt-rem-actions"><button class="dt-rem-cancel" type="button">Cancel</button><button class="dt-rem-save" type="button">Save reminder</button></div>`;
+  const exactBtn=body.querySelector("#dtRestExactBtn");if(exactBtn)exactBtn.onclick=async()=>{exactBtn.disabled=true;exactBtn.textContent="Opening…";await window.dtEnableExactRestAlerts?.();setTimeout(()=>{if(document.getElementById("dtReminderBody"))renderReminderSettings()},800)};
+  const restTest=body.querySelector("#dtRestAlertTest");if(restTest)restTest.onclick=async()=>{restTest.disabled=true;restTest.textContent="Scheduling…";const ok=await window.dtTestRestAlert?.();restTest.textContent=ok?"Sent ✓":"Could not send";setTimeout(()=>{if(document.getElementById("dtReminderBody"))renderReminderSettings()},1200)};
   body.querySelector("#dtReminderToggle").onclick=e=>e.currentTarget.classList.toggle("on");
   body.querySelectorAll("[data-rem-style]").forEach(b=>b.onclick=()=>{
     body.querySelectorAll("[data-rem-style]").forEach(x=>x.classList.remove("active"));
@@ -7942,7 +7945,11 @@ async function bindNotificationAction(){
   const p=localPlugin();if(!p?.addListener)return;
   try{
     await p.addListener("localNotificationActionPerformed",event=>{
-      const slot=event?.notification?.extra?.slot;
+      const extra=event?.notification?.extra||{},slot=extra.slot,type=extra.type;
+      if(type==="rest-complete"||type==="rest-alert-test"){
+        try{window.dtV27OpenHome?.()}catch(_){try{switchView("today")}catch(__){}}
+        return;
+      }
       try{switchView("workout")}catch(_){}
       if(slot)setTimeout(()=>document.querySelector(`.workout-tab[data-wday="${slot}"]`)?.click(),180);
     });
@@ -9029,6 +9036,11 @@ async function exShareBytes(base64,name,mime){
   return "Download started.";
 }
 async function exGenerate(format,start,end){
+  if(format==="backup"){
+    if(typeof window.dtExportFullAppBackup!=="function")throw new Error("Full backup service is not available in this build.");
+    const result=await window.dtExportFullAppBackup();
+    return result?.native?"Full training & app backup saved • Documents/MARC Backups":"Full training & app backup downloaded.";
+  }
   const rec=exRecords(start,end),analysis=exAnalyze(rec);
   if(!rec.length)throw new Error("No workout records found in this date range.");
   const safe=`${start}_to_${end}`;
@@ -9052,7 +9064,7 @@ function exDefaultRange(days=90){
 function exEnsureModal(){
   if(document.getElementById("dtExportModal"))return;
   const m=document.createElement("div");m.id="dtExportModal";
-  m.innerHTML=`<section class="dt-ex-sheet"><div class="dt-ex-head"><div><div class="dt-ex-kicker">Export progress</div><div class="dt-ex-title">Your training, outside M/ARC</div><div class="dt-ex-copy">Choose a period, then export the raw workout data to Excel or generate a shareable visual progress report.</div></div><button class="dt-ex-close" type="button">×</button></div><div id="dtExportBody"></div></section>`;
+  m.innerHTML=`<section class="dt-ex-sheet"><div class="dt-ex-head"><div><div class="dt-ex-kicker">Export progress</div><div class="dt-ex-title">Your training, outside M/ARC</div><div class="dt-ex-copy">Export a visual report, detailed Excel training data, or a complete backup of your training setup and app preferences.</div></div><button class="dt-ex-close" type="button">×</button></div><div id="dtExportBody"></div></section>`;
   m.onclick=e=>{if(e.target===m)m.classList.remove("show")};m.querySelector(".dt-ex-close").onclick=()=>m.classList.remove("show");document.body.appendChild(m);
 }
 function exRender(){
@@ -9061,8 +9073,8 @@ function exRender(){
     <div class="dt-ex-presets">${[[30,"30D"],[90,"3M"],[180,"6M"],[365,"1Y"]].map(([d,l])=>`<button type="button" data-ex-days="${d}" class="${d===90?"active":""}">${l}</button>`).join("")}</div>
     <div class="dt-ex-dates"><div class="dt-ex-date"><label>Start</label><input id="dtExportStart" type="date" value="${r.start}"></div><div class="dt-ex-date"><label>End</label><input id="dtExportEnd" type="date" value="${r.end}"></div></div>
   </div>
-  <div class="dt-ex-section"><div class="dt-ex-label">Export format<small>Excel keeps the detailed data. Visual Report summarizes progress as a shareable image.</small></div>
-    <div class="dt-ex-formats"><button class="dt-ex-format active" data-ex-format="visual"><b>Visual Report</b><small>PNG · progression, muscle scores, top exercises, highlights & next steps</small></button><button class="dt-ex-format" data-ex-format="xlsx"><b>Excel</b><small>XLSX · summary, sets, exercise progress and muscle trends</small></button></div>
+  <div class="dt-ex-section"><div class="dt-ex-label">Export format<small>Visual and Excel cover the selected period. Full Backup saves your complete training setup and app state.</small></div>
+    <div class="dt-ex-formats"><button class="dt-ex-format active" data-ex-format="visual"><b>Visual Report</b><small>PNG · progression, muscle scores, top exercises, highlights & next steps</small></button><button class="dt-ex-format" data-ex-format="xlsx"><b>Excel</b><small>XLSX · summary, sets, exercise progress and muscle trends</small></button><button class="dt-ex-format" data-ex-format="backup"><b>Full Backup</b><small>JSON · workouts, routines, schedule, reminders, settings & app state</small></button></div>
     <div id="dtExportSummary" class="dt-ex-summary"></div>
   </div>
   <div class="dt-ex-actions"><button class="dt-ex-cancel" type="button">Cancel</button><button class="dt-ex-generate" type="button">Generate export</button></div><div class="dt-ex-result"></div>`;
@@ -9070,14 +9082,14 @@ function exRender(){
     body.querySelectorAll("[data-ex-days]").forEach(x=>x.classList.remove("active"));b.classList.add("active");
     const rr=exDefaultRange(+b.dataset.exDays);body.querySelector("#dtExportStart").value=rr.start;body.querySelector("#dtExportEnd").value=rr.end;exRefreshSummary();
   });
-  body.querySelectorAll("[data-ex-format]").forEach(b=>b.onclick=()=>{body.querySelectorAll("[data-ex-format]").forEach(x=>x.classList.remove("active"));b.classList.add("active")});
+  body.querySelectorAll("[data-ex-format]").forEach(b=>b.onclick=()=>{body.querySelectorAll("[data-ex-format]").forEach(x=>x.classList.remove("active"));b.classList.add("active");exRefreshSummary()});
   body.querySelectorAll("input[type=date]").forEach(i=>i.onchange=exRefreshSummary);
   body.querySelector(".dt-ex-cancel").onclick=()=>document.getElementById("dtExportModal").classList.remove("show");
   body.querySelector(".dt-ex-generate").onclick=async()=>{
     const btn=body.querySelector(".dt-ex-generate"),res=body.querySelector(".dt-ex-result");
     const start=body.querySelector("#dtExportStart").value,end=body.querySelector("#dtExportEnd").value,format=body.querySelector("[data-ex-format].active")?.dataset.exFormat||"visual";
-    if(!start||!end||start>end){res.className="dt-ex-result bad";res.textContent="Choose a valid date range.";return}
-    btn.disabled=true;btn.textContent="Generating…";res.className="dt-ex-result";res.innerHTML="";res.textContent=format==="xlsx"?"Building Excel workbook…":"Rendering visual report…";
+    if(format!=="backup"&&(!start||!end||start>end)){res.className="dt-ex-result bad";res.textContent="Choose a valid date range.";return}
+    btn.disabled=true;btn.textContent="Generating…";res.className="dt-ex-result";res.innerHTML="";res.textContent=format==="xlsx"?"Building Excel workbook…":format==="backup"?"Preparing complete training & app backup…":"Rendering visual report…";
     try{
       window.dtLastExportPreview=null;
       const msg=await exGenerate(format,start,end);
@@ -9113,14 +9125,20 @@ function exRender(){
 }
 function exRefreshSummary(){
   const body=document.getElementById("dtExportBody");if(!body)return;
+  const h=body.querySelector("#dtExportSummary"),format=body.querySelector("[data-ex-format].active")?.dataset.exFormat||"visual";
+  if(format==="backup"){
+    const s=typeof window.dtGetFullBackupSummary==="function"?window.dtGetFullBackupSummary():null;
+    h.innerHTML=`<div><small>Workout sessions</small><b>${s?.workoutHistory?.sessions??"—"}</b></div><div><small>Saved routines</small><b>${s?.routines?.saved??"—"}</b></div><div><small>Schedule / reminders</small><b>${s?.trainingSchedule?.included||s?.reminders?.included?"Included":"—"}</b></div>`;
+    return;
+  }
   const start=body.querySelector("#dtExportStart")?.value,end=body.querySelector("#dtExportEnd")?.value;if(!start||!end)return;
-  const a=exAnalyze(exRecords(start,end)),h=body.querySelector("#dtExportSummary");
+  const a=exAnalyze(exRecords(start,end));
   h.innerHTML=`<div><small>Workouts</small><b>${a.workouts}</b></div><div><small>Sets</small><b>${a.sets}</b></div><div><small>Volume</small><b>${Math.round(a.volume).toLocaleString()}</b></div>`;
 }
 function exOpen(){exEnsureModal();exRender();document.getElementById("dtExportModal").classList.add("show")}
 function exAddEntry(){
   const grid=document.querySelector("#dtV10MoreModal .dt-more-grid");if(grid&&!grid.querySelector('[data-more="export"]')){
-    const b=document.createElement("button");b.className="dt-more-item";b.dataset.more="export";b.innerHTML="<b>Export progress</b><small>Excel data or a visual training report.</small>";
+    const b=document.createElement("button");b.className="dt-more-item";b.dataset.more="export";b.innerHTML="<b>Export & backup</b><small>Visual report, Excel data or complete training backup.</small>";
     const stats=grid.querySelector('[data-more="stats"]');stats?stats.insertAdjacentElement("afterend",b):grid.prepend(b);
     b.onclick=()=>{document.getElementById("dtV10MoreModal")?.classList.remove("show");exOpen()};
   }
@@ -12010,7 +12028,7 @@ body.dt-session-focus-open{overflow:hidden!important}
 <script id="dt-v25-5-session-focus-js">
 (()=>{
   "use strict";
-  const VERSION="25.5-session-focus-v27.9-day-plan-context";
+  const VERSION="25.5-session-focus-v27.10-reliable-rest-alerts";
   const REST_MIN=15,REST_MAX=600;
   let uiTimer=null,wakeLock=null,focusStartY=null;
 
@@ -12021,7 +12039,8 @@ body.dt-session-focus-open{overflow:hidden!important}
     const d=new Date(ms);return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
   }
   const REST_DONE_NOTIFICATION_ID=739121;
-  const REST_DONE_CHANNEL="marc-rest-complete";
+  const REST_DONE_CHANNEL="marc-rest-complete-v2";
+  const REST_TEST_NOTIFICATION_ID=739122;
   function restNotificationPlugin(){
     try{
       const cap=window.Capacitor;if(!cap)return null;
@@ -12030,28 +12049,80 @@ body.dt-session-focus-open{overflow:hidden!important}
       return cap.Plugins.LocalNotifications||null;
     }catch(_){return null}
   }
-  async function cancelRestNotification(){
-    const p=restNotificationPlugin();if(!p?.cancel)return;
-    try{await p.cancel({notifications:[{id:REST_DONE_NOTIFICATION_ID}]})}catch(_){ }
+  let restAlertEpoch=0,restAlertOp=Promise.resolve();
+  function queueRestAlertOp(work){
+    const run=restAlertOp.then(work,work);restAlertOp=run.catch(()=>{});return run;
   }
-  async function scheduleRestNotification(endsAtMs){
-    const p=restNotificationPlugin();if(!p?.schedule||!Number.isFinite(Number(endsAtMs)))return false;
+  async function cancelNativeRestNotification(){
+    const p=restNotificationPlugin();if(!p?.cancel)return false;
+    try{await p.cancel({notifications:[{id:REST_DONE_NOTIFICATION_ID}]});return true}catch(_){return false}
+  }
+  function cancelRestNotification(){
+    const epoch=++restAlertEpoch;
+    return queueRestAlertOp(async()=>{if(epoch!==restAlertEpoch)return false;return cancelNativeRestNotification()});
+  }
+  function restAlertState(){
+    state.notifications=state.notifications||{};
+    if(typeof state.notifications.restCompleteEnabled!=="boolean")state.notifications.restCompleteEnabled=true;
+    return state.notifications;
+  }
+  async function ensureRestAlertReady({requestPermission=true}={}){
+    const p=restNotificationPlugin(),n=restAlertState();
+    if(!p?.schedule){n.restAlertLastStatus="Native notification plugin unavailable";return {ok:false,reason:"plugin"}}
     try{
       let perm=await p.checkPermissions?.();
-      if(perm&&perm.display!=="granted")perm=await p.requestPermissions?.();
-      if(perm&&perm.display!=="granted")return false;
+      if(requestPermission&&perm?.display!=="granted")perm=await p.requestPermissions?.();
+      if(perm?.display!=="granted"){n.restAlertLastStatus="Notification permission not granted";return {ok:false,reason:"permission"}}
       if(p.createChannel){
-        try{await p.createChannel({id:REST_DONE_CHANNEL,name:"Rest complete",description:"Notifies when your M/ARC rest timer finishes.",importance:4,vibration:true,lights:false})}catch(_){ }
+        await p.createChannel({id:REST_DONE_CHANNEL,name:"Rest complete alerts",description:"Precise M/ARC rest-finished alerts.",importance:5,vibration:true,lights:true});
       }
-      await cancelRestNotification();
-      await p.schedule({notifications:[{id:REST_DONE_NOTIFICATION_ID,title:"M/ARC · Rest complete",body:"Stop scrolling — continue your workout.",channelId:REST_DONE_CHANNEL,autoCancel:true,ongoing:false,schedule:{at:new Date(Number(endsAtMs)),allowWhileIdle:true},isExactNotification:false,extra:{type:"rest-complete"}}]});
+      let exact="unknown";
+      try{exact=(await p.checkExactNotificationSetting?.())?.exact_alarm||"unknown"}catch(_){ }
+      return {ok:true,p,exact};
+    }catch(e){n.restAlertLastStatus=`Alert setup failed: ${e?.message||e}`;console.warn("Rest alert setup failed",e);return {ok:false,reason:"setup",error:e}}
+  }
+  async function scheduleNativeRestAlert(id,endsAtMs,{test=false,epoch=null}={}){
+    const isRest=id===REST_DONE_NOTIFICATION_ID,n=restAlertState();if(n.restCompleteEnabled===false&&!test)return false;
+    if(isRest&&epoch!==restAlertEpoch)return false;
+    const ready=await ensureRestAlertReady({requestPermission:true});if(!ready.ok){try{save()}catch(_){};return false}
+    if(isRest&&epoch!==restAlertEpoch)return false;
+    const {p,exact}=ready;
+    try{
+      if(isRest){await cancelNativeRestNotification();if(epoch!==restAlertEpoch)return false}
+      const result=await p.schedule({notifications:[{id,title:test?"M/ARC · Test alert":"M/ARC · Rest complete",body:test?"Rest alerts are working on this device.":"Stop scrolling — continue your workout.",channelId:REST_DONE_CHANNEL,autoCancel:true,ongoing:false,foreground:true,schedule:{at:new Date(Number(endsAtMs)),allowWhileIdle:true},isExactNotification:true,isExactMandatory:false,extra:{type:test?"rest-alert-test":"rest-complete"}}]});
+      if(isRest&&epoch!==restAlertEpoch)return false;
+      let pending=false;
+      try{pending=!!(await p.getPending?.())?.notifications?.some(x=>Number(x.id)===Number(id))}catch(_){ }
+      const warning=result?.warning?.message||"";
+      n.restAlertLastStatus=warning?`Scheduled with Android fallback · ${warning}`:`${test?"Test":"Rest"} alert scheduled${pending?" ✓":""}${exact&&exact!=="unknown"?` · exact ${exact}`:""}`;
+      n.restAlertLastScheduledAt=Date.now();
+      try{save()}catch(_){}
       return true;
-    }catch(e){console.warn("Rest completion notification unavailable",e);return false}
+    }catch(e){n.restAlertLastStatus=`Scheduling failed: ${e?.message||e}`;try{save()}catch(_){};console.warn("Rest completion notification unavailable",e);return false}
+  }
+  function scheduleRestNotification(endsAtMs){
+    const epoch=++restAlertEpoch;
+    return queueRestAlertOp(()=>scheduleNativeRestAlert(REST_DONE_NOTIFICATION_ID,endsAtMs,{epoch}));
+  }
+  function showRestDoneBanner(){
+    if(document.visibilityState!=="visible")return;
+    let el=document.getElementById("dtRestDoneBanner");
+    if(!el){el=document.createElement("div");el.id="dtRestDoneBanner";el.className="dt-rest-done-banner";el.innerHTML='<div><b>Rest done</b><span>Stop scrolling — continue your workout.</span></div><button type="button">Continue</button>';document.body.appendChild(el);el.querySelector("button").onclick=()=>{el.classList.remove("show");try{window.dtV27OpenHome?.()}catch(_){}}}
+    el.classList.add("show");clearTimeout(el._hide);el._hide=setTimeout(()=>el.classList.remove("show"),6500);
   }
   function notifyRestCompleteInApp(){
     try{if(navigator.vibrate)navigator.vibrate([160,90,220])}catch(_){ }
-    try{if(document.visibilityState==="visible"&&"Notification" in window&&Notification.permission==="granted")new Notification("M/ARC · Rest complete",{body:"Stop scrolling — continue your workout.",tag:"marc-rest-complete"})}catch(_){ }
+    showRestDoneBanner();
   }
+  window.dtTestRestAlert=async()=>scheduleNativeRestAlert(REST_TEST_NOTIFICATION_ID,Date.now()+5000,{test:true});
+  window.dtEnableExactRestAlerts=async()=>{
+    const n=restAlertState(),p=restNotificationPlugin();if(!p){n.restAlertLastStatus="Native notification plugin unavailable";try{save()}catch(_){};return false}
+    try{
+      let perm=await p.checkPermissions?.();if(perm?.display!=="granted")perm=await p.requestPermissions?.();if(perm?.display!=="granted"){n.restAlertLastStatus="Notification permission not granted";try{save()}catch(_){};return false}
+      if(!p.changeExactNotificationSetting){n.restAlertLastStatus="Exact-alarm settings are not available on this Android version";try{save()}catch(_){};return true}
+      const res=await p.changeExactNotificationSetting();n.restAlertLastStatus=`Precise alerts · ${res?.exact_alarm||"settings opened"}`;try{save()}catch(_){};return res?.exact_alarm!=="denied";
+    }catch(e){n.restAlertLastStatus=`Could not open precise-alert settings: ${e?.message||e}`;try{save()}catch(_){};return false}
+  };
   function fmtLong(ms){
     const total=Math.max(0,Math.floor(ms/1000)),h=Math.floor(total/3600),m=Math.floor((total%3600)/60),s=total%60;
     return `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
@@ -12229,7 +12300,7 @@ body.dt-session-focus-open{overflow:hidden!important}
   function restTick(){
     const s=session();if(!s?.active||!s.rest?.running)return;
     if(s.rest.endsAtMs<=now()){
-      accumulateRest(s);s.rest.running=false;s.rest.paused=false;s.rest.remainingMs=0;s.rest.completeUntilMs=now()+5200;persist();cancelRestNotification();notifyRestCompleteInApp();
+      accumulateRest(s);s.rest.running=false;s.rest.paused=false;s.rest.remainingMs=0;s.rest.completeUntilMs=now()+5200;persist();notifyRestCompleteInApp();
     }
   }
   function toggleAutoRest(){ensure();state.workouts.sessionSettings.autoRest=!state.workouts.sessionSettings.autoRest;persist();renderAll()}
@@ -12979,7 +13050,8 @@ nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
     const inner=f.querySelector(".dt-session-focus-inner");
     f.addEventListener("pointerdown",e=>{
       if(!f.classList.contains("show"))return;
-      if(e.target.closest("button,input,select,textarea,#dtSessionRestCard")){focusGesture={blocked:true,id:e.pointerId};return}
+      if(e.target.closest("#dtSessionRestCard")){focusGesture={blocked:"rest",id:e.pointerId};return}
+      if(e.target.closest("button,input,select,textarea")){focusGesture={blocked:"control",id:e.pointerId};return}
       focusGesture={blocked:false,id:e.pointerId,x:e.clientX,y:e.clientY,dy:0,started:performance.now(),drag:false};
       try{f.setPointerCapture?.(e.pointerId)}catch(_){}
     },true);
@@ -13000,7 +13072,7 @@ nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
     f.addEventListener("pointerup",e=>{
       const g=focusGesture;if(!g||e.pointerId!==g.id)return;
       focusGesture=null;
-      if(g.blocked){e.stopImmediatePropagation();return}
+      if(g.blocked){if(g.blocked!=="rest")e.stopImmediatePropagation();return}
       e.stopImmediatePropagation();
       f.classList.remove("dt-focus-pulling");
       const v=g.dy/Math.max(1,performance.now()-g.started);
@@ -13089,19 +13161,24 @@ nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
   }
   function skipRestDirect(){
     const s=session();if(!s?.rest)return;
-    if(s.rest.running&&s.rest.lastActiveAtMs)s.restSpentMs=(Number(s.restSpentMs)||0)+Math.max(0,Date.now()-s.rest.lastActiveAtMs);
-    s.rest={running:false,paused:false,remainingMs:0,endsAtMs:0,lastActiveAtMs:0,completeUntilMs:0};
-    saveNow();renderRestUX();renderCenterRestRing();
+    if(typeof window.dtSkipRestTimer==="function")window.dtSkipRestTimer();
+    else{
+      if(s.rest.running&&s.rest.lastActiveAtMs)s.restSpentMs=(Number(s.restSpentMs)||0)+Math.max(0,Date.now()-s.rest.lastActiveAtMs);
+      s.rest={running:false,paused:false,remainingMs:0,endsAtMs:0,lastActiveAtMs:0,completeUntilMs:0};saveNow();
+    }
+    renderRestUX();renderCenterRestRing();
   }
   function toggleRestDirect(){
     const s=session(),r=s?.rest;if(!s?.active||!r)return;
-    if(r.running){
+    if(r.running&&typeof window.dtPauseRestTimer==="function")window.dtPauseRestTimer();
+    else if(r.paused&&s.status==="running"&&typeof window.dtResumeRestTimer==="function")window.dtResumeRestTimer();
+    else if(r.running){
       if(r.lastActiveAtMs)s.restSpentMs=(Number(s.restSpentMs)||0)+Math.max(0,Date.now()-r.lastActiveAtMs);
-      r.remainingMs=Math.max(0,r.endsAtMs-Date.now());r.running=false;r.paused=true;r.lastActiveAtMs=0;
+      r.remainingMs=Math.max(0,r.endsAtMs-Date.now());r.running=false;r.paused=true;r.lastActiveAtMs=0;saveNow();
     }else if(r.paused&&s.status==="running"){
-      r.running=true;r.paused=false;r.endsAtMs=Date.now()+Math.max(1000,r.remainingMs);r.lastActiveAtMs=Date.now();
+      r.running=true;r.paused=false;r.endsAtMs=Date.now()+Math.max(1000,r.remainingMs);r.lastActiveAtMs=Date.now();saveNow();
     }
-    saveNow();renderRestUX();renderCenterRestRing();
+    renderRestUX();renderCenterRestRing();
   }
   function renderRestUX(){
     const g=ensureGlobalRest(),s=session(),r=s?.rest;
@@ -15524,7 +15601,7 @@ body.dt-reorder-active{-webkit-user-select:none!important;user-select:none!impor
 <script id="dt-v26-production-cleanup-js">
 (()=>{
 "use strict";
-const VERSION="26.0-production-cleanup-v1.1-native-backup";
+const VERSION="28.0-rest-alert-racefix-complete-training-backup-v1";
 const BACKUP_TYPE="marc-full-backup",BACKUP_VERSION=1;
 const FORENSIC_TYPE="marc-recovery-forensic";
 const KEY_NAME="dailyTrackerPremium",DAMAGED_KEY=KEY_NAME+"_damaged_recovery_raw_v1",META_KEY=KEY_NAME+"_last_known_good_meta_v1";
@@ -15588,7 +15665,41 @@ async function dtExportBackupObject(obj,name,actionId,label){
     throw e;
   }
 }
-function fullBackupObject(){let chatCollapsed=null;try{chatCollapsed=localStorage.getItem("dt_chat_collapsed")}catch(_){}return {type:BACKUP_TYPE,version:BACKUP_VERSION,exportedAt:new Date().toISOString(),app:"M/ARC",state:clone(state),auxLocalStorage:{dt_chat_collapsed:chatCollapsed}}}
+function backupContentsSummary(){
+  const w=state.workouts||{},schedule=state.trainingSchedule||{},notifications=state.notifications||{},prefs=state.preferences||{};
+  const scheduledDays=Object.values(schedule.days||{}).filter(Boolean).length;
+  return {
+    workoutHistory:{sessions:Array.isArray(w.sessions)?w.sessions.length:0,completedActivities:Array.isArray(w.completedExercises)?w.completedExercises.length:0,timedSessions:Array.isArray(w.timedSessions)?w.timedSessions.length:0},
+    routines:{saved:Array.isArray(w.savedRoutines)?w.savedRoutines.length:0,customSplits:Array.isArray(w.customSplits)?w.customSplits.length:0,overrides:Object.keys(w.routineOverrides||{}).length},
+    trainingSchedule:{included:!!state.trainingSchedule,scheduledDays},
+    reminders:{included:!!state.notifications,trainingEnabled:!!notifications.trainingEnabled,scheduledCount:Array.isArray(notifications.scheduledIds)?notifications.scheduledIds.length:0},
+    workoutSettings:{included:!!w.sessionSettings,restDefaultSec:Number(w.sessionSettings?.restDefaultSec)||90,autoRest:w.sessionSettings?.autoRest!==false},
+    preferences:{included:!!state.preferences,weightUnit:prefs.units?.weight||"kg",theme:prefs.theme||"dark"},
+    healthIntegration:{included:!!state.health,connected:!!state.health?.connected,provider:state.health?.provider||"Android Health Connect"},
+    appState:"complete"
+  };
+}
+function backupStateSnapshot(){
+  const snapshot=clone(state);
+  if(snapshot.notifications&&typeof snapshot.notifications==="object")snapshot.notifications.scheduledIds=[];
+  return snapshot;
+}
+function fullBackupObject(){
+  let chatCollapsed=null,chatNonOverlap=null;
+  try{chatCollapsed=localStorage.getItem("dt_chat_collapsed")}catch(_){}
+  try{chatNonOverlap=localStorage.getItem("dt_chat_nonoverlap_v1")}catch(_){}
+  return {
+    type:BACKUP_TYPE,
+    version:BACKUP_VERSION,
+    exportedAt:new Date().toISOString(),
+    app:"M/ARC",
+    backupScope:"complete-training-and-app-state",
+    contents:backupContentsSummary(),
+    deviceBoundExcluded:["notifications.scheduledIds","Android notification permission","Android exact-alarm access"],
+    state:backupStateSnapshot(),
+    auxLocalStorage:{dt_chat_collapsed:chatCollapsed,dt_chat_nonoverlap_v1:chatNonOverlap}
+  };
+}
 function forensicObject(){
   let raw=null,meta=null;try{raw=localStorage.getItem(DAMAGED_KEY)}catch(_){}try{meta=JSON.parse(localStorage.getItem(META_KEY)||"null")}catch(_){}
   if(!raw)return null;return {type:FORENSIC_TYPE,version:1,exportedAt:new Date().toISOString(),damagedRaw:raw,recoveryMetadata:meta,bootRecovery:clone(window.DT_BOOT_RECOVERY||{})};
@@ -15602,8 +15713,17 @@ function validateBackupObject(obj){
 }
 function restoreObject(obj){
   validateBackupObject(obj);const candidate=clone(obj.state);
+  if(candidate.notifications&&typeof candidate.notifications==="object")candidate.notifications.scheduledIds=[];
   const old=state;state=candidate;
-  try{dtEnsureFoundation?.();save({forceRecoveryScan:true,replaceRecoveryMeta:true});if(obj.auxLocalStorage&&Object.prototype.hasOwnProperty.call(obj.auxLocalStorage,"dt_chat_collapsed")){const v=obj.auxLocalStorage.dt_chat_collapsed;if(v==null)localStorage.removeItem("dt_chat_collapsed");else localStorage.setItem("dt_chat_collapsed",String(v))}}
+  try{
+    dtEnsureFoundation?.();save({forceRecoveryScan:true,replaceRecoveryMeta:true});
+    if(obj.auxLocalStorage){
+      for(const key of ["dt_chat_collapsed","dt_chat_nonoverlap_v1"]){
+        if(!Object.prototype.hasOwnProperty.call(obj.auxLocalStorage,key))continue;
+        const v=obj.auxLocalStorage[key];if(v==null)localStorage.removeItem(key);else localStorage.setItem(key,String(v));
+      }
+    }
+  }
   catch(e){state=old;throw new Error("Restore could not be saved. Your previous saved copy is still preserved.")}
   return true;
 }
@@ -15611,7 +15731,7 @@ function ensureUi(){
   const card=document.querySelector("#settings .settings-card");if(!card||document.getElementById("dtFullBackupBtn"))return;
   const anchor=card.querySelector(".health-connect-card")||card.querySelector("#resetBtn");
   const box=document.createElement("div");box.id="dtBackupTools";box.className="dt-backup-tools";
-  box.innerHTML=`<button class="setting-row dt-backup-row" id="dtFullBackupBtn" type="button"><span class="dt-backup-copy"><b>Full App Backup</b><small>Workouts, Money, health snapshot and settings</small></span><span class="dt-backup-action" id="dtFullBackupAction">Export</span></button><button class="setting-row dt-backup-row" id="dtFullRestoreBtn" type="button"><span class="dt-backup-copy"><b>Restore Full Backup</b><small>Validates before replacing local data</small></span><span class="dt-backup-action" id="dtFullRestoreAction">Import</span></button><input id="dtFullRestoreInput" type="file" accept="application/json,.json" hidden><button class="setting-row dt-backup-row" id="dtRecoveryExportBtn" type="button" style="display:none"><span class="dt-backup-copy"><b>Export Recovery Data</b><small>Preserved damaged payload for recovery/support only</small></span><span class="dt-backup-action" id="dtRecoveryExportAction">Export</span></button>`;
+  box.innerHTML=`<button class="setting-row dt-backup-row" id="dtFullBackupBtn" type="button"><span class="dt-backup-copy"><b>Full Training & App Backup</b><small>History, saved routines, schedule, reminders, workout settings and app preferences</small></span><span class="dt-backup-action" id="dtFullBackupAction">Export</span></button><button class="setting-row dt-backup-row" id="dtFullRestoreBtn" type="button"><span class="dt-backup-copy"><b>Restore Full Backup</b><small>Validates before replacing local data</small></span><span class="dt-backup-action" id="dtFullRestoreAction">Import</span></button><input id="dtFullRestoreInput" type="file" accept="application/json,.json" hidden><button class="setting-row dt-backup-row" id="dtRecoveryExportBtn" type="button" style="display:none"><span class="dt-backup-copy"><b>Export Recovery Data</b><small>Preserved damaged payload for recovery/support only</small></span><span class="dt-backup-action" id="dtRecoveryExportAction">Export</span></button>`;
   if(anchor?.parentNode)anchor.parentNode.insertBefore(box,anchor);else card.appendChild(box);
   box.querySelector("#dtFullBackupBtn").onclick=async()=>{
     const btn=box.querySelector("#dtFullBackupBtn");if(btn.disabled)return;btn.disabled=true;
@@ -15623,6 +15743,12 @@ function ensureUi(){
   if(hasRaw){forensic.style.display="";forensic.onclick=async()=>{const obj=forensicObject();if(!obj)return;const btn=forensic;if(btn.disabled)return;btn.disabled=true;try{await dtExportBackupObject(obj,fileName("MARC_Recovery_Data"),"dtRecoveryExportAction","Recovery Data")}catch(_){}finally{btn.disabled=false}}}
 }
 window.dtCreateFullBackupObject=fullBackupObject;
+window.dtGetFullBackupSummary=backupContentsSummary;
+window.dtExportFullAppBackup=async()=>{
+  const obj=fullBackupObject(),name=fileName("MARC_Training_App_Backup");
+  const result=await saveJsonFile(obj,name);
+  return {...result,contents:obj.contents};
+};
 window.dtValidateFullBackupObject=validateBackupObject;
 window.dtRestoreFullBackupObject=restoreObject;
 window.dtCreateRecoveryExportObject=forensicObject;
@@ -15984,7 +16110,7 @@ document.readyState==="loading"?document.addEventListener("DOMContentLoaded",ens
 <script id="dt-pwa-offline-registration">
 (()=>{
   "use strict";
-  window.DT_PWA_OFFLINE_VERSION="27.11-pwa-history-coach-v1";
+  window.DT_PWA_OFFLINE_VERSION="28.0-pwa-rest-alert-racefix-backup-v1";
   if(!("serviceWorker" in navigator))return;
   window.addEventListener("load",()=>{
     navigator.serviceWorker.register("./sw.js",{scope:"./"})
@@ -16712,6 +16838,7 @@ body:has(#today.view.active) #dtRestGlobal{display:none!important}
 
   window.dtOpenWorkoutHome=openHome;
   window.dtWorkoutHomeSetPage=setPage;
+  window.dtV27OpenHome=openHome;
   window.dtV27SelectedExerciseKey=day=>selectedActivity(day,{preferUnfinished:false})?.key||"";
   window.dtV27SelectedExerciseStatus=day=>selectedActivity(day,{preferUnfinished:false})?.status||"";
   window.dtV27SelectedExerciseInfo=day=>{const x=selectedActivity(day,{preferUnfinished:false});return x?{day:x.day,index:x.index,key:x.key,name:x.e?.[0]||"Exercise",muscle:x.e?.[2]||"",status:x.status}:null};
@@ -16889,6 +17016,15 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
 })();
 
 </script>
+
+
+<style id="dt-v27-10-rest-alert-backup-css">
+.dt-rest-done-banner{position:fixed;left:50%;bottom:calc(28px + env(safe-area-inset-bottom));transform:translate(-50%,18px);width:min(520px,calc(100% - 28px));z-index:12050;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 14px;border-radius:17px;border:1px solid rgba(88,226,163,.32);background:rgba(7,25,31,.97);box-shadow:0 18px 55px rgba(0,0,0,.42);opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease}
+.dt-rest-done-banner.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.dt-rest-done-banner div{min-width:0}.dt-rest-done-banner b{display:block;color:#69e3a8;font:900 13px system-ui}.dt-rest-done-banner span{display:block;color:#b7c8cf;font:650 11px/1.4 system-ui;margin-top:2px}.dt-rest-done-banner button,.dt-rem-test{flex:none;border:1px solid rgba(88,226,163,.28);background:rgba(88,226,163,.10);color:#69e3a8;border-radius:11px;padding:9px 11px;font:850 10px system-ui}.dt-rem-test-actions{display:flex;flex-direction:column;gap:6px;align-items:flex-end}.dt-rem-test:disabled{opacity:.65}
+#dtExportModal .dt-ex-formats{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:560px){#dtExportModal .dt-ex-formats{grid-template-columns:1fr}.dt-rest-done-banner{bottom:calc(18px + env(safe-area-inset-bottom))}}
+</style>
 
 </body>
 </html>
