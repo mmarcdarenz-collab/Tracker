@@ -1,6 +1,6 @@
 "use strict";
 
-const VERSION = "marc-v26-rc6-pwa-offline-v3-backup-native";
+const VERSION = "marc-v27-history-coach-v1";
 const APP_CACHE = `${VERSION}-app`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest"];
@@ -29,7 +29,7 @@ self.addEventListener("activate", event => {
   event.waitUntil((async()=>{
     const keep=new Set([APP_CACHE,RUNTIME_CACHE]);
     const keys=await caches.keys();
-    await Promise.all(keys.filter(k=>!keep.has(k) && k.startsWith("marc-v26-")).map(k=>caches.delete(k)));
+    await Promise.all(keys.filter(k=>!keep.has(k) && (k.startsWith("marc-v26-")||k.startsWith("marc-v27-"))).map(k=>caches.delete(k)));
     await self.clients.claim();
   })());
 });
