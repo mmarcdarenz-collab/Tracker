@@ -5997,7 +5997,14 @@ renderTrainingGoal();
   function decorateExerciseRows(){
     ensureRenameButton();applyWorkoutNames();
     const exs=effectiveExercises(wday),boxes=[...document.querySelectorAll('#wlist .exercise')];
-    boxes.forEach((box,ei)=>{
+    boxes.forEach((box,domIndex)=>{
+      const wanted=String(box.dataset.exerciseKey||box.dataset.exkey||"");
+      let ei=wanted?exs.findIndex((candidate,index)=>{
+        const stable=String(candidate?.[4]||exerciseKey(candidate)||"");
+        const legacy=String(exerciseKey(candidate)||"");
+        return stable===wanted||legacy===wanted;
+      }):-1;
+      if(ei<0)ei=domIndex;
       const e=exs[ei];if(!e)return;
       const rows=[...box.querySelectorAll('.setrow')];
       rows.forEach((row,si)=>{
@@ -6084,6 +6091,7 @@ renderTrainingGoal();
 .dt-px-next-copy b{display:block;color:#edf6f9;font:800 14px system-ui}.dt-px-next-copy span{display:block;color:#7f98a5;font:500 12px/1.45 system-ui;margin-top:3px}
 .dt-px-note{color:#667f8c;font:500 10px/1.45 system-ui;margin-top:13px}
 @media(max-width:420px){.dt-px-sheet{padding-left:16px;padding-right:16px}.dt-px-title{font-size:24px}.dt-px-stat{padding:12px 9px}.dt-px-stat strong{font-size:15px}}
+@media(max-width:340px){.dt-px-stat{padding:12px 7px}.dt-px-stat strong{font-size:13.5px;letter-spacing:-.02em}}
 </style>
 
 <script id="dt-v5-progress-js">
@@ -6092,10 +6100,10 @@ renderTrainingGoal();
 const DT_V5="5.0-progress-analytics";
 
 function norm(s){return String(s||"").trim().toLowerCase().replace(/\s+/g," ")}
-function stableKey(e){try{return typeof exerciseKey==="function"?exerciseKey(e):`${e?.[0]||""}|${e?.[1]||""}`}catch(_){return `${e?.[0]||""}|${e?.[1]||""}`}}
+function stableKey(e){try{return String(e?.[4]||(typeof exerciseKey==="function"?exerciseKey(e):`${e?.[0]||""}|${e?.[1]||""}`))}catch(_){return String(e?.[4]||`${e?.[0]||""}|${e?.[1]||""}`)}}
 function e1rm(kg,reps){kg=+kg;reps=+reps;if(!(kg>0&&reps>0))return 0;return kg*(1+Math.min(reps,30)/30)}
 function vol(sets){return (sets||[]).reduce((n,s)=>n+(+s.kg||0)*(+s.reps||0),0)}
-function validSets(sets){return (sets||[]).map(s=>({kg:+s.kg||0,reps:+s.reps||0,effort:String(s.effort||"")})).filter(s=>s.kg>0&&s.reps>0)}
+function validSets(sets){return (sets||[]).map(s=>({kg:+s.kg||0,reps:+s.reps||0,effort:String(s.effort||"")})).filter(s=>s.reps>0&&s.kg>=0)}
 function historyFor(e){
  const key=stableKey(e), name=norm(e?.[0]), type=norm(e?.[1]);
  const all=(state.workouts?.completedExercises||[]).filter(x=>{
@@ -6105,14 +6113,16 @@ function historyFor(e){
  }).map(x=>({...x,sets:validSets(x.sets),ts:Date.parse(x.finalizedAt||x.startedAt||x.dayKey||0)||0})).filter(x=>x.sets.length).sort((a,b)=>a.ts-b.ts);
  return all;
 }
-function bestSet(sessions){
+function hasLoadedHistory(sessions){return sessions.some(x=>(x.sets||[]).some(s=>(+s.kg||0)>0))}
+function setScore(s,weighted){return weighted?e1rm(s.kg,s.reps):(+s.reps||0)}
+function bestSet(sessions,weighted=hasLoadedHistory(sessions)){
  let best=null;
- sessions.forEach(x=>x.sets.forEach(s=>{const score=e1rm(s.kg,s.reps);if(!best||score>best.score)best={...s,score,ts:x.ts}}));
+ sessions.forEach(x=>x.sets.forEach(s=>{const score=setScore(s,weighted);if(!best||score>best.score)best={...s,score,ts:x.ts}}));
  return best;
 }
 function bestWeight(sessions){return Math.max(0,...sessions.flatMap(x=>x.sets.map(s=>s.kg)))}
 function fmtDate(ts){try{return new Intl.DateTimeFormat(undefined,{month:"short",day:"numeric"}).format(new Date(ts))}catch(_){return ""}}
-function sessionBest(x){return x.sets.reduce((b,s)=>!b||e1rm(s.kg,s.reps)>e1rm(b.kg,b.reps)?s:b,null)}
+function sessionBest(x,weighted=true){return x.sets.reduce((b,s)=>!b||setScore(s,weighted)>setScore(b,weighted)?s:b,null)}
 function chartSVG(points){
  if(points.length<2)return `<div class="dt-px-empty">Complete this exercise in at least two workouts to unlock its progression line.</div>`;
  const W=520,H=140,padX=24,padY=20, vals=points.map(p=>p.score), lo=Math.min(...vals),hi=Math.max(...vals),span=Math.max(hi-lo,1);
@@ -6130,45 +6140,59 @@ function ensureModal(){
  const m=document.createElement("div");m.id="dtExerciseProgressModal";m.innerHTML=`<section class="dt-px-sheet" role="dialog" aria-modal="true"><div id="dtPxContent"></div></section>`;
  m.addEventListener("click",ev=>{if(ev.target===m)closeProgress()});document.body.appendChild(m);
 }
-function closeProgress(){document.getElementById("dtExerciseProgressModal")?.classList.remove("show")}
+function closeProgress(){
+ const modal=document.getElementById("dtExerciseProgressModal");
+ modal?.classList.remove("show");if(modal)delete modal.dataset.exerciseKey;
+ window.__dtCurrentProgressExercise=null;
+}
 window.dtCloseExerciseProgress=closeProgress;
 
 function openProgress(e){
  ensureModal();
- const sessions=historyFor(e), best=bestSet(sessions), maxKg=bestWeight(sessions), latest=sessions.at(-1), previous=sessions.at(-2);
- const latestBest=latest?sessionBest(latest):null, prevBest=previous?sessionBest(previous):null;
- const latestScore=latestBest?e1rm(latestBest.kg,latestBest.reps):0, prevScore=prevBest?e1rm(prevBest.kg,prevBest.reps):0;
+ window.__dtCurrentProgressExercise=e||null;
+ const modal=document.getElementById("dtExerciseProgressModal");if(modal)modal.dataset.exerciseKey=stableKey(e);
+ const sessions=historyFor(e), weighted=hasLoadedHistory(sessions), best=bestSet(sessions,weighted), maxKg=bestWeight(sessions), latest=sessions.at(-1), previous=sessions.at(-2);
+ const latestBest=latest?sessionBest(latest,weighted):null, prevBest=previous?sessionBest(previous,weighted):null;
+ const latestScore=latestBest?setScore(latestBest,weighted):0, prevScore=prevBest?setScore(prevBest,weighted):0;
  const delta=prevScore?((latestScore-prevScore)/prevScore*100):0;
- const points=sessions.slice(-7).map(x=>{const s=sessionBest(x);return {score:e1rm(s.kg,s.reps),label:fmtDate(x.ts)}});
+ const points=sessions.slice(-7).map(x=>{const s=sessionBest(x,weighted);return {score:setScore(s,weighted),label:fmtDate(x.ts)}});
  const rec=recFor(e)||{kind:"start",icon:"•",label:"Build baseline",title:"Complete a workout to establish your baseline."};
  const recent=sessions.slice(-5).reverse();
  const rows=recent.length?recent.map((x,ri)=>{
-   const b=sessionBest(x), isBest=best&&Math.abs(e1rm(b.kg,b.reps)-best.score)<.0001;
-   return `<div class="dt-px-row"><div><b>${fmtDate(x.ts)}</b><span>${x.sets.length} working set${x.sets.length===1?"":"s"} · volume ${Math.round(vol(x.sets)).toLocaleString()} kg</span>${isBest?`<span class="dt-px-pr">🏆 Best performance</span>`:""}</div><strong>${b.kg} kg × ${b.reps}</strong></div>`;
+   const b=sessionBest(x,weighted), isBest=best&&Math.abs(setScore(b,weighted)-best.score)<.0001;
+   return `<div class="dt-px-row"><div><b>${fmtDate(x.ts)}</b><span>${x.sets.length} working set${x.sets.length===1?"":"s"} · volume ${Math.round(vol(x.sets)).toLocaleString()} kg</span>${isBest?`<span class="dt-px-pr">🏆 Best performance</span>`:""}</div><strong>${b.kg>0?`${b.kg} kg × ${b.reps}`:`BW × ${b.reps}`}</strong></div>`;
  }).join(""):`<div class="dt-px-empty">No completed history yet. Your first finished workout becomes the baseline.</div>`;
  const trend=delta>1?`+${delta.toFixed(1)}% vs prior`:delta<-1?`${delta.toFixed(1)}% vs prior`:"Stable vs prior";
  const content=document.getElementById("dtPxContent");
  content.innerHTML=`
  <div class="dt-px-head"><div><div class="dt-px-kicker">Exercise Progress</div><div class="dt-px-title">${e?.[0]||"Exercise"}</div><div class="dt-px-sub">${e?.[2]||e?.[1]||""} · completed workout history</div></div><button class="dt-px-close" onclick="dtCloseExerciseProgress()" aria-label="Close">×</button></div>
  <div class="dt-px-hero">
-   <div class="dt-px-stat"><small>Best set</small><strong>${best?`${best.kg} × ${best.reps}`:"—"}</strong><em>${best?"kg × reps":"Build baseline"}</em></div>
-   <div class="dt-px-stat"><small>Top load</small><strong>${maxKg?`${maxKg} kg`:"—"}</strong><em>${sessions.length} session${sessions.length===1?"":"s"}</em></div>
+   <div class="dt-px-stat"><small>Best set</small><strong>${best?(best.kg>0?`${best.kg} × ${best.reps}`:`BW × ${best.reps}`):"—"}</strong><em>${best?(best.kg>0?"kg × reps":"bodyweight × reps"):"Build baseline"}</em></div>
+   <div class="dt-px-stat"><small>Top load</small><strong>${maxKg?`${maxKg} kg`:sessions.length?"BW":"—"}</strong><em>${sessions.length} session${sessions.length===1?"":"s"}</em></div>
    <div class="dt-px-stat"><small>Trend</small><strong>${sessions.length>1?(delta>1?"Improving":delta<-1?"Down":"Steady"):"—"}</strong><em>${sessions.length>1?trend:"Need 2 sessions"}</em></div>
  </div>
- <div class="dt-px-card"><h4>Performance trend</h4><div class="dt-px-chart">${chartSVG(points)}</div><div class="dt-px-note">Trend uses an estimated 1RM score only to compare your own logged sets over time. It is not a measured 1RM test.</div></div>
+ <div class="dt-px-card"><h4>Performance trend</h4><div class="dt-px-chart">${chartSVG(points)}</div><div class="dt-px-note">${weighted?"Trend uses an estimated 1RM score only to compare your own logged sets over time. It is not a measured 1RM test.":"For bodyweight/reps-only history, the trend compares your best logged reps per workout."}</div></div>
  <div class="dt-px-card"><h4>Next-session guidance</h4><div class="dt-px-next"><div class="dt-px-next-icon">${rec.icon||"•"}</div><div class="dt-px-next-copy"><b>${rec.label||"Build baseline"}</b><span>${rec.title||""}</span></div></div></div>
  <div class="dt-px-card"><h4>Recent workouts</h4><div class="dt-px-sessions">${rows}</div></div>`;
  document.getElementById("dtExerciseProgressModal").classList.add("show");
 }
 window.dtOpenExerciseProgress=openProgress;
 
+function resolveBoxExercise(box,domIndex,exs){
+ const wanted=String(box?.dataset?.exerciseKey||box?.dataset?.exkey||"");
+ if(wanted){
+   const hit=exs.find(e=>{const stable=stableKey(e),legacy=String(typeof exerciseKey==="function"?exerciseKey(e):"");return stable===wanted||legacy===wanted});
+   if(hit)return hit;
+ }
+ return exs[domIndex]||null;
+}
 function decorate(){
  const list=document.getElementById("wlist");if(!list)return;
  const exs=typeof effectiveExercises==="function"?effectiveExercises(wday):[];
  [...list.querySelectorAll(".exercise")].forEach((box,i)=>{
-   if(box.querySelector(".dt-progress-open")||!exs[i])return;
-   const btn=document.createElement("button");btn.type="button";btn.className="dt-progress-open";btn.textContent="Progress";
-   btn.title="View exercise progress";btn.addEventListener("click",ev=>{ev.stopPropagation();openProgress(exs[i])});
+   const exercise=resolveBoxExercise(box,i,exs);if(box.querySelector(".dt-progress-open")||!exercise)return;
+   const btn=document.createElement("button");btn.type="button";btn.className="dt-progress-open";btn.textContent="Progress";btn.dataset.exerciseKey=stableKey(exercise);
+   btn.title="View exercise progress";btn.addEventListener("click",ev=>{ev.stopPropagation();openProgress(exercise)});
    const target=box.querySelector(".exercise-actions,.ex-actions,.exercise-head")||box;
    target.appendChild(btn);
  });
@@ -6700,7 +6724,7 @@ window.dtLoadDemoWorkoutData=()=>false;window.dtResetWorkoutData=resetWorkoutDat
 const DT_LIFT_TREND_VERSION="8.1-rir-lift-trend";
 
 function ltNorm(v){return String(v||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}
-function ltKey(e){try{return typeof exerciseKey==="function"?String(exerciseKey(e)):String(e?.[4]||"")}catch(_){return String(e?.[4]||"")}}
+function ltKey(e){try{return String(e?.[4]||(typeof exerciseKey==="function"?exerciseKey(e):""))}catch(_){return String(e?.[4]||"")}}
 function ltDate(ts){try{return new Intl.DateTimeFormat(undefined,{month:"short",day:"numeric"}).format(new Date(ts))}catch(_){return ""}}
 function ltE1rm(s){return (+s.kg||0)*(1+Math.min(+s.reps||0,30)/30)}
 function rirBand(effort){
@@ -6785,12 +6809,15 @@ function rerouteProgressButtons(){
   const exs=typeof effectiveExercises==="function"?effectiveExercises(wday):[];
   document.querySelectorAll("#wlist .exercise").forEach((box,i)=>{
     const btn=box.querySelector(".dt-progress-open");
-    if(!btn||btn.dataset.liftTrendBound||!exs[i])return;
+    const wanted=String(box.dataset.exerciseKey||box.dataset.exkey||btn?.dataset.exerciseKey||"");
+    const exact=wanted?exs.find(e=>ltKey(e)===wanted||String(typeof exerciseKey==="function"?exerciseKey(e):"")===wanted):null;
+    const exercise=exact||exs[i];
+    if(!btn||btn.dataset.liftTrendBound||!exercise)return;
     btn.dataset.liftTrendBound="1";
     btn.addEventListener("click",()=>{
       setTimeout(()=>{
-        // If the old handler opened first, simply append the upgraded trend to that same modal.
-        addLiftTrend(exs[i]);
+        // Keep the enhancement on the exact exercise opened by this card.
+        addLiftTrend(window.__dtCurrentProgressExercise||exercise);
       },20);
     },true);
   });
@@ -6847,7 +6874,7 @@ window.DT_LIFT_TREND_VERSION=DT_LIFT_TREND_VERSION;
 const DT_V8_2="8.2-dashboard-demo-trends";
 
 function miniNorm(v){return String(v||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}
-function miniKey(e){try{return typeof exerciseKey==="function"?String(exerciseKey(e)):String(e?.[4]||"")}catch(_){return String(e?.[4]||"")}}
+function miniKey(e){try{return String(e?.[4]||(typeof exerciseKey==="function"?exerciseKey(e):""))}catch(_){return String(e?.[4]||"")}}
 function miniHistory(e){
   const key=miniKey(e),name=miniNorm(e?.[0]),type=miniNorm(e?.[1]);
   const byDay=new Map();
@@ -6879,7 +6906,9 @@ function decorateActivityTrends(){
   let exs=[];
   try{exs=effectiveExercises(wday)||[]}catch(_){}
   [...list.querySelectorAll(".exercise")].forEach((box,i)=>{
-    const e=exs[i];if(!e)return;
+    const wanted=String(box.dataset.exerciseKey||box.dataset.exkey||"");
+    const exact=wanted?exs.find(e=>miniKey(e)===wanted||String(typeof exerciseKey==="function"?exerciseKey(e):"")===wanted):null;
+    const e=exact||exs[i];if(!e)return;
     const h=miniHistory(e);
     let mini=box.querySelector(".dt-ex-trend-mini");
     if(h.length<2){if(mini)mini.remove();return}
@@ -7432,14 +7461,14 @@ document.querySelectorAll(".view").forEach(v=>viewObserver.observe(v,{attributes
 
 /* ---------- Detailed geometric load / reps / sets trend ---------- */
 function norm(s){return String(s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}
-function keyFor(e){try{return String(exerciseKey(e))}catch(_){return String(e?.[4]||"")}}
+function keyFor(e){try{return String(e?.[4]||exerciseKey(e)||"")}catch(_){return String(e?.[4]||"")}}
 function sessionMetrics(e){
   const key=keyFor(e),name=norm(e?.[0]),type=norm(e?.[1]),map=new Map();
   (state.workouts?.completedExercises||[]).forEach(x=>{
     const exact=x.exerciseKey&&key&&String(x.exerciseKey)===key;
     const named=norm(x.name)===name&&(!type||!x.type||norm(x.type)===type);
     if(!exact&&!named)return;
-    const sets=(x.sets||[]).map(s=>({kg:+s.kg||0,reps:+s.reps||0})).filter(s=>s.kg>0&&s.reps>0);
+    const sets=(x.sets||[]).map(s=>({kg:+s.kg||0,reps:+s.reps||0})).filter(s=>s.reps>0&&s.kg>=0);
     if(!sets.length)return;
     const d=String(x.dayKey||x.finalizedAt||"").slice(0,10);
     const cur=map.get(d)||{date:d,sets:[]};cur.sets.push(...sets);map.set(d,cur);
@@ -7522,8 +7551,8 @@ const modalObs=new MutationObserver(()=>{
   if(document.getElementById("dtExerciseProgressModal")?.classList.contains("show")){
     let e=null;
     try{
-      const title=document.querySelector("#dtPxContent .dt-px-title")?.textContent.trim();
-      e=(effectiveExercises(wday)||[]).find(x=>String(x[0])===title);
+      e=window.__dtCurrentProgressExercise||null;
+      if(!e){const title=document.querySelector("#dtPxContent .dt-px-title")?.textContent.trim();e=(effectiveExercises(wday)||[]).find(x=>String(x[0])===title)};
     }catch(_){}
     if(e)setTimeout(()=>upgradePerformanceCard(e,90),40);
   }
@@ -7538,8 +7567,8 @@ document.addEventListener("click",ev=>{
   setTimeout(()=>{
     const title=document.querySelector("#dtPxContent .dt-px-title")?.textContent.trim();
     if(!title)return;
-    let e=null;
-    try{e=(effectiveExercises(wday)||[]).find(x=>String(x[0])===title)}catch(_){}
+    let e=window.__dtCurrentProgressExercise||null;
+    try{if(!e)e=(effectiveExercises(wday)||[]).find(x=>String(x[0])===title)}catch(_){}
     if(e)upgradePerformanceCard(e,90);
   },90);
 },true);
@@ -7958,14 +7987,14 @@ async function bindNotificationAction(){
 
 /* ---------- Detailed progress view ---------- */
 function v11Norm(v){return String(v||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}
-function v11Key(e){try{return String(exerciseKey(e))}catch(_){return String(e?.[4]||"")}}
+function v11Key(e){try{return String(e?.[4]||exerciseKey(e)||"")}catch(_){return String(e?.[4]||"")}}
 function v11Sessions(e){
   const key=v11Key(e),name=v11Norm(e?.[0]),type=v11Norm(e?.[1]),by=new Map();
   (state.workouts?.completedExercises||[]).forEach(x=>{
     const exact=x.exerciseKey&&key&&String(x.exerciseKey)===key;
     const named=v11Norm(x.name)===name&&(!type||!x.type||v11Norm(x.type)===type);
     if(!exact&&!named)return;
-    const sets=(x.sets||[]).map(s=>({kg:+s.kg||0,reps:+s.reps||0})).filter(s=>s.kg>0&&s.reps>0);
+    const sets=(x.sets||[]).map(s=>({kg:+s.kg||0,reps:+s.reps||0})).filter(s=>s.reps>0&&s.kg>=0);
     if(!sets.length)return;
     const dk=String(x.dayKey||x.finalizedAt||"").slice(0,10),rec=by.get(dk)||{date:dk,sets:[]};
     rec.sets.push(...sets);by.set(dk,rec);
@@ -8030,7 +8059,7 @@ document.addEventListener("click",ev=>{
   setTimeout(()=>{
     const title=document.querySelector("#dtPxContent .dt-px-title")?.textContent.trim();
     if(!title)return;
-    let e=null;try{e=(effectiveExercises(wday)||[]).find(x=>String(x[0])===title)}catch(_){}
+    let e=window.__dtCurrentProgressExercise||null;try{if(!e)e=(effectiveExercises(wday)||[]).find(x=>String(x[0])===title)}catch(_){}
     if(e)addDetailMode(e,90);
   },170);
 },true);
@@ -8167,7 +8196,7 @@ demoObserver.observe(document.body,{childList:true,subtree:true});
 
 /* ---------- Exercise Progress V2 ---------- */
 function p12Norm(v){return String(v||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}
-function p12Key(e){try{return String(exerciseKey(e))}catch(_){return String(e?.[4]||"")}}
+function p12Key(e){try{return String(e?.[4]||exerciseKey(e)||"")}catch(_){return String(e?.[4]||"")}}
 function p12Sessions(e){
   const key=p12Key(e),name=p12Norm(e?.[0]),type=p12Norm(e?.[1]),by=new Map();
   (state.workouts?.completedExercises||[]).forEach(x=>{
@@ -8175,7 +8204,7 @@ function p12Sessions(e){
     const exact=x.exerciseKey&&key&&String(x.exerciseKey)===key;
     const named=p12Norm(x.name)===name&&(!type||!x.type||p12Norm(x.type)===type);
     if(!exact&&!named)return;
-    const sets=(x.sets||[]).map(s=>({kg:+s.kg||0,reps:+s.reps||0})).filter(s=>s.kg>0&&s.reps>0);
+    const sets=(x.sets||[]).map(s=>({kg:+s.kg||0,reps:+s.reps||0})).filter(s=>s.reps>0&&s.kg>=0);
     if(!sets.length)return;
     const dk=String(x.dayKey||x.finalizedAt||"").slice(0,10);
     const rec=by.get(dk)||{date:dk,sets:[]};rec.sets.push(...sets);by.set(dk,rec);
@@ -8262,7 +8291,7 @@ document.addEventListener("click",ev=>{
   setTimeout(()=>{
     const title=document.querySelector("#dtPxContent .dt-px-title")?.textContent.trim();
     if(!title)return;
-    let e=null;try{e=(effectiveExercises(wday)||[]).find(x=>String(x[0])===title)}catch(_){}
+    let e=window.__dtCurrentProgressExercise||null;try{if(!e)e=(effectiveExercises(wday)||[]).find(x=>String(x[0])===title)}catch(_){}
     if(e)applyProgressV2(e,90);
   },230);
 },true);
@@ -16579,10 +16608,9 @@ body:has(#today.view.active) #dtRestGlobal{display:none!important}
     return `${kg} ${unit.toLowerCase()} × ${set?.reps||"—"}${eff?` · ${eff[0].toUpperCase()+eff.slice(1)}`:""}`;
   }
   function quickInputDefaults(info){
-    if(!info)return {kg:"",reps:"",effort:""};
-    const cached=quickPrefill.get(info.key);if(cached)return cached;
-    const last=quickLoggedSets(info).at(-1);if(!last)return {kg:"",reps:"",effort:""};
-    return {kg:last.kg!==""&&last.kg!=null?String(window.dtWeightDisplayValue?.(last.kg)??last.kg):"",reps:String(last.reps||""),effort:String(last.effort||"")};
+    /* A successful Log Set always starts the next set with a clean input row.
+       Previous performance remains visible in the logged-set chips/history, not as editable input. */
+    return {kg:"",reps:"",effort:""};
   }
   function haptic(ms=12){try{navigator.vibrate?.(ms)}catch(_){}}
   function quickRequiresWeight(info){
@@ -16602,7 +16630,7 @@ body:has(#today.view.active) #dtRestGlobal{display:none!important}
     try{
       const entry=quickDraftEntry(fresh);if(!entry)return {ok:false,msg:"Workout draft unavailable."};
       let target=(entry.sets||[]).find(x=>!quickValidSet(x));if(!target){target={kg:"",reps:"",effort:""};entry.sets.push(target)}
-      target.kg=kg;target.reps=String(repsInput);target.effort=effort;quickPrefill.set(fresh.key,{kg:String(kgInput??""),reps:String(repsInput??""),effort});save();haptic();return {ok:true,msg:`Set ${quickLoggedSets(fresh).length} logged.`};
+      target.kg=kg;target.reps=String(repsInput);target.effort=effort;quickPrefill.delete(fresh.key);save();haptic();return {ok:true,msg:`Set ${quickLoggedSets(fresh).length} logged.`};
     }catch(_){return {ok:false,msg:"Could not save this set."}}
   }
   function quickComplete(info){
@@ -16949,12 +16977,25 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
   function exDetail(ex){const rows=setRows(ex);if(!rows.length)return "";const sets=rows.map((s,i)=>{const kg=String(s.kg??"").trim()!==""?`${s.kg} kg`:"BW",eff=s.effort?` · ${String(s.effort)[0].toUpperCase()+String(s.effort).slice(1)}`:"";return `S${i+1} ${kg} × ${s.reps}${eff}`}).join(" · ");return `<div class="dt-hv2-ex"><b>${esc(ex.name||"Exercise")}</b><span>${esc(sets)}</span></div>`}
   function sessionHtml(s,idx){const m=sessionMetric(s),id=String(s.summaryId||s.id||`${s.date}|${idx}`),open=histUi.openSessions.has(id),d=new Date(s.date),label=typeof workoutDayLabel==="function"?workoutDayLabel(s.day):String(s.day||"Workout");return `<div class="dt-hv2-session ${open?"open":""}" data-session-id="${esc(id)}"><button class="dt-hv2-session-head" type="button"><i class="dt-hv2-dot"></i><span class="dt-hv2-session-main"><b>${esc(label)}</b><small>${esc(d.toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short"}))} · ${esc(d.toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit",hour12:true}))}</small></span><span class="dt-hv2-session-side"><b>${m.sets} sets</b><small>${m.ex.length} exercises · ${m.volume?`${Math.round(m.volume).toLocaleString()} kg`:"details"}</small></span></button><div class="dt-hv2-session-detail">${m.ex.map(exDetail).filter(Boolean).join("")||'<div class="dt-hv2-ex"><span>No detailed set data was stored for this session.</span></div>'}</div></div>`}
   function weekHtml(g,index,currentKey){const current=g.key===currentKey;if(!histUi.initialized&&current)histUi.openWeeks.add(g.key);const open=histUi.openWeeks.has(g.key);return `<section class="dt-hv2-week ${current?"current":""} ${open?"open":""}" data-week="${g.key}"><button class="dt-hv2-week-head" type="button"><span class="dt-hv2-week-title"><small>${current?"CURRENT WEEK":"WEEKLY HISTORY"}</small><b>${esc(weekLabel(g.start,current))}</b><span>${g.sessions.length} workout${g.sessions.length===1?"":"s"} · ${g.sets} working sets</span></span><span class="dt-hv2-week-metrics"><span><b>${g.volume?g.volume.toLocaleString():"—"}</b><small>${g.volume?"kg volume":"volume"}</small></span><i class="dt-hv2-chevron">⌄</i></span></button><div class="dt-hv2-week-body">${g.sessions.map(sessionHtml).join("")}</div></section>`}
+  function savedActivitiesHtml(){
+    const records=[...(state.workouts?.completedExercises||[])].filter(r=>(r.sets||[]).some(x=>Number(x?.reps)>0)).sort((a,b)=>String(b.finalizedAt||b.startedAt||b.dayKey||"").localeCompare(String(a.finalizedAt||a.startedAt||a.dayKey||""))).slice(0,60);
+    if(!records.length)return "";
+    const unit=String(window.dtWeightUnitLabel?.()||"KG").toLowerCase();
+    const rows=records.map(rec=>{
+      const when=new Date(rec.finalizedAt||rec.startedAt||rec.dayKey||Date.now()),sets=(rec.sets||[]).filter(x=>Number(x?.reps)>0);
+      const details=sets.map((set,i)=>{const raw=String(set?.kg??"").trim(),kg=raw!==""&&Number(raw)>0?`${window.dtWeightDisplayValue?.(Number(raw))??raw} ${unit}`:"BW",eff=set?.effort?` · ${String(set.effort)[0].toUpperCase()+String(set.effort).slice(1)}`:"";return `Set ${i+1}: ${kg} × ${Number(set.reps)} reps${eff}`}).join("<br>");
+      const day=typeof workoutDayLabel==="function"?workoutDayLabel(rec.day):String(rec.day||"Workout"),date=isNaN(when)?String(rec.dayKey||""):when.toLocaleDateString("en-AU",{day:"numeric",month:"short",year:"numeric"}),time=isNaN(when)?"":` · ${when.toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit",hour12:true})}`;
+      return `<div class="saved-activity-row" data-saved-exercise-key="${esc(String(rec.exerciseKey||""))}"><div class="saved-activity-icon">${window.dtMuscleIconHTML?.(rec.muscle)||"✓"}</div><div class="saved-activity-main"><b>${esc(rec.name||"Exercise")}</b><small>${esc(day)} · ${esc(date)}${esc(time)}</small><div class="saved-activity-detail">${details||"No set details"}</div></div></div>`;
+    }).join("");
+    return `<div class="activity-history-title">Saved activities</div>${rows}`;
+  }
   function renderHistoryV2(){
     const list=document.getElementById("workoutHistoryList");if(!list)return;list.classList.add("dt-history-v2");
     const groups=historyGroups(),currentKey=ymd(monday(new Date())),visible=groups.slice(0,histUi.visibleWeeks),totalSessions=groups.reduce((n,g)=>n+g.sessions.length,0),totalSets=groups.reduce((n,g)=>n+g.sets,0);
-    if(!groups.length){list.innerHTML='<div class="workout-history-empty">No completed workout sessions yet.</div>';return}
+    const savedHtml=savedActivitiesHtml();
+    if(!groups.length){list.innerHTML=`<div class="workout-history-empty">${savedHtml?"No completed workout sessions yet. Saved activities are kept below until the workout is finished.":"No completed workout sessions yet."}</div>${savedHtml}`;return}
     const thisWeek=groups.find(g=>g.key===currentKey)||{sessions:[],sets:0};
-    list.innerHTML=`<div class="dt-hv2-overview"><div><small>This week</small><b>${thisWeek.sessions.length}</b></div><div><small>Working sets</small><b>${thisWeek.sets||0}</b></div><div><small>History</small><b>${groups.length} wk</b></div></div>${visible.map((g,i)=>weekHtml(g,i,currentKey)).join("")}<div class="dt-hv2-more">${histUi.visibleWeeks<groups.length?'<button class="primary" type="button" data-hv2="more">Show earlier weeks</button>':''}${histUi.visibleWeeks>4?'<button type="button" data-hv2="less">Show less</button>':''}</div>`;
+    list.innerHTML=`<div class="dt-hv2-overview"><div><small>This week</small><b>${thisWeek.sessions.length}</b></div><div><small>Working sets</small><b>${thisWeek.sets||0}</b></div><div><small>History</small><b>${groups.length} wk</b></div></div>${visible.map((g,i)=>weekHtml(g,i,currentKey)).join("")}<div class="dt-hv2-more">${histUi.visibleWeeks<groups.length?'<button class="primary" type="button" data-hv2="more">Show earlier weeks</button>':''}${histUi.visibleWeeks>4?'<button type="button" data-hv2="less">Show less</button>':''}</div>${savedHtml}`;
     histUi.initialized=true;
     list.querySelectorAll(".dt-hv2-week-head").forEach(b=>b.onclick=()=>{const w=b.closest(".dt-hv2-week"),key=w.dataset.week,open=!w.classList.contains("open");w.classList.toggle("open",open);open?histUi.openWeeks.add(key):histUi.openWeeks.delete(key)});
     list.querySelectorAll(".dt-hv2-session-head").forEach(b=>b.onclick=()=>{const s=b.closest(".dt-hv2-session"),id=s.dataset.sessionId,open=!s.classList.contains("open");s.classList.toggle("open",open);open?histUi.openSessions.add(id):histUi.openSessions.delete(id)});
