@@ -6294,15 +6294,33 @@ function allDayKeys(){const set=new Set();(state.workouts?.completedExercises||[
 function currentStreak(){const days=allDayKeys();if(!days.size)return 0;const today=new Date();today.setHours(12,0,0,0);let cursor=new Date(today);if(!days.has(dateKey(cursor)))cursor=new Date(cursor.getTime()-DAY);let streak=0;while(days.has(dateKey(cursor))){streak++;cursor=new Date(cursor.getTime()-DAY)}return streak}
 window.dtCurrentWorkoutStreak=currentStreak;
 function muscleTotals(rows){const m={};rows.forEach(x=>{const sets=validSets(x).length;if(!sets)return;const parts=String(x.muscle||'Other').split(/[/,]/).map(s=>s.trim()).filter(Boolean);const share=sets/Math.max(parts.length,1);parts.forEach(p=>m[p]=(m[p]||0)+share)});return Object.entries(m).sort((a,b)=>b[1]-a[1])}
-function prList(rows,w){
- const before=(state.workouts?.completedExercises||[]).filter(x=>String(x.dayKey||x.finalizedAt||'').slice(0,10)<w.keys[0]);
- const bestBefore={};before.forEach(x=>validSets(x).forEach(s=>{const k=String(x.name||'');bestBefore[k]=Math.max(bestBefore[k]||0,e1rm(s))}));
- const out=[];rows.slice().sort((a,b)=>String(a.finalizedAt||a.dayKey).localeCompare(String(b.finalizedAt||b.dayKey))).forEach(x=>{const sets=validSets(x);if(!sets.length)return;const best=sets.reduce((a,b)=>e1rm(a)>e1rm(b)?a:b),score=e1rm(best),k=String(x.name||'');if(bestBefore[k]&&score>bestBefore[k]*1.01){out.push({name:k,kg:+best.kg,reps:+best.reps,date:String(x.dayKey||x.finalizedAt).slice(0,10)});bestBefore[k]=score}else bestBefore[k]=Math.max(bestBefore[k]||0,score)});return out.reverse()
+function prIdentity(x){
+ const key=String(x?.exerciseKey||'').trim();if(key)return `key:${key}`;
+ const name=String(x?.name||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+ const type=String(x?.type||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+ return `legacy:${name}|${type}`
 }
+function prList(rows,w){
+ const startKey=w?.keys?.[0]||weekBounds().keys[0];
+ const before=(state.workouts?.completedExercises||[]).filter(x=>workoutRecordDayKey(x)<startKey);
+ const bestBefore={};before.forEach(x=>validSets(x).forEach(s=>{const k=prIdentity(x);bestBefore[k]=Math.max(bestBefore[k]||0,e1rm(s))}));
+ const out=[];(rows||[]).slice().sort((a,b)=>String(a.finalizedAt||a.startedAt||a.dayKey).localeCompare(String(b.finalizedAt||b.startedAt||b.dayKey))).forEach(x=>{
+   const sets=validSets(x);if(!sets.length)return;
+   const best=sets.reduce((a,b)=>e1rm(a)>e1rm(b)?a:b),score=e1rm(best),k=prIdentity(x);
+   if(bestBefore[k]&&score>bestBefore[k]*1.01){
+     out.push({exerciseKey:String(x.exerciseKey||''),name:String(x.name||'Exercise'),type:String(x.type||''),kg:+best.kg,reps:+best.reps,score,date:workoutRecordDayKey(x)});
+     bestBefore[k]=score;
+   }else bestBefore[k]=Math.max(bestBefore[k]||0,score);
+ });
+ return out.reverse()
+}
+function currentWeekPRs(){const w=weekBounds();return prList(completedInWeek(w),w)}
+window.dtWeeklyPerformancePRs=currentWeekPRs;
+window.dtWeeklyPerformancePRList=prList;
 function ensure(){if(document.getElementById('dtWeeklyPerformanceModal'))return;const m=document.createElement('div');m.id='dtWeeklyPerformanceModal';m.innerHTML='<section class="dt-wp-sheet"><div id="dtWpContent"></div></section>';m.onclick=e=>{if(e.target===m)m.classList.remove('show')};document.body.appendChild(m)}
 function fmtRange(w){const f=d=>new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric'}).format(d);return `${f(w.start)} – ${f(w.end)}`}
 function insight(rows,muscles,prs,sessions,streak){if(!rows.length)return ['•','Build the week','Complete your first workout this week and this dashboard will start comparing your streak, working sets and progression.'];if(prs.length)return ['↑',`${prs.length} new PR${prs.length===1?'':'s'}`,`Performance moved forward this week. Keep progression conservative and preserve good reps rather than forcing a load increase every session.`];if(sessions>=3)return ['🔥',`${streak}-day streak`,`You logged ${sessions} workout sessions. ${muscles[0]?`${muscles[0][0]} received the most logged set emphasis.`:''}`];return ['→','Keep building',`You have ${sessions} completed workout${sessions===1?'':'s'} this week. The dashboard will become more useful as completed sessions accumulate.`]}
-function openWeekly(){ensure();const w=weekBounds(),rows=completedInWeek(w),sessions=sessionIds(rows),sets=rows.reduce((n,x)=>n+validSets(x).length,0),volume=Math.round(rows.reduce((n,x)=>n+validSets(x).reduce((a,s)=>a+(+s.kg)*(+s.reps),0),0)),muscles=muscleTotals(rows),prs=prList(rows,w),totalM=muscles.reduce((a,x)=>a+x[1],0)||1,active=new Set(rows.map(x=>workoutRecordDayKey(x))),streak=currentStreak(),ins=insight(rows,muscles,prs,sessions,streak);
+function openWeekly(){ensure();const w=weekBounds(),rows=completedInWeek(w),sessions=sessionIds(rows),sets=rows.reduce((n,x)=>n+validSets(x).length,0),volume=Math.round(rows.reduce((n,x)=>n+validSets(x).reduce((a,s)=>a+(+s.kg)*(+s.reps),0),0)),muscles=muscleTotals(rows),prs=currentWeekPRs(),totalM=muscles.reduce((a,x)=>a+x[1],0)||1,active=new Set(rows.map(x=>workoutRecordDayKey(x))),streak=currentStreak(),ins=insight(rows,muscles,prs,sessions,streak);
  const muscleHtml=muscles.length?muscles.slice(0,6).map(([name,v])=>{const pct=Math.round(v/totalM*100),on=Math.max(1,Math.round(pct/10));return `<div class="dt-wp-muscle-line"><b>${name}</b><div class="dt-wp-track">${Array.from({length:10},(_,i)=>`<i class="${i<on?'on':''}"></i>`).join('')}</div><strong>${pct}%</strong></div>`}).join(''):'<div class="dt-wp-sub">Muscle emphasis appears after completed workout sets.</div>';
  const prHtml=prs.length?prs.slice(0,5).map(p=>`<div class="dt-wp-pr"><div><b>${p.name}</b><span>${p.date}</span></div><strong>🏆 ${p.kg} × ${p.reps}</strong></div>`).join(''):'<div class="dt-wp-sub">No new performance records detected this week.</div>';
  document.getElementById('dtWpContent').innerHTML=`<div class="dt-wp-head"><div><div class="dt-wp-kicker">Weekly Performance</div><div class="dt-wp-title">Your training week</div><div class="dt-wp-sub">${fmtRange(w)}</div></div><button class="dt-wp-close" onclick="document.getElementById('dtWeeklyPerformanceModal').classList.remove('show')">×</button></div><div class="dt-wp-grid"><div class="dt-wp-stat"><small>Workouts</small><strong>${sessions}</strong><em>completed</em></div><div class="dt-wp-stat"><small>Working sets</small><strong>${sets}</strong><em>logged sets</em></div><div class="dt-wp-stat"><small>Volume load</small><strong>${volume?volume.toLocaleString():'—'}</strong><em>${volume?'kg logged':'no data'}</em></div><div class="dt-wp-stat"><small>PRs</small><strong>${prs.length}</strong><em>this week</em></div></div><div class="dt-wp-card"><h4>🔥 Streak</h4><div class="dt-wp-streak-count">${streak} day${streak===1?'':'s'}</div><div class="dt-wp-days">${w.keys.map((k,i)=>`<div class="dt-wp-day ${active.has(k)?'on':''}"><i></i><span>${['M','T','W','T','F','S','S'][i]}</span></div>`).join('')}</div></div><div class="dt-wp-card"><h4>Logged set emphasis</h4><div class="dt-wp-muscles">${muscleHtml}</div><div class="dt-wp-foot">Relative share of your logged working sets this week.</div></div><div class="dt-wp-card"><h4>Performance records</h4><div class="dt-wp-prs">${prHtml}</div></div><div class="dt-wp-card"><h4>Weekly insight</h4><div class="dt-wp-insight"><div class="dt-wp-insight-icon">${ins[0]}</div><div><b>${ins[1]}</b><span>${ins[2]}</span></div></div></div>`;document.getElementById('dtWeeklyPerformanceModal').classList.add('show')}
@@ -17143,9 +17161,9 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
   function imbalanceEvidence(){try{const n=window.dtIntelImbalanceNudge?.();if(!n)return [];return [`${n.ratioLabel||"Recent imbalance"} over the last ${n.weeks||3} weeks`,`${n.persistenceWeeks||0} of ${n.weeks||3} recent weeks met the imbalance threshold`]}catch(_){return []}}
   function evidenceFor(row){if(row?.category==="imbalance")return imbalanceEvidence();const e=exerciseEvidence(row);return e.length?e:[String(row?.body||"")].filter(Boolean)}
   function advice(cat){return E[cat]||E.generic}
-  function thisWeekBrief(rows){const now=new Date(),start=monday(now),end=new Date(start);end.setDate(end.getDate()+6);const sessions=(state.workouts?.sessions||[]).filter(s=>{const d=new Date(s.date);return d>=start&&d<new Date(end.getTime()+86400000)&&sessionMetric(s).sets>0}),recs=(state.workouts?.completedExercises||[]).filter(r=>{const d=new Date(r.finalizedAt||r.startedAt||r.dayKey);return !isNaN(d)&&d>=start&&d<new Date(end.getTime()+86400000)}),sets=sessions.reduce((n,s)=>n+sessionMetric(s).sets,0);
-    let prs=0;const by=new Map();(state.workouts?.completedExercises||[]).forEach(r=>{if(!r?.exerciseKey)return;if(!by.has(r.exerciseKey))by.set(r.exerciseKey,[]);by.get(r.exerciseKey).push(r)});by.forEach(arr=>{arr.sort((a,b)=>new Date(a.finalizedAt||a.startedAt)-new Date(b.finalizedAt||b.startedAt));let best=0;arr.forEach(r=>{const d=new Date(r.finalizedAt||r.startedAt),top=Math.max(0,...(r.sets||[]).map(s=>Number(s.kg)||0));if(d>=start&&top>best&&best>0)prs++;best=Math.max(best,top)})});
-    const fmt=d=>d.toLocaleDateString("en-AU",{day:"numeric",month:"short"}),first=rows?.[0],second=rows?.[1],good=prs?`${prs} new load PR${prs===1?"":"s"} appeared in your finalized sessions.`:`${sessions.length} completed workout${sessions.length===1?"":"s"} are logged this week.`,watch=first?.title||"No strong warning signal this week.",next=first?advice(first.category).action.split(".")[0]+".":"Complete the next planned workout and keep effort logging consistent.";return {range:`${fmt(start)} – ${fmt(end)}`,workouts:sessions.length,sets,prs,good,watch,next}}
+  function thisWeekBrief(rows){const now=new Date(),start=monday(now),end=new Date(start);end.setDate(end.getDate()+6);const sessions=(state.workouts?.sessions||[]).filter(s=>{const d=new Date(s.date);return d>=start&&d<new Date(end.getTime()+86400000)&&sessionMetric(s).sets>0}),sets=sessions.reduce((n,s)=>n+sessionMetric(s).sets,0);
+    const prRows=typeof window.dtWeeklyPerformancePRs==="function"?(window.dtWeeklyPerformancePRs()||[]):[],prs=prRows.length;
+    const fmt=d=>d.toLocaleDateString("en-AU",{day:"numeric",month:"short"}),first=rows?.[0],second=rows?.[1],good=prs?`${prs} new performance PR${prs===1?"":"s"} appeared in your finalized sessions.`:`${sessions.length} completed workout${sessions.length===1?"":"s"} are logged this week.`,watch=first?.title||"No strong warning signal this week.",next=first?advice(first.category).action.split(".")[0]+".":"Complete the next planned workout and keep effort logging consistent.";return {range:`${fmt(start)} – ${fmt(end)}`,workouts:sessions.length,sets,prs,good,watch,next}}
   function buildModel(rows){const cards=(rows||[]).map(row=>{const a=advice(row.category);return {category:row.category,title:row.title,summary:row.body,noticed:row.body,evidence:evidenceFor(row),action:a.action,why:a.why,fact:a.fact,source:a.source,trivia:a.trivia}});const learn=LEARN[cards[0]?.category]||LEARN.generic;return {cards,brief:thisWeekBrief(rows),learn}}
   window.dtCoachV2BuildModel=buildModel;
   window.DT_COACH_EVIDENCE_LIBRARY=E;
@@ -17604,7 +17622,7 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
 })();
 </script>
 
-<script>window.DT_MARC_RELEASE_FIX_VERSION="35.0-motion-polish";</script>
+<script>window.DT_MARC_RELEASE_FIX_VERSION="36.0-pr-consistency";</script>
 
 </body>
 </html>

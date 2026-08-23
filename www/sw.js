@@ -1,6 +1,6 @@
 "use strict";
 
-const VERSION = "marc-v35-motion-polish-v1";
+const VERSION = "marc-v36-pr-consistency-v1";
 const APP_CACHE = `${VERSION}-app`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest"];
@@ -29,7 +29,7 @@ self.addEventListener("activate", event => {
   event.waitUntil((async()=>{
     const keep=new Set([APP_CACHE,RUNTIME_CACHE]);
     const keys=await caches.keys();
-    await Promise.all(keys.filter(k=>!keep.has(k) && (k.startsWith("marc-v26-")||k.startsWith("marc-v27-")||k.startsWith("marc-v28-")||k.startsWith("marc-v29-")||k.startsWith("marc-v30-")||k.startsWith("marc-v31-")||k.startsWith("marc-v32-")||k.startsWith("marc-v33-")||k.startsWith("marc-v34-")||k.startsWith("marc-v35-"))).map(k=>caches.delete(k)));
+    await Promise.all(keys.filter(k=>!keep.has(k) && (k.startsWith("marc-v26-")||k.startsWith("marc-v27-")||k.startsWith("marc-v28-")||k.startsWith("marc-v29-")||k.startsWith("marc-v30-")||k.startsWith("marc-v31-")||k.startsWith("marc-v32-")||k.startsWith("marc-v33-")||k.startsWith("marc-v34-")||k.startsWith("marc-v35-")||k.startsWith("marc-v36-"))).map(k=>caches.delete(k)));
     await self.clients.claim();
   })());
 });
