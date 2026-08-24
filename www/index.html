@@ -10400,8 +10400,14 @@ window.dtRemoveWorkoutSet=removeSet;
     m.classList.remove("show");
     renderTabs();
     renderWorkout();
+    /* Explicit user action: after all authoritative rerenders, center ONLY the
+       newly-created split. This is allowed; passive rerenders never recenter. */
+    setTimeout(()=>{
+      const tab=document.querySelector(`#workout .workout-tab[data-wday="${CSS.escape(key)}"]`);
+      tab?.scrollIntoView({behavior:"smooth",inline:"center",block:"nearest"});
+    },80);
     /* New split starts empty: use the existing Add Exercise flow. */
-    setTimeout(()=>document.getElementById("addExerciseBtn")?.scrollIntoView({behavior:"smooth",block:"center"}),120);
+    setTimeout(()=>document.getElementById("addExerciseBtn")?.scrollIntoView({behavior:"smooth",block:"center"}),160);
     try{window.dtRenderTodaySchedule?.()}catch(_){}
     return true;
   }
@@ -19021,8 +19027,9 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     window.addEventListener("resize",updateHints,{passive:true});
     updateHints();
 
-    /* Put the active split fully into view after first render. */
-    setTimeout(()=>scrollActive(false),60);
+    /* V36.14: initial bind must not steal a restored/manual scroll position.
+       Explicit split selection/creation owns centering. */
+    setTimeout(updateHints,60);
   }
 
   function activeTab(){
@@ -19084,10 +19091,11 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     }
     if(splitChanged){
       queueMicrotask(()=>{
+        /* V36.14: rebind/update edge hints only. Never auto-recenter after a
+           tab DOM rebuild because that steals the user's manual horizontal
+           scroll position and causes the split strip to snap back. */
         bindStrip();
-        /* New/rendered tabs may move the active split, but only after a true
-           tab render — never from pointer press classes. */
-        scrollActive(true);
+        updateHints();
       });
     }
   });
@@ -19104,7 +19112,6 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
 
   window.dtMobileInteraction={
     bindSplitStrip:bindStrip,
-    scrollActiveSplit:scrollActive,
     updateSplitHints:updateHints
   };
 })();
@@ -19802,6 +19809,16 @@ window.DT_V36_PHASE6_FIX_VERSION="36.6-phase6-release-integrity";
 .dt-empty-workout-mark{width:58px;height:58px;margin:0 auto 14px;border:1px solid #315a72;border-radius:50%;display:grid;place-items:center;color:#69b9ff;font-size:28px}
 .dt-empty-workout b{display:block;color:#edf5f8;font-size:18px}
 .dt-empty-workout small{display:block;margin-top:7px;color:#879aa6;font-size:12px}
+</style>
+
+<script>window.DT_MARC_RELEASE_FIX_VERSION="36.14-phase14-custom-split-manual-scroll-ownership";</script>
+<style id="dt-v36-14-custom-split-scroll-ownership">
+#workout .workout-tabs{
+  touch-action:pan-x!important;
+  scroll-behavior:auto!important;
+  overscroll-behavior-x:contain!important;
+  scroll-snap-type:none!important;
+}
 </style>
 </body>
 </html>
