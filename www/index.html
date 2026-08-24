@@ -18181,7 +18181,7 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
 })();
 </script>
 
-<script>window.DT_MARC_RELEASE_FIX_VERSION="36.0-debug-j2";</script>
+<script>window.DT_MARC_RELEASE_FIX_VERSION="36.0-debug-j3";</script>
 
 
 <script id="dt-v36-p2-haptics">
@@ -18665,7 +18665,7 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
 
   const ENABLE_KEY="dt_debug_recorder_enabled_v1";
   const LOG_KEY="dt_debug_recorder_log_v1";
-  const MAX_EVENTS=5000;
+  const MAX_EVENTS=20000;
   const MAX_TEXT=180;
   const PERSIST_DEBOUNCE_MS=1200;
   const PERSIST_EVENT_BATCH=18;
@@ -18699,6 +18699,15 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
   }
 
   let log=loadLog();
+  const SESSION_KEY="dt_debug_current_session_meta_v1";
+  const ARCHIVE_KEY="dt_debug_session_archive_v1";
+  const MAX_ARCHIVED_SESSIONS=12;
+  const MAX_ARCHIVED_EVENTS_PER_SESSION=3500;
+  const debugSessionId=`s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
+  const debugSessionStartedAt=new Date().toISOString();
+  let previousSessionMeta=null;
+  try{previousSessionMeta=JSON.parse(localStorage.getItem(SESSION_KEY)||"null")}catch(_){}
+  try{localStorage.setItem(SESSION_KEY,JSON.stringify({id:debugSessionId,startedAt:debugSessionStartedAt,previousSessionId:previousSessionMeta?.id||null}))}catch(_){}
   let seq=log.reduce((m,e)=>Math.max(m,Number(e?.seq)||0),0);
   let interactionSeq=0;
   let activeInteractionId=null;
@@ -18712,6 +18721,23 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     validationFailure:0,frameStall:0,frozenFrame:0,longTask:0,layoutShift:0,
     blocked:0,occluded:0
   };
+
+  function loadSessionArchive(){
+    try{const a=JSON.parse(localStorage.getItem(ARCHIVE_KEY)||"[]");return Array.isArray(a)?a:[]}catch(_){return []}
+  }
+  function saveSessionArchive(a){
+    try{localStorage.setItem(ARCHIVE_KEY,JSON.stringify(a.slice(-MAX_ARCHIVED_SESSIONS)));return true}catch(_){return false}
+  }
+  function archivePreviousSessionIfNeeded(){
+    if(!previousSessionMeta?.id)return;
+    const archive=loadSessionArchive();
+    if(archive.some(x=>x?.id===previousSessionMeta.id))return;
+    const events=log.filter(e=>e?.sessionId===previousSessionMeta.id).slice(-MAX_ARCHIVED_EVENTS_PER_SESSION);
+    if(!events.length)return;
+    archive.push({id:previousSessionMeta.id,startedAt:previousSessionMeta.startedAt||null,archivedAt:new Date().toISOString(),eventCount:events.length,firstSeq:events[0]?.seq||null,lastSeq:events.at(-1)?.seq||null,events});
+    saveSessionArchive(archive);
+  }
+  archivePreviousSessionIfNeeded();
 
   function persistLogNow(){
     if(!dirty&&eventsSincePersist===0)return true;
@@ -18764,7 +18790,7 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     if(!enabled)return null;
     const evt={
       seq:++seq,ts:new Date().toISOString(),t:Math.round(performance.now()),type,
-      interactionId:opts.interactionId??activeInteractionId,view:currentView(),data
+      interactionId:opts.interactionId??activeInteractionId,sessionId:debugSessionId,view:currentView(),data
     };
     log.push(evt);trim();schedulePersist();return evt;
   }
@@ -18908,6 +18934,16 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
       },{interactionId:g.id});
     }
   }
+  function shouldFlagNoVisibleChange(target){
+    if(!target)return false;
+    const p=String(target.path||"");
+    const tag=String(target.tag||"").toLowerCase();
+    if(["input","textarea","select"].includes(tag))return false;
+    if(/dtSessionOrbit|dtV27SessionButton|dtSessionPause/i.test(p))return false;
+    if(/workout-tab/i.test(p))return false;
+    return true;
+  }
+
   function finishGesture(e,cancelled=false){
     const g=gestureMap.get(e.pointerId);if(!g)return;
     gestureMap.delete(e.pointerId);activeInteractionId=g.id;
@@ -18934,7 +18970,7 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
           newOverlays:after.overlays.filter(x=>!before.overlays.includes(x)),
           closedOverlays:before.overlays.filter(x=>!after.overlays.includes(x))
         },{interactionId:iid});
-        if(index===2&&!changed&&!original?.disabled){
+        if(index===2&&!changed&&!original?.disabled&&shouldFlagNoVisibleChange(original)){
           counters.noVisibleChange++;
           record("interaction_no_visible_change",{
             target:original,waitedMs:delay,
@@ -19261,7 +19297,10 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     return exportObject(`MARC_DEBUG_BUNDLE_${stamp()}.json`,{
       ...baseMeta(),kind:"debug-bundle",
       dataScope:"detailed-gesture-control-outcome-input-validation-errors-network-performance-ui-state-no-raw-values",
-      eventCount:log.length,summary:diagnosticSummary(),events:log,snapshot:getDebugSnapshot()
+      eventCount:log.length,
+      currentSession:{id:debugSessionId,startedAt:debugSessionStartedAt,previousSessionId:previousSessionMeta?.id||null},
+      archivedSessions:loadSessionArchive(),
+      summary:diagnosticSummary(),events:log,snapshot:getDebugSnapshot()
     });
   }
   async function exportAppBackup(){
@@ -19310,12 +19349,12 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
 
   window.dtDebugRecorder={
     get enabled(){return enabled},setEnabled,record,flush:persistLogNow,exportDebugLog,exportDebugBundle,exportAppBackup,
-    clear:clearDebug,getLog:()=>log.slice(),summary:diagnosticSummary,uiFingerprint
+    clear:clearDebug,getLog:()=>log.slice(),summary:diagnosticSummary,uiFingerprint,sessionId:debugSessionId,getSessionArchive:loadSessionArchive
   };
 
   function boot(){
     watchViews();viewportEvent("boot");renderHealth();
-    record("session_start",{device:deviceMeta(),release:releaseMeta(),debugger:"J1"});
+    record("session_start",{sessionId:debugSessionId,previousSessionId:previousSessionMeta?.id||null,startedAt:debugSessionStartedAt,device:deviceMeta(),release:releaseMeta(),debugger:"J3"});
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();
 })();
@@ -19639,7 +19678,7 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
 <script id="dt-v36-debugger-j2">
 (()=>{
   "use strict";
-  const VERSION="J2-deep-diagnostics";
+  const VERSION="J3-deep-diagnostics";
   const markBtn=document.getElementById("dtMarkBugNow");
   let bugSeq=0;
   let lastScrollSample=0;
@@ -19817,13 +19856,15 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     });
   },{capture:true,passive:true});
 
-  // DOM churn locator for flicker/flash bugs. No text values are recorded.
+  // J3: aggregate DOM churn so telemetry cannot evict real user interactions.
   function flushMutations(){
     if(!mutationBurst.count)return;
-    rec("dom_mutation_burst",{
-      count:mutationBurst.count,added:mutationBurst.added,removed:mutationBurst.removed,
-      attributes:mutationBurst.attrs,targets:[...mutationBurst.targets].slice(0,20)
-    });
+    const targets=[...mutationBurst.targets];
+    const filtered=targets.filter(p=>!/small#dtDebugHealth/.test(p||"")&&!/^section#workout$/.test(p||""));
+    const meaningful=mutationBurst.count>=20||mutationBurst.added>=8||mutationBurst.removed>=8||mutationBurst.attrs>=12||filtered.length>0;
+    if(meaningful){
+      rec("dom_mutation_summary",{windowMs:2000,count:mutationBurst.count,added:mutationBurst.added,removed:mutationBurst.removed,attributes:mutationBurst.attrs,targets:(filtered.length?filtered:targets).slice(0,18)});
+    }
     mutationBurst={count:0,added:0,removed:0,attrs:0,targets:new Set(),timer:null};
   }
   try{
@@ -19836,8 +19877,8 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
         if(r.target instanceof Element)mutationBurst.targets.add(path(r.target));
       });
       clearTimeout(mutationBurst.timer);
-      mutationBurst.timer=setTimeout(flushMutations,180);
-      if(mutationBurst.count>120)flushMutations();
+      mutationBurst.timer=setTimeout(flushMutations,2000);
+      if(mutationBurst.count>400)flushMutations();
     });
     mo.observe(document.body,{
       subtree:true,childList:true,attributes:true,
@@ -19846,6 +19887,7 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
   }catch(_){}
 
   rec("debugger_j2_ready",{version:VERSION});
+  rec("debugger_j3_retention_ready",{maxEvents:20000,mutationAggregationMs:2000});
   window.dtDebuggerJ2={markBug,snapshot,version:VERSION};
 })();
 </script>
