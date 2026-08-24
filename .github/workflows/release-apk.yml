@@ -46,7 +46,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import hashlib, json
-          expected = "e7b5cfd156c426fd00f9443ca1222433daf811ee019dc2cf9997c04bdc681cef"
+          expected = "ed3f9278db21e8875dd643481181f79a3e82a42b1fef81fb5e4209cbecfc7b91"
           for name in ("package.json", "capacitor.config.json"):
               json.loads(Path(name).read_text())
               print(f"{name}: JSON parse PASS")
@@ -99,11 +99,11 @@ jobs:
           echo "Capacitor major: $CAP_MAJOR"
           # cap sync inspects package.json when includePlugins is not explicitly configured.
           # Save these dependencies in the ephemeral Actions workspace so plugin discovery is deterministic.
-          npm install --save-exact --package-lock=false "@capacitor/local-notifications@$CAP_MAJOR" "@capacitor/filesystem@$CAP_MAJOR" "@capacitor/share@$CAP_MAJOR"
+          npm install --save-exact --package-lock=false "@capacitor/local-notifications@$CAP_MAJOR" "@capacitor/filesystem@$CAP_MAJOR" "@capacitor/share@$CAP_MAJOR" "@capacitor/haptics@$CAP_MAJOR"
           node - <<'NODE'
           const pkg=require('./package.json');
           const coreMajor=require('./node_modules/@capacitor/core/package.json').version.split('.')[0];
-          for(const name of ['@capacitor/local-notifications','@capacitor/filesystem','@capacitor/share']){
+          for(const name of ['@capacitor/local-notifications','@capacitor/filesystem','@capacitor/share','@capacitor/haptics']){
             const declared=pkg.dependencies?.[name]||pkg.devDependencies?.[name];
             if(!declared)throw new Error(`${name} is not declared in package.json after install`);
             const installed=require(`./node_modules/${name}/package.json`).version;
@@ -156,6 +156,34 @@ jobs:
 
       - name: Sync web app
         run: npx cap sync android
+
+      - name: Verify exact V36.8 web bundle copied into Android assets
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          expected = "ed3f9278db21e8875dd643481181f79a3e82a42b1fef81fb5e4209cbecfc7b91"
+          marker = 'window.DT_MARC_RELEASE_FIX_VERSION="36.8-phase8-training-brief-deep-regression"'
+          source = Path("www/index.html")
+          bundled = Path("android/app/src/main/assets/public/index.html")
+          if not bundled.exists():
+              raise SystemExit(f"Android bundled web asset missing: {bundled}")
+          source_bytes = source.read_bytes()
+          bundled_bytes = bundled.read_bytes()
+          source_hash = hashlib.sha256(source_bytes).hexdigest()
+          bundled_hash = hashlib.sha256(bundled_bytes).hexdigest()
+          if source_hash != expected:
+              raise SystemExit(f"Source hash changed before Android sync: {source_hash}")
+          if bundled_hash != expected:
+              raise SystemExit(f"Android asset hash mismatch: expected {expected}, got {bundled_hash}")
+          if source_bytes != bundled_bytes:
+              raise SystemExit("Android bundled index.html is not byte-for-byte identical to www/index.html")
+          if marker.encode() not in bundled_bytes:
+              raise SystemExit("V36.8 Phase 8 APK sync marker missing from Android bundled index.html")
+          print(f"Android bundled index.html exact V36.8 SHA256 PASS: {bundled_hash}")
+          print("V36.8 Phase 8 APK sync marker PASS")
+          PY
 
       - name: Install Health Connect native bridge
         run: |
@@ -214,7 +242,8 @@ jobs:
           grep -qi 'LocalNotifications' android/app/src/main/assets/capacitor.plugins.json
           grep -qi 'Filesystem' android/app/src/main/assets/capacitor.plugins.json
           grep -qi 'Share' android/app/src/main/assets/capacitor.plugins.json
-          echo "Local Notifications + Filesystem + Share native plugin registry PASS"
+          grep -qi 'Haptics' android/app/src/main/assets/capacitor.plugins.json
+          echo "Local Notifications + Filesystem + Share + Haptics native plugin registry PASS"
           grep -n "versionCode $VERSION_CODE" android/app/build.gradle
           grep -n "versionName \"$VERSION_NAME\"" android/app/build.gradle
 
@@ -224,6 +253,35 @@ jobs:
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease
+
+      - name: Verify unsigned APK embeds exact V36 web source
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, zipfile
+          expected = "ed3f9278db21e8875dd643481181f79a3e82a42b1fef81fb5e4209cbecfc7b91"
+          marker = b'window.DT_MARC_RELEASE_FIX_VERSION="36.8-phase8-training-brief-deep-regression"'
+          candidates = [
+              Path("android/app/build/outputs/apk/release/app-release-unsigned.apk"),
+              Path("android/app/build/outputs/apk/release/app-release.apk"),
+          ]
+          apk = next((x for x in candidates if x.exists()), None)
+          if not apk:
+              raise SystemExit("No unsigned/release APK found for embedded-web verification")
+          with zipfile.ZipFile(apk) as z:
+              name = "assets/public/index.html"
+              if name not in z.namelist():
+                  raise SystemExit(f"{name} missing inside {apk}")
+              data = z.read(name)
+          actual = hashlib.sha256(data).hexdigest()
+          if actual != expected:
+              raise SystemExit(f"APK embedded index.html SHA256 mismatch: expected {expected}, got {actual}")
+          if marker not in data:
+              raise SystemExit("V36 marker missing inside APK embedded index.html")
+          print(f"Unsigned APK embedded V36 index.html SHA256 PASS: {actual}")
+          print("Unsigned APK V36 marker PASS")
+          PY
 
       - name: Decode permanent signing keystore
         env:
@@ -275,6 +333,25 @@ jobs:
             --out "$SIGNED" \
             "$ALIGNED"
           "$APKSIGNER" verify --verbose --print-certs "$SIGNED"
+          python3 - "$SIGNED" <<'PY'
+          from pathlib import Path
+          import hashlib, sys, zipfile
+          apk = Path(sys.argv[1])
+          expected = "ed3f9278db21e8875dd643481181f79a3e82a42b1fef81fb5e4209cbecfc7b91"
+          marker = b'window.DT_MARC_RELEASE_FIX_VERSION="36.8-phase8-training-brief-deep-regression"'
+          with zipfile.ZipFile(apk) as z:
+              name = "assets/public/index.html"
+              if name not in z.namelist():
+                  raise SystemExit(f"{name} missing inside signed APK")
+              data = z.read(name)
+          actual = hashlib.sha256(data).hexdigest()
+          if actual != expected:
+              raise SystemExit(f"Signed APK embedded index.html mismatch: expected {expected}, got {actual}")
+          if marker not in data:
+              raise SystemExit("V36.8 Phase 8 marker missing inside signed APK")
+          print(f"Signed APK embedded V36 index.html SHA256 PASS: {actual}")
+          print("Signed APK V36 marker PASS")
+          PY
           sha256sum "$SIGNED" | tee "release-output/MARC-v${VERSION_NAME}-signed.apk.sha256"
           rm -f "$ALIGNED" "$RUNNER_TEMP/marc-release.jks"
 
