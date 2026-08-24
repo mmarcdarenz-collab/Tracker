@@ -1417,7 +1417,8 @@ html,body{max-width:100%;overflow-x:hidden}
 
 /* G2 — stop vertical pull/stretch and keep return control anchored */
 html,body{
-  overscroll-behavior-y:none!important;
+  overflow-y:auto!important;
+  -webkit-overflow-scrolling:touch;
 }
 .dt-v27-return-row{
   position:sticky!important;
@@ -1425,6 +1426,8 @@ html,body{
   z-index:120!important;
   margin-top:0!important;
   pointer-events:none;
+  width:max-content!important;
+  max-width:100%!important;
 }
 .dt-v27-return-row .dt-v27-home-back{
   pointer-events:auto;
@@ -1460,6 +1463,28 @@ body{padding-top:0!important}
 .view.active > .brand,
 .dt-v27-brand{
   padding-top:max(0px,env(safe-area-inset-top,0px));
+}
+</style>
+
+
+<style id="dt-v36-bugfix-h-scroll-css">
+html,body{
+  min-height:100%;
+  height:auto!important;
+  overflow-y:auto!important;
+  touch-action:pan-y pinch-zoom;
+}
+body{
+  position:static!important;
+}
+.view{
+  min-height:100dvh;
+  overflow:visible!important;
+}
+main,.app,.app-shell,#app{
+  overflow:visible!important;
+  height:auto!important;
+  min-height:100%;
 }
 </style>
 
@@ -8474,7 +8499,7 @@ function renderReminderSettings(){
     n.trainingTime=body.querySelector("#dtReminderTime").value||"17:30";
     n.trainingStyle=body.querySelector("[data-rem-style].active")?.dataset.remStyle||"silent";
     n.promptSeen=true;save();
-    const btn=body.querySelector(".dt-rem-save");btn.textContent="Saving…";btn.disabled=true;
+    const btn=body.querySelector(".dt-rem-save");btn.textContent="Preparing…";btn.disabled=true;
     const res=await syncTrainingReminders({requestPermission:n.trainingEnabled});
     btn.textContent=res.ok?"Saved ✓":"Could not schedule";
     setTimeout(()=>document.getElementById("dtReminderModal")?.classList.remove("show"),550);
@@ -18982,16 +19007,41 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
   async function exportObject(filename,obj){
     const fs=debugPlugin("Filesystem");
     if(debugIsNative()&&fs){
-      const folder="MARC Debug";
-      const path=`${folder}/${filename}`;
-      const directory="DOCUMENTS";
+      /*
+        Android scoped storage can make Directory.Documents app-created files
+        difficult to discover in OEM file managers. Write to app cache, verify
+        it exists, then invoke the native Share sheet so the user explicitly
+        chooses where to save/send the JSON.
+      */
+      const path=`MARC_Debug/${filename}`;
+      const directory="CACHE";
       const data=await jsonBase64(obj);
       if(!data)throw new Error("Export file could not be prepared.");
+
       const written=await fs.writeFile({path,data,directory,recursive:true});
       const uri=written?.uri||(await fs.getUri({path,directory})).uri;
-      window.dtLastDebugExport={filename,path,directory,uri};
-      alert(`Debug export saved successfully.\n\nDocuments/MARC Debug/${filename}`);
-      return {native:true,filename,path,directory,uri};
+
+      /* Verify the actual file exists before ever showing Saved. */
+      const stat=await fs.stat({path,directory});
+      if(!stat || !Number(stat.size)){
+        throw new Error("The export was not verified after writing.");
+      }
+
+      window.dtLastDebugExport={filename,path,directory,uri,size:stat.size};
+
+      const share=debugPlugin("Share");
+      if(!share || typeof share.share!=="function"){
+        throw new Error("File was created, but the Android save/share sheet is unavailable.");
+      }
+
+      await share.share({
+        title:"M/ARC Debug Export",
+        text:"Save or share this M/ARC debug export.",
+        files:[uri],
+        dialogTitle:"Save M/ARC debug export"
+      });
+
+      return {native:true,filename,path,directory,uri,size:stat.size,shared:true};
     }
 
     const blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"});
@@ -19083,10 +19133,10 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     btn.disabled=true;
     btn.textContent="Saving…";
     try{
-      await fn();
-      btn.textContent="Saved";
+      const result=await fn();
+      btn.textContent=result?.native?"Shared":"Downloaded";
       try{window.dtHaptics?.light?.()}catch(_){}
-      setTimeout(()=>{btn.textContent=original;btn.disabled=false;delete btn.dataset.dtExportBusy},1300);
+      setTimeout(()=>{btn.textContent=original;btn.disabled=false;delete btn.dataset.dtExportBusy},1600);
     }catch(err){
       console.error("Debug export failed",err);
       btn.textContent="Retry";
