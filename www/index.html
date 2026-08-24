@@ -1736,6 +1736,7 @@ main,.app,.app-shell,#app{
   <div class="dt-debug-action-grid">
     <button id="dtExportDebugLog" class="dt-debug-action-btn" type="button">Export Debug Log</button>
     <button id="dtExportDebugBundle" class="dt-debug-action-btn" type="button">Export Debug Bundle</button>
+    <button id="dtMarkBugNow" class="dt-debug-action-btn" type="button">Mark Bug Now</button>
     <button id="dtExportAppBackup" class="dt-debug-action-btn" type="button">Export App Backup</button>
     <button id="dtClearDebugData" class="dt-debug-action-btn danger" type="button">Clear Debug Data</button>
   </div>
@@ -18180,7 +18181,7 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
 })();
 </script>
 
-<script>window.DT_MARC_RELEASE_FIX_VERSION="36.0-pr-consistency";</script>
+<script>window.DT_MARC_RELEASE_FIX_VERSION="36.0-debug-j2";</script>
 
 
 <script id="dt-v36-p2-haptics">
@@ -18658,21 +18659,19 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
 
 
 <script id="dt-v36-p5-debug-recorder">
+
 (()=>{
   "use strict";
 
   const ENABLE_KEY="dt_debug_recorder_enabled_v1";
   const LOG_KEY="dt_debug_recorder_log_v1";
-  const MAX_EVENTS=1800;
+  const MAX_EVENTS=5000;
   const MAX_TEXT=180;
+  const PERSIST_DEBOUNCE_MS=1200;
+  const PERSIST_EVENT_BATCH=18;
   const REDACT_RE=/(password|passwd|token|secret|auth|key|credential|pin|ssn|card|cvv)/i;
-  /*
-    Privacy-by-default recorder:
-    - Never persist raw user-entered text or numeric values in debug events.
-    - Record only structural identifiers, input type, lengths, and booleans.
-    - Visible button text is not used as a tap label because it may be user-authored.
-  */
-  const SAFE_CONTROL_LABEL_RE=/^(save|done|cancel|close|back|home|next|previous|add|edit|delete|remove|reset|export|import|start|stop|finish|confirm|settings?|today|history|workout|money|recovery|coach|on|off)$/i;
+  const STATE_BLOB_RE=/^dailyTrackerPremium(?:_|$)|backup|last_known_good|schema_snapshot|state_snapshot/i;
+  const SAFE_CONTROL_LABEL_RE=/^(save|done|cancel|close|back|home|next|previous|add|edit|delete|remove|reset|export|import|start|stop|finish|confirm|settings?|today|history|workout|money|recovery|coach|on|off|progress)$/i;
 
   const toggle=document.getElementById("dtDebugToggle");
   const exportLogBtn=document.getElementById("dtExportDebugLog");
@@ -18681,10 +18680,7 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
   const clearBtn=document.getElementById("dtClearDebugData");
 
   function readEnabled(){
-    try{
-      const raw=localStorage.getItem(ENABLE_KEY);
-      return raw==null?true:raw!=="0";
-    }catch(_){return true}
+    try{const raw=localStorage.getItem(ENABLE_KEY);return raw==null?true:raw!=="0"}catch(_){return true}
   }
   let enabled=readEnabled();
 
@@ -18703,234 +18699,487 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
   }
 
   let log=loadLog();
-
-  let persistTimer=null;
-  let dirty=false;
-  let eventsSincePersist=0;
-  const PERSIST_DEBOUNCE_MS=1400;
-  const PERSIST_EVENT_BATCH=12;
+  let seq=log.reduce((m,e)=>Math.max(m,Number(e?.seq)||0),0);
+  let interactionSeq=0;
+  let activeInteractionId=null;
+  let lastView=currentView();
+  let persistTimer=null,dirty=false,eventsSincePersist=0;
+  let lastPointerTap={path:null,ts:0,count:0};
+  const gestureMap=new Map();
+  const inputMap=new WeakMap();
+  const counters={
+    error:0,unhandled:0,consoleError:0,networkError:0,noVisibleChange:0,
+    validationFailure:0,frameStall:0,frozenFrame:0,longTask:0,layoutShift:0,
+    blocked:0,occluded:0
+  };
 
   function persistLogNow(){
-    if(!dirty && eventsSincePersist===0)return true;
-    if(persistTimer){
-      clearTimeout(persistTimer);
-      persistTimer=null;
-    }
+    if(!dirty&&eventsSincePersist===0)return true;
+    if(persistTimer){clearTimeout(persistTimer);persistTimer=null}
     try{
       localStorage.setItem(LOG_KEY,JSON.stringify(log));
-      dirty=false;
-      eventsSincePersist=0;
-      return true;
-    }catch(_){
+      dirty=false;eventsSincePersist=0;return true;
+    }catch(err){
+      try{console.warn("Debug recorder persistence failed",err)}catch(_){}
       return false;
     }
   }
-
   function schedulePersist(){
-    dirty=true;
-    eventsSincePersist++;
-    if(eventsSincePersist>=PERSIST_EVENT_BATCH){
-      persistLogNow();
-      return;
-    }
+    dirty=true;eventsSincePersist++;
+    if(eventsSincePersist>=PERSIST_EVENT_BATCH){persistLogNow();return}
     if(persistTimer)clearTimeout(persistTimer);
-    persistTimer=setTimeout(()=>{
-      persistTimer=null;
-      persistLogNow();
-    },PERSIST_DEBOUNCE_MS);
+    persistTimer=setTimeout(()=>{persistTimer=null;persistLogNow()},PERSIST_DEBOUNCE_MS);
   }
-
-  function trim(){
-    if(log.length>MAX_EVENTS)log=log.slice(log.length-MAX_EVENTS);
-  }
+  function trim(){if(log.length>MAX_EVENTS)log=log.slice(log.length-MAX_EVENTS)}
 
   function safeText(value,name=""){
     if(REDACT_RE.test(String(name||"")))return "[REDACTED]";
     if(value==null)return value;
     let s=String(value);
-    if(REDACT_RE.test(s) && s.length>24)return "[REDACTED]";
+    if(REDACT_RE.test(s)&&s.length>24)return "[REDACTED]";
     if(s.length>MAX_TEXT)s=s.slice(0,MAX_TEXT)+"…";
     return s;
   }
-
   function currentView(){
     const v=document.querySelector(".view.active");
     return v?.id||v?.getAttribute("data-view")||null;
   }
-
   function deviceMeta(){
+    const vv=window.visualViewport;
     return {
-      width:window.innerWidth,
-      height:window.innerHeight,
-      dpr:window.devicePixelRatio||1,
+      width:window.innerWidth,height:window.innerHeight,dpr:window.devicePixelRatio||1,
+      visualWidth:Math.round(vv?.width||window.innerWidth),visualHeight:Math.round(vv?.height||window.innerHeight),
+      scale:vv?.scale||1,refreshHint:window.matchMedia?.("(min-resolution: 2dppx)")?.matches?">=2dppx":null,
       tz:Intl.DateTimeFormat().resolvedOptions().timeZone||null,
-      ua:navigator.userAgent,
-      platform:navigator.userAgentData?.platform||navigator.platform||null,
-      standalone:!!window.matchMedia?.("(display-mode: standalone)")?.matches
+      ua:navigator.userAgent,platform:navigator.userAgentData?.platform||navigator.platform||null,
+      standalone:!!window.matchMedia?.("(display-mode: standalone)")?.matches,
+      online:navigator.onLine,memory:performance.memory?{
+        usedJSHeapSize:performance.memory.usedJSHeapSize,
+        totalJSHeapSize:performance.memory.totalJSHeapSize,
+        jsHeapSizeLimit:performance.memory.jsHeapSizeLimit
+      }:null
     };
   }
-
-  function record(type,data={}){
-    if(!enabled)return;
+  function record(type,data={},opts={}){
+    if(!enabled)return null;
     const evt={
-      ts:new Date().toISOString(),
-      t:Math.round(performance.now()),
-      type,
-      view:currentView(),
-      data
+      seq:++seq,ts:new Date().toISOString(),t:Math.round(performance.now()),type,
+      interactionId:opts.interactionId??activeInteractionId,view:currentView(),data
     };
-    log.push(evt);
-    trim();
-    schedulePersist();
+    log.push(evt);trim();schedulePersist();return evt;
   }
 
   function cssPath(el){
-    if(!el || !(el instanceof Element))return null;
-    const parts=[];
-    let node=el,depth=0;
-    while(node && depth<4 && node!==document.body){
+    if(!el||!(el instanceof Element))return null;
+    const parts=[];let node=el,depth=0;
+    while(node&&depth<5&&node!==document.body){
       let p=node.tagName.toLowerCase();
       if(node.id){p+="#"+node.id;parts.unshift(p);break}
       const cls=[...node.classList].filter(c=>!/^dt-p[345]-/.test(c)).slice(0,2);
       if(cls.length)p+="."+cls.join(".");
-      parts.unshift(p);
-      node=node.parentElement;
-      depth++;
+      const parent=node.parentElement;
+      if(parent&&!node.id){
+        const siblings=[...parent.children].filter(x=>x.tagName===node.tagName);
+        if(siblings.length>1)p+=`:nth-of-type(${siblings.indexOf(node)+1})`;
+      }
+      parts.unshift(p);node=parent;depth++;
     }
     return parts.join(">");
   }
-
-  function elementLabel(el){
-    const structural=el?.getAttribute?.("aria-label") || el?.getAttribute?.("title") || el?.name || el?.id || "";
-    const safeStructural=safeText(structural,el?.name||el?.id||"");
-    if(safeStructural && safeStructural!=="[REDACTED]")return safeStructural;
-
+  function structuralLabel(el){
+    const structural=el?.getAttribute?.("aria-label")||el?.getAttribute?.("title")||el?.name||el?.id||"";
+    const s=safeText(structural,el?.name||el?.id||"");
+    if(s&&s!=="[REDACTED]")return s;
     const visible=String(el?.innerText||el?.textContent||"").trim();
-    return SAFE_CONTROL_LABEL_RE.test(visible) ? visible : "[USER_TEXT]";
+    return SAFE_CONTROL_LABEL_RE.test(visible)?visible:"[USER_TEXT]";
+  }
+  function rectSnapshot(el){
+    if(!(el instanceof Element))return null;
+    const r=el.getBoundingClientRect(),cs=getComputedStyle(el);
+    return {
+      x:Math.round(r.x),y:Math.round(r.y),width:Math.round(r.width),height:Math.round(r.height),
+      right:Math.round(r.right),bottom:Math.round(r.bottom),
+      display:cs.display,visibility:cs.visibility,opacity:cs.opacity,pointerEvents:cs.pointerEvents,
+      position:cs.position,zIndex:cs.zIndex,overflowX:cs.overflowX,overflowY:cs.overflowY
+    };
+  }
+  function interactiveTarget(node){
+    return node?.closest?.("button,[role='button'],a,input,textarea,select,[tabindex],[data-action],[onclick]")||null;
+  }
+  function controlState(el){
+    if(!(el instanceof Element))return null;
+    return {
+      path:cssPath(el),label:structuralLabel(el),tag:el.tagName.toLowerCase(),
+      type:el.getAttribute("type")||null,disabled:!!el.disabled||el.getAttribute("aria-disabled")==="true",
+      ariaExpanded:el.getAttribute("aria-expanded"),ariaSelected:el.getAttribute("aria-selected"),
+      ariaChecked:el.getAttribute("aria-checked"),ariaPressed:el.getAttribute("aria-pressed"),
+      rect:rectSnapshot(el)
+    };
+  }
+  function visibleOverlays(){
+    const out=[];
+    document.querySelectorAll("[role='dialog'],.modal,.sheet,[class*='modal'],[class*='sheet'],#dtPxContent").forEach(el=>{
+      if(!(el instanceof HTMLElement))return;
+      const r=el.getBoundingClientRect(),cs=getComputedStyle(el);
+      if(r.width<2||r.height<2||cs.display==="none"||cs.visibility==="hidden"||Number(cs.opacity)===0)return;
+      const id=el.id||[...el.classList].slice(0,3).join(".");
+      if(id&&!out.includes(id))out.push(id);
+    });
+    return out.slice(0,16);
+  }
+  function uiFingerprint(){
+    const vv=window.visualViewport;
+    return {
+      view:currentView(),overlays:visibleOverlays(),
+      active:cssPath(document.activeElement),
+      scrollX:Math.round(window.scrollX||0),scrollY:Math.round(window.scrollY||document.documentElement.scrollTop||0),
+      viewport:{w:Math.round(vv?.width||innerWidth),h:Math.round(vv?.height||innerHeight),top:Math.round(vv?.offsetTop||0)},
+      url:location.hash||location.pathname
+    };
+  }
+  function fingerprintChanged(a,b){return JSON.stringify(a)!==JSON.stringify(b)}
+  function validitySnapshot(el){
+    if(!(el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement||el instanceof HTMLSelectElement))return null;
+    const v=el.validity;
+    return {
+      valid:!!v?.valid,valueMissing:!!v?.valueMissing,typeMismatch:!!v?.typeMismatch,
+      patternMismatch:!!v?.patternMismatch,tooLong:!!v?.tooLong,tooShort:!!v?.tooShort,
+      rangeUnderflow:!!v?.rangeUnderflow,rangeOverflow:!!v?.rangeOverflow,stepMismatch:!!v?.stepMismatch,
+      badInput:!!v?.badInput,required:!!el.required,
+      min:safeText(el.getAttribute("min"),el.name||el.id||""),
+      max:safeText(el.getAttribute("max"),el.name||el.id||""),
+      step:safeText(el.getAttribute("step"),el.name||el.id||""),
+      valueLength:String(el.value||"").length
+    };
   }
 
-  // Rapid-tap detection
-  let lastTap={path:null,ts:0,count:0};
-  document.addEventListener("pointerup",e=>{
+  function recordViewChange(source){
+    const id=currentView();
+    if(!id||id===lastView)return;
+    const previous=lastView;lastView=id;
+    record("view_open",{id,previous,source});
+  }
+  function watchViews(){
+    lastView=currentView();
+    const viewObserver=new MutationObserver(()=>queueMicrotask(()=>recordViewChange("class_mutation")));
+    const bind=v=>{try{viewObserver.observe(v,{attributes:true,attributeFilter:["class"]})}catch(_){}};
+    document.querySelectorAll(".view").forEach(bind);
+    new MutationObserver(records=>{
+      for(const rec of records)for(const node of rec.addedNodes){
+        if(!(node instanceof HTMLElement))continue;
+        if(node.classList?.contains("view"))bind(node);
+        node.querySelectorAll?.(".view").forEach(bind);
+      }
+    }).observe(document.body,{childList:true,subtree:true});
+  }
+
+  // Gesture journey: down -> movement -> up/cancel -> visual outcome.
+  function onPointerDown(e){
     if(!enabled)return;
-    const target=e.target?.closest?.("button,[role='button'],a,input,select,textarea");
-    if(!target)return;
-    const path=cssPath(target);
-    const now=performance.now();
-    let rapid=1;
-    if(lastTap.path===path && now-lastTap.ts<650){
-      rapid=lastTap.count+1;
+    const target=interactiveTarget(e.target);
+    const id=`i_${Date.now().toString(36)}_${(++interactionSeq).toString(36)}`;
+    activeInteractionId=id;
+    const top=document.elementFromPoint(e.clientX,e.clientY);
+    const entry={
+      id,pointerId:e.pointerId,pointerType:e.pointerType||"unknown",start:performance.now(),
+      x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,pathLength:0,
+      target,before:uiFingerprint(),targetBefore:controlState(target),moves:0
+    };
+    gestureMap.set(e.pointerId,entry);
+    const actual=interactiveTarget(top)||top;
+    const actualState=controlState(actual);
+    const intended=entry.targetBefore;
+    const occluded=!!(target&&top&&!target.contains(top)&&top!==target);
+    if(occluded)counters.occluded++;
+    record("gesture_start",{
+      pointerId:e.pointerId,pointerType:entry.pointerType,x:Math.round(e.clientX),y:Math.round(e.clientY),
+      intended,actualHit:actualState,occluded
+    },{interactionId:id});
+    if(intended?.disabled){counters.blocked++;record("interaction_blocked",{reason:"disabled",target:intended},{interactionId:id})}
+  }
+  function onPointerMove(e){
+    const g=gestureMap.get(e.pointerId);if(!g)return;
+    const dx=e.clientX-g.lastX,dy=e.clientY-g.lastY;
+    g.pathLength+=Math.hypot(dx,dy);g.lastX=e.clientX;g.lastY=e.clientY;g.moves++;
+    if(g.moves===1||g.moves%8===0){
+      record("gesture_move_sample",{
+        pointerId:e.pointerId,x:Math.round(e.clientX),y:Math.round(e.clientY),
+        dx:Math.round(e.clientX-g.x),dy:Math.round(e.clientY-g.y),pathLength:Math.round(g.pathLength)
+      },{interactionId:g.id});
     }
-    lastTap={path,ts:now,count:rapid};
-    record(rapid>=2?"rapid_tap":"tap",{
-      path,
-      label:elementLabel(target),
-      rapidCount:rapid,
-      pointerType:e.pointerType||null,
-      x:Math.round(e.clientX),
-      y:Math.round(e.clientY)
+  }
+  function finishGesture(e,cancelled=false){
+    const g=gestureMap.get(e.pointerId);if(!g)return;
+    gestureMap.delete(e.pointerId);activeInteractionId=g.id;
+    const dx=e.clientX-g.x,dy=e.clientY-g.y,dist=Math.hypot(dx,dy),duration=performance.now()-g.start;
+    let kind=cancelled?"cancel":duration>=650&&dist<18?"long_press":dist>=28?(Math.abs(dx)>Math.abs(dy)?"swipe_horizontal":"swipe_vertical"):"tap";
+    const endTop=document.elementFromPoint(e.clientX,e.clientY);
+    const endTarget=interactiveTarget(endTop)||endTop;
+    record(cancelled?"gesture_cancel":"gesture_end",{
+      pointerId:e.pointerId,gesture:kind,durationMs:Math.round(duration),dx:Math.round(dx),dy:Math.round(dy),
+      distance:Math.round(dist),pathLength:Math.round(g.pathLength),
+      endTarget:controlState(endTarget),sameInteractiveTarget:!!(g.target&&interactiveTarget(endTop)===g.target)
+    },{interactionId:g.id});
+
+    if(!cancelled&&g.target){
+      const original=controlState(g.target),iid=g.id,before=g.before;
+      [80,220,700,1500].forEach((delay,index)=>setTimeout(()=>{
+        const after=uiFingerprint(),now=controlState(g.target);
+        const controlChanged=original?.ariaExpanded!==now?.ariaExpanded||
+          original?.ariaSelected!==now?.ariaSelected||original?.ariaChecked!==now?.ariaChecked||
+          original?.ariaPressed!==now?.ariaPressed||original?.disabled!==now?.disabled;
+        const changed=fingerprintChanged(before,after)||controlChanged;
+        record("interaction_outcome",{
+          delayMs:delay,target:original,changed,before,after,targetAfter:now,
+          newOverlays:after.overlays.filter(x=>!before.overlays.includes(x)),
+          closedOverlays:before.overlays.filter(x=>!after.overlays.includes(x))
+        },{interactionId:iid});
+        if(index===2&&!changed&&!original?.disabled){
+          counters.noVisibleChange++;
+          record("interaction_no_visible_change",{
+            target:original,waitedMs:delay,
+            note:"Gesture reached the control but no navigation, overlay, selection, focus, scroll, or control-state change was detected."
+          },{interactionId:iid});
+        }
+      },delay));
+    }
+    activeInteractionId=null;
+  }
+
+  document.addEventListener("pointerdown",onPointerDown,{capture:true,passive:true});
+  document.addEventListener("pointermove",onPointerMove,{capture:true,passive:true});
+  document.addEventListener("pointerup",e=>{
+    const target=e.target?.closest?.("button,[role='button'],a,input,select,textarea");
+    if(target){
+      const path=cssPath(target),now=performance.now();
+      let rapid=1;if(lastPointerTap.path===path&&now-lastPointerTap.ts<650)rapid=lastPointerTap.count+1;
+      lastPointerTap={path,ts:now,count:rapid};
+      record(rapid>=2?"rapid_tap":"tap",{
+        path,label:structuralLabel(target),rapidCount:rapid,pointerType:e.pointerType||null,
+        x:Math.round(e.clientX),y:Math.round(e.clientY)
+      },{interactionId:gestureMap.get(e.pointerId)?.id});
+    }
+    finishGesture(e,false);
+  },true);
+  document.addEventListener("pointercancel",e=>finishGesture(e,true),true);
+
+  // Click-level occlusion/default prevention metadata.
+  document.addEventListener("click",e=>{
+    const el=interactiveTarget(e.target);if(!el)return;
+    const r=el.getBoundingClientRect();
+    const x=Number.isFinite(e.clientX)&&e.clientX?e.clientX:r.left+r.width/2;
+    const y=Number.isFinite(e.clientY)&&e.clientY?e.clientY:r.top+r.height/2;
+    const top=document.elementFromPoint(x,y);
+    record("control_click",{
+      target:controlState(el),topAtPoint:controlState(interactiveTarget(top)||top),
+      defaultPrevented:e.defaultPrevented,trusted:e.isTrusted
     });
   },true);
 
+  // Input journey, no raw values.
+  document.addEventListener("focusin",e=>{
+    const el=e.target;if(!(el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement||el instanceof HTMLSelectElement))return;
+    inputMap.set(el,{start:performance.now(),initialLength:String(el.value||"").length});
+    record("input_focus",{path:cssPath(el),name:safeText(el.name||el.id||"input",el.name||el.id||""),inputType:el.type||el.tagName.toLowerCase(),validity:validitySnapshot(el)});
+  },true);
+  document.addEventListener("input",e=>{
+    const el=e.target;if(!(el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement))return;
+    const len=String(el.value||"").length;
+    const st=inputMap.get(el)||{};st.events=(st.events||0)+1;inputMap.set(el,st);
+    if(st.events===1||st.events%5===0)record("input_progress",{path:cssPath(el),name:safeText(el.name||el.id||"input"),inputType:el.type||el.tagName.toLowerCase(),length:len,value:"[REDACTED]"});
+  },true);
   document.addEventListener("change",e=>{
-    if(!enabled)return;
-    const el=e.target;
-    if(!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement))return;
-    const name=el.name||el.id||el.getAttribute("aria-label")||"input";
-    const type=(el instanceof HTMLInputElement ? (el.type||"text") : el.tagName.toLowerCase());
-    const data={
-      path:cssPath(el),
-      name:safeText(name,name),
-      inputType:type
-    };
-
-    if(el instanceof HTMLInputElement && (el.type==="checkbox"||el.type==="radio")){
-      data.checked=!!el.checked;
-    }else if(el instanceof HTMLSelectElement){
-      data.selectedIndex=el.selectedIndex;
-      data.optionCount=el.options?.length||0;
-    }else{
-      /* Length is useful for diagnosing interaction without retaining the value. */
-      data.valueLength=String(el.value||"").length;
-      data.value="[REDACTED]";
-    }
+    const el=e.target;if(!(el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement||el instanceof HTMLSelectElement))return;
+    const data={path:cssPath(el),name:safeText(el.name||el.id||"input",el.name||el.id||""),inputType:el.type||el.tagName.toLowerCase(),validity:validitySnapshot(el)};
+    if(el instanceof HTMLInputElement&&(el.type==="checkbox"||el.type==="radio"))data.checked=!!el.checked;
+    else if(el instanceof HTMLSelectElement){data.selectedIndex=el.selectedIndex;data.optionCount=el.options?.length||0}
+    else{data.valueLength=String(el.value||"").length;data.value="[REDACTED]"}
     record("input_change",data);
   },true);
-
-  document.addEventListener("input",e=>{
-    if(!enabled)return;
-    const el=e.target;
-    if(!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement))return;
-    if(REDACT_RE.test(el.name||el.id||""))return;
-    if((el.value||"").length%8!==0)return; // sampled input trace; avoids log spam
-    record("input_progress",{
-      path:cssPath(el),
-      name:safeText(el.name||el.id||"input"),
-      inputType:el.type||el.tagName.toLowerCase(),
-      length:(el.value||"").length,
-      value:"[REDACTED]"
-    });
+  document.addEventListener("invalid",e=>{
+    const el=e.target;if(!(el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement||el instanceof HTMLSelectElement))return;
+    counters.validationFailure++;record("input_validation_failed",{path:cssPath(el),name:safeText(el.name||el.id||"input",el.name||el.id||""),inputType:el.type||el.tagName.toLowerCase(),validity:validitySnapshot(el)});
+  },true);
+  document.addEventListener("focusout",e=>{
+    const el=e.target;if(!(el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement||el instanceof HTMLSelectElement))return;
+    const st=inputMap.get(el)||{},validity=validitySnapshot(el);
+    record("input_blur",{path:cssPath(el),name:safeText(el.name||el.id||"input",el.name||el.id||""),inputType:el.type||el.tagName.toLowerCase(),durationMs:st.start?Math.round(performance.now()-st.start):null,initialLength:st.initialLength??null,finalLength:String(el.value||"").length,validity});
+    if(validity&&!validity.valid){counters.validationFailure++;record("input_left_invalid",{path:cssPath(el),validity})}
+    inputMap.delete(el);
   },true);
 
-  // View-state watcher
-  function watchViews(){
-    document.querySelectorAll(".view").forEach(v=>{
-      new MutationObserver(()=>{
-        if(v.classList.contains("active"))record("view_open",{id:v.id||null});
-      }).observe(v,{attributes:true,attributeFilter:["class"]});
-    });
-  }
+  // Dialog/sheet visibility changes and mutation storms.
+  let mutationWindow={start:performance.now(),count:0};
+  new MutationObserver(records=>{
+    mutationWindow.count+=records.length;
+    const now=performance.now();
+    if(now-mutationWindow.start>=1000){
+      if(mutationWindow.count>120)record("dom_mutation_burst",{mutations:mutationWindow.count,windowMs:Math.round(now-mutationWindow.start)});
+      mutationWindow={start:now,count:0};
+    }
+  }).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:["class","style","hidden","aria-hidden"]});
 
-  // Global errors
+  let lastOverlays=visibleOverlays();
+  setInterval(()=>{
+    if(!enabled)return;
+    const now=visibleOverlays();
+    const opened=now.filter(x=>!lastOverlays.includes(x)),closed=lastOverlays.filter(x=>!now.includes(x));
+    if(opened.length||closed.length)record("overlay_change",{opened,closed,current:now});
+    lastOverlays=now;
+  },300);
+
+  // Progress panel-specific diagnostics: useful for flashes/render replacement.
+  document.addEventListener("click",e=>{
+    const btn=e.target?.closest?.(".dt-progress-open");if(!btn)return;
+    const iid=activeInteractionId||`progress_${Date.now().toString(36)}`;
+    const snapshot=(delay)=>{
+      const px=document.getElementById("dtPxContent");
+      const r=px?.getBoundingClientRect();
+      const text=px?.textContent||"";
+      const sessionMatch=text.match(/(\d+)\s+sessions?/i);
+      record("progress_render_probe",{
+        delayMs:delay,present:!!px,visible:!!(px&&r&&r.height>20&&getComputedStyle(px).display!=="none"),
+        rect:px?rectSnapshot(px):null,childCount:px?.querySelectorAll?.("*")?.length||0,
+        charts:px?.querySelectorAll?.("canvas,svg")?.length||0,
+        detectedSessions:sessionMatch?Number(sessionMatch[1]):null,
+        unlockMessage:/at least two workouts to unlock/i.test(text),
+        htmlLength:px?.innerHTML?.length||0
+      },{interactionId:iid});
+    };
+    [0,50,120,230,450,800].forEach(d=>setTimeout(()=>snapshot(d),d));
+  },true);
+
+  // Global JS errors + console warnings/errors.
   window.addEventListener("error",e=>{
-    record("error",{
-      message:safeText(e.message),
-      file:safeText(e.filename),
-      line:e.lineno||null,
-      col:e.colno||null
-    });
+    counters.error++;record("error",{message:safeText(e.message),file:safeText(e.filename),line:e.lineno||null,col:e.colno||null,stack:safeText(e.error?.stack)});
   });
   window.addEventListener("unhandledrejection",e=>{
-    record("unhandled_rejection",{reason:safeText(e.reason?.message||e.reason)});
+    counters.unhandled++;record("unhandled_rejection",{reason:safeText(e.reason?.message||e.reason),stack:safeText(e.reason?.stack)});
   });
-
-  // Wrap console.error lightly, preserving original behavior.
   try{
-    const origError=console.error.bind(console);
-    console.error=(...args)=>{
-      try{record("console_error",{args:args.slice(0,4).map(x=>safeText(x?.message||x))})}catch(_){}
-      origError(...args);
+    const origError=console.error.bind(console),origWarn=console.warn.bind(console);
+    console.error=(...args)=>{try{counters.consoleError++;record("console_error",{args:args.slice(0,5).map(x=>safeText(x?.message||x))})}catch(_){}origError(...args)};
+    console.warn=(...args)=>{try{record("console_warn",{args:args.slice(0,5).map(x=>safeText(x?.message||x))})}catch(_){}origWarn(...args)};
+  }catch(_){}
+
+  // Network failures without body/request content.
+  try{
+    const origFetch=window.fetch?.bind(window);
+    if(origFetch)window.fetch=async function(input,init){
+      const started=performance.now(),method=String(init?.method||"GET").toUpperCase();
+      let url="";try{url=new URL(typeof input==="string"?input:input?.url,location.href).origin+new URL(typeof input==="string"?input:input?.url,location.href).pathname}catch(_){url="[unparsed]"}
+      try{
+        const res=await origFetch(input,init);
+        const ms=Math.round(performance.now()-started);
+        if(!res.ok){counters.networkError++;record("network_http_error",{kind:"fetch",method,url:safeText(url),status:res.status,durationMs:ms})}
+        else if(ms>1500)record("network_slow",{kind:"fetch",method,url:safeText(url),status:res.status,durationMs:ms});
+        return res;
+      }catch(err){counters.networkError++;record("network_failure",{kind:"fetch",method,url:safeText(url),durationMs:Math.round(performance.now()-started),error:safeText(err?.message||err)});throw err}
+    };
+  }catch(_){}
+  try{
+    const XO=XMLHttpRequest.prototype.open,XS=XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open=function(method,url,...rest){this.__dtDbg={method:String(method||"GET").toUpperCase(),url:safeText(String(url||"").split("?")[0])};return XO.call(this,method,url,...rest)};
+    XMLHttpRequest.prototype.send=function(body){
+      const meta=this.__dtDbg||{},start=performance.now();
+      this.addEventListener("loadend",()=>{
+        const ms=Math.round(performance.now()-start);
+        if(this.status===0||this.status>=400){counters.networkError++;record("network_http_error",{kind:"xhr",method:meta.method,url:meta.url,status:this.status,durationMs:ms})}
+        else if(ms>1500)record("network_slow",{kind:"xhr",method:meta.method,url:meta.url,status:this.status,durationMs:ms});
+      },{once:true});
+      return XS.call(this,body);
     };
   }catch(_){}
 
-  function safeLocalStorageSnapshot(options={}){
+  // Frame/jank monitor. Field-friendly sampling; record only stalls.
+  let lastFrame=performance.now(),frameWindow=[];
+  function frameTick(now){
+    const delta=now-lastFrame;lastFrame=now;
+    frameWindow.push(delta);if(frameWindow.length>120)frameWindow.shift();
+    if(enabled&&delta>=100){
+      counters.frameStall++;if(delta>=700)counters.frozenFrame++;
+      record(delta>=700?"frozen_frame":"frame_stall",{
+        frameGapMs:Math.round(delta),threshold:delta>=700?"frozen_700ms":"stall_100ms",
+        view:currentView(),overlays:visibleOverlays(),scrollY:Math.round(scrollY||0),
+        memory:performance.memory?{used:performance.memory.usedJSHeapSize,total:performance.memory.totalJSHeapSize}:null
+      });
+    }
+    requestAnimationFrame(frameTick);
+  }
+  requestAnimationFrame(frameTick);
+
+  // Long tasks and layout shifts where the WebView exposes PerformanceObserver.
+  try{
+    if(PerformanceObserver.supportedEntryTypes?.includes("longtask")){
+      new PerformanceObserver(list=>list.getEntries().forEach(entry=>{
+        counters.longTask++;record("long_task",{durationMs:Math.round(entry.duration),startTime:Math.round(entry.startTime)});
+      })).observe({type:"longtask",buffered:true});
+    }
+  }catch(_){}
+  try{
+    if(PerformanceObserver.supportedEntryTypes?.includes("layout-shift")){
+      new PerformanceObserver(list=>list.getEntries().forEach(entry=>{
+        if(entry.hadRecentInput)return;
+        if(entry.value>=0.02){counters.layoutShift++;record("layout_shift",{value:Number(entry.value.toFixed(4)),startTime:Math.round(entry.startTime)})}
+      })).observe({type:"layout-shift",buffered:true});
+    }
+  }catch(_){}
+
+  // Viewport / keyboard / orientation / connectivity / lifecycle.
+  let lastVV=null;
+  function viewportEvent(source){
+    const vv=window.visualViewport;
+    const cur={w:Math.round(vv?.width||innerWidth),h:Math.round(vv?.height||innerHeight),top:Math.round(vv?.offsetTop||0),scale:vv?.scale||1};
+    if(lastVV&&JSON.stringify(lastVV)===JSON.stringify(cur))return;
+    const prev=lastVV;lastVV=cur;
+    record("viewport_change",{source,previous:prev,current:cur,keyboardLikely:!!(prev&&prev.h-cur.h>120)});
+  }
+  window.visualViewport?.addEventListener("resize",()=>viewportEvent("visualViewport.resize"),{passive:true});
+  window.visualViewport?.addEventListener("scroll",()=>viewportEvent("visualViewport.scroll"),{passive:true});
+  window.addEventListener("orientationchange",()=>record("orientation_change",{orientation:screen.orientation?.type||null,angle:screen.orientation?.angle||null}));
+  window.addEventListener("online",()=>record("network_state",{online:true}));
+  window.addEventListener("offline",()=>record("network_state",{online:false}));
+  document.addEventListener("visibilitychange",()=>{record("visibility_change",{state:document.visibilityState});if(document.visibilityState==="hidden")persistLogNow()},{passive:true});
+  window.addEventListener("pagehide",()=>{record("pagehide",{});persistLogNow()},{passive:true});
+  window.addEventListener("pageshow",e=>record("pageshow",{persisted:!!e.persisted}),{passive:true});
+
+  // Scroll sessions: catches scroll lock / jumpback.
+  let scrollSession=null,scrollEndTimer=null;
+  window.addEventListener("scroll",()=>{
+    if(!enabled)return;
+    const y=Math.round(window.scrollY||document.documentElement.scrollTop||0),now=performance.now();
+    if(!scrollSession){scrollSession={start:now,startY:y,minY:y,maxY:y};record("scroll_start",{y})}
+    scrollSession.minY=Math.min(scrollSession.minY,y);scrollSession.maxY=Math.max(scrollSession.maxY,y);
+    clearTimeout(scrollEndTimer);scrollEndTimer=setTimeout(()=>{
+      const s=scrollSession;if(!s)return;scrollSession=null;
+      record("scroll_end",{durationMs:Math.round(performance.now()-s.start),startY:s.startY,endY:y,minY:s.minY,maxY:s.maxY,distance:s.maxY-s.minY});
+    },180);
+  },{passive:true});
+
+  function safeLocalStorageSnapshot(){
     const ls={};
-    const excludeKeys=new Set(options.excludeKeys||[]);
     try{
       for(let i=0;i<localStorage.length;i++){
-        const k=localStorage.key(i);
-        if(!k)continue;
-        if(excludeKeys.has(k))continue;
-        if(REDACT_RE.test(k))continue;
-        if(k===LOG_KEY)continue;
+        const k=localStorage.key(i);if(!k||k===LOG_KEY||REDACT_RE.test(k)||STATE_BLOB_RE.test(k))continue;
         const val=localStorage.getItem(k);
-        ls[k]=val && val.length>120000 ? `[OMITTED ${val.length} chars]` : val;
+        ls[k]=val&&val.length>24000?`[OMITTED ${val.length} chars]`:val;
       }
     }catch(_){}
     return ls;
   }
-
-  function getDebugSnapshot(){
-    const out={
-      currentView:currentView(),
-      /* Never include the persisted full-state blob in a diagnostic bundle. */
-      localStorage:safeLocalStorageSnapshot({excludeKeys:["dailyTrackerPremium"]})
+  function diagnosticSummary(){
+    const typeCounts={};for(const e of log)typeCounts[e.type]=(typeCounts[e.type]||0)+1;
+    return {
+      totalEvents:log.length,typeCounts,counters:{...counters},
+      lastEventSeq:seq,currentView:currentView(),overlays:visibleOverlays(),
+      recentNoVisibleChange:log.filter(e=>e.type==="interaction_no_visible_change").slice(-25),
+      recentErrors:log.filter(e=>["error","unhandled_rejection","console_error","network_failure","network_http_error"].includes(e.type)).slice(-25),
+      recentPerformance:log.filter(e=>["frame_stall","frozen_frame","long_task","layout_shift"].includes(e.type)).slice(-25)
     };
-
-    try{
-      if(typeof wday!=="undefined")out.workoutDay=wday;
-    }catch(_){}
-
+  }
+  function getDebugSnapshot(){
+    const out={currentView:currentView(),ui:uiFingerprint(),localStorage:safeLocalStorageSnapshot(),diagnosticSummary:diagnosticSummary()};
+    try{if(typeof wday!=="undefined")out.workoutDay=wday}catch(_){}
     try{
       if(typeof state!=="undefined"){
         const workouts=state?.workouts||{};
@@ -18938,67 +19187,40 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
           workoutSessionCount:Array.isArray(workouts.sessions)?workouts.sessions.length:0,
           completedExerciseCount:Array.isArray(workouts.completedExercises)?workouts.completedExercises.length:0,
           customSplitCount:Array.isArray(workouts.customSplits)?workouts.customSplits.length:0,
-          hasActiveDraft:!!(
-            typeof wkey==="function" &&
-            workouts.drafts &&
-            workouts.drafts[wkey()]
-          ),
-          trainingScheduleConfigured:!!state?.trainingSchedule,
-          settingsKeys:state?.settings && typeof state.settings==="object"
-            ? Object.keys(state.settings)
-            : []
+          activeDraftExerciseCount:(typeof wkey==="function"&&Array.isArray(workouts.drafts?.[wkey()]))?workouts.drafts[wkey()].length:0,
+          trainingScheduleConfigured:!!state?.trainingSchedule
         };
-
-        if(typeof wkey==="function" && workouts.drafts?.[wkey()]){
-          out.currentDraft=workouts.drafts[wkey()];
-        }
       }
     }catch(_){}
-
     return out;
   }
-
   function getFullBackupSnapshot(){
-    const out={};
+    const out={};try{if(typeof state!=="undefined")out.state=state}catch(_){}
     try{
-      if(typeof state!=="undefined")out.state=state;
+      const ls={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k!==LOG_KEY&&!REDACT_RE.test(k))ls[k]=localStorage.getItem(k)}
+      out.localStorage=ls;
     }catch(_){}
-    out.localStorage=safeLocalStorageSnapshot();
     return out;
   }
-
   function releaseMeta(){
     let release=null;
-    try{
-      release=
-        document.querySelector('meta[name="release"]')?.content ||
-        window.DT_RELEASE ||
-        window.RELEASE ||
-        null;
-    }catch(_){}
-    return {release};
+    try{release=document.querySelector('meta[name="release"]')?.content||window.DT_MARC_RELEASE_FIX_VERSION||window.DT_RELEASE||window.RELEASE||null}catch(_){}
+    return {release,debuggerVersion:"J1-diagnostic-instrumentation"};
   }
 
   function debugPlugin(name){
     try{
-      const cap=window.Capacitor;
-      if(!cap)return null;
-      if(!cap.Plugins)cap.Plugins={};
-      if(!cap.Plugins[name]&&typeof cap.registerPlugin==="function"){
-        cap.Plugins[name]=cap.registerPlugin(name);
-      }
+      const cap=window.Capacitor;if(!cap)return null;if(!cap.Plugins)cap.Plugins={};
+      if(!cap.Plugins[name]&&typeof cap.registerPlugin==="function")cap.Plugins[name]=cap.registerPlugin(name);
       return cap.Plugins[name]||null;
     }catch(_){return null}
   }
-  function debugIsNative(){
-    try{return !!window.Capacitor?.isNativePlatform?.()}catch(_){return false}
-  }
+  function debugIsNative(){try{return !!window.Capacitor?.isNativePlatform?.()}catch(_){return false}}
   function jsonBase64(obj){
     const json=JSON.stringify(obj,null,2);
     return new Promise((resolve,reject)=>{
       try{
-        const reader=new FileReader();
-        reader.onload=()=>resolve(String(reader.result||"").split(",")[1]||"");
+        const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||"").split(",")[1]||"");
         reader.onerror=()=>reject(reader.error||new Error("Could not prepare debug export."));
         reader.readAsDataURL(new Blob([json],{type:"application/json;charset=utf-8"}));
       }catch(e){reject(e)}
@@ -19007,141 +19229,76 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
   async function exportObject(filename,obj){
     const fs=debugPlugin("Filesystem");
     if(debugIsNative()&&fs){
-      /*
-        Android scoped storage can make Directory.Documents app-created files
-        difficult to discover in OEM file managers. Write to app cache, verify
-        it exists, then invoke the native Share sheet so the user explicitly
-        chooses where to save/send the JSON.
-      */
-      const path=`MARC_Debug/${filename}`;
-      const directory="CACHE";
-      const data=await jsonBase64(obj);
+      const path=`MARC_Debug/${filename}`,directory="CACHE",data=await jsonBase64(obj);
       if(!data)throw new Error("Export file could not be prepared.");
-
       const written=await fs.writeFile({path,data,directory,recursive:true});
       const uri=written?.uri||(await fs.getUri({path,directory})).uri;
-
-      /* Verify the actual file exists before ever showing Saved. */
       const stat=await fs.stat({path,directory});
-      if(!stat || !Number(stat.size)){
-        throw new Error("The export was not verified after writing.");
-      }
-
+      if(!stat||!Number(stat.size))throw new Error("The export was not verified after writing.");
       window.dtLastDebugExport={filename,path,directory,uri,size:stat.size};
-
       const share=debugPlugin("Share");
-      if(!share || typeof share.share!=="function"){
-        throw new Error("File was created, but the Android save/share sheet is unavailable.");
-      }
-
-      await share.share({
-        title:"M/ARC Debug Export",
-        text:"Save or share this M/ARC debug export.",
-        files:[uri],
-        dialogTitle:"Save M/ARC debug export"
-      });
-
+      if(!share||typeof share.share!=="function")throw new Error("File was created, but Android sharing is unavailable.");
+      await share.share({title:"M/ARC Debug Export",text:"Save or share this M/ARC diagnostic export.",files:[uri],dialogTitle:"Save M/ARC diagnostic export"});
       return {native:true,filename,path,directory,uri,size:stat.size,shared:true};
     }
-
-    const blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url;a.download=filename;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},1200);
+    const blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");
+    a.href=url;a.download=filename;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},1200);
     return {native:false,filename};
   }
-
-  function stamp(){
-    return new Date().toISOString().replace(/[:.]/g,"-");
-  }
-
+  function stamp(){return new Date().toISOString().replace(/[:.]/g,"-")}
   function baseMeta(){
     return {
-      schema:"marc-debug-export",
-      schemaVersion:1,
-      exportedAt:new Date().toISOString(),
-      device:deviceMeta(),
-      app:releaseMeta()
+      schema:"marc-debug-export",schemaVersion:2,exportedAt:new Date().toISOString(),
+      device:deviceMeta(),app:releaseMeta(),privacy:"no-raw-input-values-no-user-authored-visible-text-no-main-state-or-backup-blobs"
     };
   }
-
   async function exportDebugLog(){
-    record("debug_export_requested",{kind:"log"});
-    persistLogNow();
-    await exportObject(`MARC_DEBUG_LOG_${stamp()}.json`,{
-      ...baseMeta(),
-      kind:"debug-log",
-      eventCount:log.length,
-      events:log
-    });
+    record("debug_export_requested",{kind:"log"});persistLogNow();
+    return exportObject(`MARC_DEBUG_LOG_${stamp()}.json`,{...baseMeta(),kind:"debug-log",eventCount:log.length,summary:diagnosticSummary(),events:log});
   }
-
   async function exportDebugBundle(){
-    record("debug_export_requested",{kind:"bundle"});
-    persistLogNow();
-    await exportObject(`MARC_DEBUG_BUNDLE_${stamp()}.json`,{
-      ...baseMeta(),
-      kind:"debug-bundle",
-      dataScope:"privacy-default-diagnostics-no-raw-input-values-no-user-visible-text-no-full-history-no-main-state-storage",
-      eventCount:log.length,
-      events:log,
-      snapshot:getDebugSnapshot()
+    record("debug_export_requested",{kind:"bundle"});persistLogNow();
+    return exportObject(`MARC_DEBUG_BUNDLE_${stamp()}.json`,{
+      ...baseMeta(),kind:"debug-bundle",
+      dataScope:"detailed-gesture-control-outcome-input-validation-errors-network-performance-ui-state-no-raw-values",
+      eventCount:log.length,summary:diagnosticSummary(),events:log,snapshot:getDebugSnapshot()
     });
   }
-
   async function exportAppBackup(){
-    record("debug_export_requested",{kind:"app-backup"});
-    persistLogNow();
-    await exportObject(`MARC_APP_BACKUP_${stamp()}.json`,{
-      ...baseMeta(),
-      kind:"app-backup",
-      dataScope:"full-app-state-and-local-storage",
-      snapshot:getFullBackupSnapshot()
-    });
+    record("debug_export_requested",{kind:"app-backup"});persistLogNow();
+    return exportObject(`MARC_APP_BACKUP_${stamp()}.json`,{...baseMeta(),kind:"app-backup",dataScope:"full-app-state-and-local-storage",snapshot:getFullBackupSnapshot()});
   }
-
   function clearDebug(){
     if(!confirm("Clear the developer debug timeline? This does not delete workout or app data."))return;
-    log=[];
-    dirty=true;
-    eventsSincePersist=1;
-    persistLogNow();
-    record("debug_log_cleared",{});
-    persistLogNow();
+    log=[];seq=0;dirty=true;eventsSincePersist=1;persistLogNow();record("debug_log_cleared",{});persistLogNow();
+  }
+  function setEnabled(next){
+    enabled=!!next;try{localStorage.setItem(ENABLE_KEY,enabled?"1":"0")}catch(_){}
+    renderToggle();if(enabled)record("debug_recorder_enabled",{});
   }
 
-  function setEnabled(next){
-    enabled=!!next;
-    try{localStorage.setItem(ENABLE_KEY,enabled?"1":"0")}catch(_){}
-    renderToggle();
-    if(enabled)record("debug_recorder_enabled",{});
+  // Small Settings diagnostic health readout.
+  function renderHealth(){
+    const root=document.querySelector(".dt-debug-action-copy");if(!root)return;
+    let box=document.getElementById("dtDebugHealth");
+    if(!box){
+      box=document.createElement("small");box.id="dtDebugHealth";box.className="dt-setting-note";
+      box.style.marginTop="5px";root.appendChild(box);
+    }
+    box.textContent=`${log.length} events · ${counters.noVisibleChange} no-response · ${counters.consoleError+counters.error+counters.unhandled} errors · ${counters.frameStall} frame stalls`;
   }
+  setInterval(()=>{if(enabled)renderHealth()},1500);
 
   renderToggle();
-  toggle?.addEventListener("click",()=>{
-    const next=!enabled;
-    setEnabled(next);
-    try{window.dtHaptics?.light?.()}catch(_){}
-  });
+  toggle?.addEventListener("click",()=>{const next=!enabled;setEnabled(next);try{window.dtHaptics?.light?.()}catch(_){}});
   async function runDebugExport(btn,fn){
     if(!btn||btn.dataset.dtExportBusy==="1")return;
-    const original=btn.textContent;
-    btn.dataset.dtExportBusy="1";
-    btn.disabled=true;
-    btn.textContent="Saving…";
+    const original=btn.textContent;btn.dataset.dtExportBusy="1";btn.disabled=true;btn.textContent="Preparing…";
     try{
-      const result=await fn();
-      btn.textContent=result?.native?"Shared":"Downloaded";
-      try{window.dtHaptics?.light?.()}catch(_){}
+      const result=await fn();btn.textContent=result?.native?"Shared":"Downloaded";try{window.dtHaptics?.light?.()}catch(_){}
       setTimeout(()=>{btn.textContent=original;btn.disabled=false;delete btn.dataset.dtExportBusy},1600);
     }catch(err){
-      console.error("Debug export failed",err);
-      btn.textContent="Retry";
-      btn.disabled=false;
-      delete btn.dataset.dtExportBusy;
+      console.error("Debug export failed",err);btn.textContent="Retry";btn.disabled=false;delete btn.dataset.dtExportBusy;
       try{window.dtHaptics?.warning?.()}catch(_){}
       alert(`Debug export could not be saved. ${err?.message||err}`);
     }
@@ -19151,38 +19308,18 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
   exportBackupBtn?.addEventListener("click",()=>runDebugExport(exportBackupBtn,exportAppBackup));
   clearBtn?.addEventListener("click",clearDebug);
 
-  function lifecycleFlush(){
-    persistLogNow();
-  }
-
-  document.addEventListener("visibilitychange",()=>{
-    if(document.visibilityState==="hidden")lifecycleFlush();
-  },{passive:true});
-  window.addEventListener("pagehide",lifecycleFlush,{passive:true});
-  window.addEventListener("beforeunload",lifecycleFlush);
-
   window.dtDebugRecorder={
-    get enabled(){return enabled},
-    setEnabled,
-    record,
-    flush:persistLogNow,
-    exportDebugLog,
-    exportDebugBundle,
-    exportAppBackup,
-    clear:clearDebug,
-    getLog:()=>log.slice()
+    get enabled(){return enabled},setEnabled,record,flush:persistLogNow,exportDebugLog,exportDebugBundle,exportAppBackup,
+    clear:clearDebug,getLog:()=>log.slice(),summary:diagnosticSummary,uiFingerprint
   };
 
-  if(document.readyState==="loading"){
-    document.addEventListener("DOMContentLoaded",()=>{
-      watchViews();
-      record("session_start",{device:deviceMeta()});
-    },{once:true});
-  }else{
-    watchViews();
-    record("session_start",{device:deviceMeta()});
+  function boot(){
+    watchViews();viewportEvent("boot");renderHealth();
+    record("session_start",{device:deviceMeta(),release:releaseMeta(),debugger:"J1"});
   }
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();
 })();
+
 </script>
 
 
@@ -19485,6 +19622,233 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
 })();
 </script>
 
+
+
+<style id="dt-v36-debugger-j2-css">
+#dtMarkBugNow{
+  border-color:rgba(255,184,83,.28)!important;
+  color:#ffd18c!important;
+  background:linear-gradient(180deg,rgba(87,56,16,.22),rgba(34,27,17,.20))!important;
+}
+#dtMarkBugNow[data-marked="1"]{
+  border-color:rgba(91,231,163,.42)!important;
+  color:#76e8ae!important;
+}
+</style>
+
+<script id="dt-v36-debugger-j2">
+(()=>{
+  "use strict";
+  const VERSION="J2-deep-diagnostics";
+  const markBtn=document.getElementById("dtMarkBugNow");
+  let bugSeq=0;
+  let lastScrollSample=0;
+  let mutationBurst={count:0,added:0,removed:0,attrs:0,targets:new Set(),timer:null};
+
+  function dbg(){return window.dtDebugRecorder||null}
+  function rec(type,data={}){
+    try{return dbg()?.record?.(type,{j2:VERSION,...data})||null}catch(_){return null}
+  }
+  function path(el){
+    if(!el||!(el instanceof Element))return null;
+    const p=[];let n=el,d=0;
+    while(n&&n!==document.body&&d<6){
+      let s=n.tagName.toLowerCase();
+      if(n.id){s+="#"+n.id;p.unshift(s);break}
+      const cls=[...n.classList].slice(0,2);
+      if(cls.length)s+="."+cls.join(".");
+      p.unshift(s);n=n.parentElement;d++;
+    }
+    return p.join(">");
+  }
+  function rect(el){
+    if(!(el instanceof Element))return null;
+    const r=el.getBoundingClientRect(),cs=getComputedStyle(el);
+    return {
+      x:Math.round(r.x),y:Math.round(r.y),width:Math.round(r.width),height:Math.round(r.height),
+      right:Math.round(r.right),bottom:Math.round(r.bottom),
+      display:cs.display,visibility:cs.visibility,opacity:cs.opacity,
+      pointerEvents:cs.pointerEvents,position:cs.position,zIndex:cs.zIndex,
+      overflowX:cs.overflowX,overflowY:cs.overflowY
+    };
+  }
+  function interactive(el){
+    return el?.closest?.("button,[role='button'],a,input,textarea,select,[tabindex],[data-action],[onclick]")||null;
+  }
+  function control(el){
+    if(!(el instanceof Element))return null;
+    const target=interactive(el)||el;
+    return {
+      path:path(target),
+      tag:target.tagName?.toLowerCase?.()||null,
+      id:target.id||null,
+      type:target.getAttribute?.("type")||null,
+      disabled:!!target.disabled||target.getAttribute?.("aria-disabled")==="true",
+      ariaExpanded:target.getAttribute?.("aria-expanded"),
+      ariaSelected:target.getAttribute?.("aria-selected"),
+      ariaChecked:target.getAttribute?.("aria-checked"),
+      rect:rect(target)
+    };
+  }
+  function visibleControls(limit=100){
+    const out=[];
+    document.querySelectorAll("button,a,[role='button'],input,textarea,select,[tabindex],[data-action]").forEach(el=>{
+      if(out.length>=limit||!(el instanceof HTMLElement))return;
+      const r=el.getBoundingClientRect(),cs=getComputedStyle(el);
+      if(r.width<2||r.height<2||r.bottom<0||r.top>innerHeight||r.right<0||r.left>innerWidth)return;
+      if(cs.display==="none"||cs.visibility==="hidden"||Number(cs.opacity)===0)return;
+      out.push(control(el));
+    });
+    return out;
+  }
+  function scrollRegions(limit=50){
+    const out=[];
+    document.querySelectorAll("body *").forEach(el=>{
+      if(out.length>=limit||!(el instanceof HTMLElement))return;
+      const cs=getComputedStyle(el);
+      if(el.scrollWidth-el.clientWidth<8&&el.scrollHeight-el.clientHeight<8)return;
+      if(!/(auto|scroll)/.test(`${cs.overflowX} ${cs.overflowY}`))return;
+      out.push({
+        path:path(el),rect:rect(el),
+        scrollLeft:Math.round(el.scrollLeft),scrollTop:Math.round(el.scrollTop),
+        scrollWidth:el.scrollWidth,scrollHeight:el.scrollHeight,
+        clientWidth:el.clientWidth,clientHeight:el.clientHeight
+      });
+    });
+    return out;
+  }
+  function focusedInput(){
+    const el=document.activeElement;
+    if(!(el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement||el instanceof HTMLSelectElement))return null;
+    const v=el.validity;
+    return {
+      path:path(el),type:el.type||el.tagName.toLowerCase(),
+      valueLength:String(el.value||"").length,
+      required:!!el.required,
+      valid:!!v?.valid,valueMissing:!!v?.valueMissing,typeMismatch:!!v?.typeMismatch,
+      patternMismatch:!!v?.patternMismatch,rangeUnderflow:!!v?.rangeUnderflow,
+      rangeOverflow:!!v?.rangeOverflow,stepMismatch:!!v?.stepMismatch,badInput:!!v?.badInput,
+      rect:rect(el)
+    };
+  }
+  function elementStacks(){
+    const points=[
+      ["center",innerWidth/2,innerHeight/2],
+      ["topLeft",Math.min(40,innerWidth/2),Math.min(80,innerHeight/2)],
+      ["topRight",Math.max(0,innerWidth-40),Math.min(80,innerHeight/2)],
+      ["bottomCenter",innerWidth/2,Math.max(0,innerHeight-90)]
+    ];
+    const out={};
+    for(const [name,x,y] of points){
+      try{
+        out[name]=document.elementsFromPoint(x,y).slice(0,10).map(el=>({
+          path:path(el),control:control(el),rect:rect(el)
+        }));
+      }catch(_){out[name]=[]}
+    }
+    return out;
+  }
+  function snapshot(reason){
+    const vv=window.visualViewport;
+    return {
+      reason,capturedAt:new Date().toISOString(),
+      view:document.querySelector(".view.active")?.id||null,
+      hash:location.hash||null,
+      viewport:{
+        innerWidth,innerHeight,
+        scrollX:Math.round(scrollX||0),scrollY:Math.round(scrollY||document.documentElement.scrollTop||0),
+        visual:vv?{
+          width:Math.round(vv.width),height:Math.round(vv.height),
+          offsetTop:Math.round(vv.offsetTop),offsetLeft:Math.round(vv.offsetLeft),scale:vv.scale
+        }:null
+      },
+      focusedInput:focusedInput(),
+      controls:visibleControls(),
+      scrollRegions:scrollRegions(),
+      elementStacks:elementStacks()
+    };
+  }
+  function markBug(){
+    const d=dbg();
+    if(!d)return;
+    if(!d.enabled)d.setEnabled?.(true);
+    const all=d.getLog?.()||[];
+    const now=performance.now(),recent=all.filter(e=>Number(e?.t)>=now-30000);
+    const id=`bug_${Date.now().toString(36)}_${(++bugSeq).toString(36)}`;
+    rec("bug_marker",{
+      bugId:id,
+      preWindow:{
+        ms:30000,count:recent.length,
+        firstSeq:recent[0]?.seq||null,lastSeq:recent.at(-1)?.seq||null
+      },
+      snapshot:snapshot("marker")
+    });
+    const probe=(label,delay)=>setTimeout(()=>rec("bug_probe",{
+      bugId:id,label,delayMs:delay,snapshot:snapshot(label)
+    }),delay);
+    probe("250ms",250);probe("1000ms",1000);probe("3000ms",3000);
+
+    if(markBtn){
+      const old=markBtn.textContent;
+      markBtn.textContent="Bug Marked ✓";
+      markBtn.dataset.marked="1";
+      markBtn.disabled=true;
+      setTimeout(()=>{markBtn.textContent=old;delete markBtn.dataset.marked;markBtn.disabled=false},1400);
+    }
+    try{window.dtHaptics?.warning?.()}catch(_){}
+    d.flush?.();
+  }
+
+  markBtn?.addEventListener("click",markBug);
+
+  // Higher-resolution scroll breadcrumbs, throttled to avoid log flooding.
+  addEventListener("scroll",e=>{
+    const now=performance.now();
+    if(now-lastScrollSample<220)return;
+    lastScrollSample=now;
+    const el=e.target===document?document.scrollingElement:e.target;
+    if(!el)return;
+    rec("scroll_sample",{
+      target:el===document.scrollingElement?"document":path(el),
+      left:Math.round(el.scrollLeft||scrollX||0),
+      top:Math.round(el.scrollTop||scrollY||0),
+      scrollWidth:el.scrollWidth||document.documentElement.scrollWidth,
+      scrollHeight:el.scrollHeight||document.documentElement.scrollHeight
+    });
+  },{capture:true,passive:true});
+
+  // DOM churn locator for flicker/flash bugs. No text values are recorded.
+  function flushMutations(){
+    if(!mutationBurst.count)return;
+    rec("dom_mutation_burst",{
+      count:mutationBurst.count,added:mutationBurst.added,removed:mutationBurst.removed,
+      attributes:mutationBurst.attrs,targets:[...mutationBurst.targets].slice(0,20)
+    });
+    mutationBurst={count:0,added:0,removed:0,attrs:0,targets:new Set(),timer:null};
+  }
+  try{
+    const mo=new MutationObserver(records=>{
+      records.forEach(r=>{
+        mutationBurst.count++;
+        mutationBurst.added+=r.addedNodes?.length||0;
+        mutationBurst.removed+=r.removedNodes?.length||0;
+        if(r.type==="attributes")mutationBurst.attrs++;
+        if(r.target instanceof Element)mutationBurst.targets.add(path(r.target));
+      });
+      clearTimeout(mutationBurst.timer);
+      mutationBurst.timer=setTimeout(flushMutations,180);
+      if(mutationBurst.count>120)flushMutations();
+    });
+    mo.observe(document.body,{
+      subtree:true,childList:true,attributes:true,
+      attributeFilter:["class","style","hidden","disabled","aria-expanded","aria-selected","aria-checked"]
+    });
+  }catch(_){}
+
+  rec("debugger_j2_ready",{version:VERSION});
+  window.dtDebuggerJ2={markBug,snapshot,version:VERSION};
+})();
+</script>
 
 </body>
 </html>

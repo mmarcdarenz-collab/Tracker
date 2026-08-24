@@ -1,6 +1,6 @@
 "use strict";
 
-const VERSION = "marc-v36-pr-consistency-v1";
+const VERSION = "marc-v36-debug-j2";
 const APP_CACHE = `${VERSION}-app`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest"];
