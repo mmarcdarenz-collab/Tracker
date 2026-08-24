@@ -46,7 +46,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import hashlib, json
-          expected = "ed3f9278db21e8875dd643481181f79a3e82a42b1fef81fb5e4209cbecfc7b91"
+          expected = "832f8a4c3ed81dad1e651da410d975e446bafbdca9e796016d560aedd36c8742"
           for name in ("package.json", "capacitor.config.json"):
               json.loads(Path(name).read_text())
               print(f"{name}: JSON parse PASS")
@@ -157,14 +157,14 @@ jobs:
       - name: Sync web app
         run: npx cap sync android
 
-      - name: Verify exact V36.8 web bundle copied into Android assets
+      - name: Verify exact V36.9 web bundle copied into Android assets
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           import hashlib
-          expected = "ed3f9278db21e8875dd643481181f79a3e82a42b1fef81fb5e4209cbecfc7b91"
-          marker = 'window.DT_MARC_RELEASE_FIX_VERSION="36.8-phase8-training-brief-deep-regression"'
+          expected = "832f8a4c3ed81dad1e651da410d975e446bafbdca9e796016d560aedd36c8742"
+          marker = 'window.DT_MARC_RELEASE_FIX_VERSION="36.9-phase9-completion-body-route-authoritative-brief"'
           source = Path("www/index.html")
           bundled = Path("android/app/src/main/assets/public/index.html")
           if not bundled.exists():
@@ -180,9 +180,9 @@ jobs:
           if source_bytes != bundled_bytes:
               raise SystemExit("Android bundled index.html is not byte-for-byte identical to www/index.html")
           if marker.encode() not in bundled_bytes:
-              raise SystemExit("V36.8 Phase 8 APK sync marker missing from Android bundled index.html")
-          print(f"Android bundled index.html exact V36.8 SHA256 PASS: {bundled_hash}")
-          print("V36.8 Phase 8 APK sync marker PASS")
+              raise SystemExit("V36.9 Phase 9 APK sync marker missing from Android bundled index.html")
+          print(f"Android bundled index.html exact V36.9 SHA256 PASS: {bundled_hash}")
+          print("V36.9 Phase 9 APK sync marker PASS")
           PY
 
       - name: Install Health Connect native bridge
@@ -260,8 +260,8 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import hashlib, zipfile
-          expected = "ed3f9278db21e8875dd643481181f79a3e82a42b1fef81fb5e4209cbecfc7b91"
-          marker = b'window.DT_MARC_RELEASE_FIX_VERSION="36.8-phase8-training-brief-deep-regression"'
+          expected = "832f8a4c3ed81dad1e651da410d975e446bafbdca9e796016d560aedd36c8742"
+          marker = b'window.DT_MARC_RELEASE_FIX_VERSION="36.9-phase9-completion-body-route-authoritative-brief"'
           candidates = [
               Path("android/app/build/outputs/apk/release/app-release-unsigned.apk"),
               Path("android/app/build/outputs/apk/release/app-release.apk"),
@@ -337,8 +337,8 @@ jobs:
           from pathlib import Path
           import hashlib, sys, zipfile
           apk = Path(sys.argv[1])
-          expected = "ed3f9278db21e8875dd643481181f79a3e82a42b1fef81fb5e4209cbecfc7b91"
-          marker = b'window.DT_MARC_RELEASE_FIX_VERSION="36.8-phase8-training-brief-deep-regression"'
+          expected = "832f8a4c3ed81dad1e651da410d975e446bafbdca9e796016d560aedd36c8742"
+          marker = b'window.DT_MARC_RELEASE_FIX_VERSION="36.9-phase9-completion-body-route-authoritative-brief"'
           with zipfile.ZipFile(apk) as z:
               name = "assets/public/index.html"
               if name not in z.namelist():
@@ -348,7 +348,7 @@ jobs:
           if actual != expected:
               raise SystemExit(f"Signed APK embedded index.html mismatch: expected {expected}, got {actual}")
           if marker not in data:
-              raise SystemExit("V36.8 Phase 8 marker missing inside signed APK")
+              raise SystemExit("V36.9 Phase 9 marker missing inside signed APK")
           print(f"Signed APK embedded V36 index.html SHA256 PASS: {actual}")
           print("Signed APK V36 marker PASS")
           PY
