@@ -1389,16 +1389,80 @@ html,body{max-width:100%;overflow-x:hidden}
 }
 </style>
 
-<style id="dt-v36-endurance-f-recovery-safearea-css">
-.dt-recovery-fill{position:absolute;inset:0 auto 0 0;width:0;border-radius:inherit;background:linear-gradient(90deg,rgba(68,197,151,.72),rgba(91,231,163,.94));box-shadow:0 0 10px rgba(91,231,163,.18);transform-origin:left center;transition:width .72s cubic-bezier(.22,.72,.24,1),opacity .22s ease;pointer-events:none}
-.dt-recovery-track-fixed{position:relative!important;overflow:hidden!important}
-.dt-recovery-track-fixed::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(255,255,255,.018);pointer-events:none}
-@media(prefers-reduced-motion:reduce){.dt-recovery-fill{transition:none!important}}
-#app,.app,.app-shell,main{--dt-safe-top:env(safe-area-inset-top,0px)}
-.dt-safe-top-brand{transform:translateY(max(0px,var(--dt-safe-top)))!important}
-@supports(padding:max(0px)){body{padding-top:max(0px,env(safe-area-inset-top))!important}}
-.dt-v27-home-back{margin-top:max(6px,env(safe-area-inset-top))!important}
+<style id="dt-v36-bugfix-g-phone-css">
+/* G1 — native recovery bars: stable glow, no synthetic overlay / no repeated resets */
+.dt-v27-recovery-track{
+  position:relative;
+  overflow:hidden;
+  isolation:isolate;
+}
+.dt-v27-recovery-fill{
+  display:block;
+  height:100%;
+  border-radius:inherit;
+  transition:width .62s cubic-bezier(.22,.72,.24,1),filter .22s ease,opacity .22s ease;
+  filter:drop-shadow(0 0 4px rgba(91,231,163,.30));
+  box-shadow:0 0 7px rgba(91,231,163,.15);
+  will-change:width;
+}
+.dt-v27-recovery-track::after{
+  content:"";
+  position:absolute;inset:0;border-radius:inherit;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.018);
+  pointer-events:none;
+}
+@media(prefers-reduced-motion:reduce){
+  .dt-v27-recovery-fill{transition:none!important}
+}
+
+/* G2 — stop vertical pull/stretch and keep return control anchored */
+html,body{
+  overscroll-behavior-y:none!important;
+}
+.dt-v27-return-row{
+  position:sticky!important;
+  top:max(8px,env(safe-area-inset-top,0px))!important;
+  z-index:120!important;
+  margin-top:0!important;
+  pointer-events:none;
+}
+.dt-v27-return-row .dt-v27-home-back{
+  pointer-events:auto;
+  margin-top:0!important;
+  min-width:72px;
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+  box-shadow:0 8px 24px rgba(0,0,0,.16);
+}
+/* Do not globally pad body; each anchored control owns its safe-area positioning. */
+body{padding-top:0!important}
+
+/* G3 — Add Split must remain a real, unobstructed target */
+#workout .workout-tabs{
+  position:relative;
+  z-index:2;
+  touch-action:pan-x pan-y;
+}
+#dtAddSplitBtn{
+  position:relative!important;
+  z-index:8!important;
+  min-width:48px!important;
+  width:48px!important;
+  min-height:44px!important;
+  flex:0 0 48px!important;
+  pointer-events:auto!important;
+}
 </style>
+
+<style id="dt-v36-bugfix-g-safe-brand-css">
+#todayView .brand,
+#todayView [class*="brand"],
+.view.active > .brand,
+.dt-v27-brand{
+  padding-top:max(0px,env(safe-area-inset-top,0px));
+}
+</style>
+
 </head>
 <body>
 <div id="dtStartupGate" aria-hidden="true"><div class="dt-startup-mark">M/ARC</div></div>
@@ -18890,14 +18954,54 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     return {release};
   }
 
-  function exportObject(filename,obj){
+  function debugPlugin(name){
+    try{
+      const cap=window.Capacitor;
+      if(!cap)return null;
+      if(!cap.Plugins)cap.Plugins={};
+      if(!cap.Plugins[name]&&typeof cap.registerPlugin==="function"){
+        cap.Plugins[name]=cap.registerPlugin(name);
+      }
+      return cap.Plugins[name]||null;
+    }catch(_){return null}
+  }
+  function debugIsNative(){
+    try{return !!window.Capacitor?.isNativePlatform?.()}catch(_){return false}
+  }
+  function jsonBase64(obj){
+    const json=JSON.stringify(obj,null,2);
+    return new Promise((resolve,reject)=>{
+      try{
+        const reader=new FileReader();
+        reader.onload=()=>resolve(String(reader.result||"").split(",")[1]||"");
+        reader.onerror=()=>reject(reader.error||new Error("Could not prepare debug export."));
+        reader.readAsDataURL(new Blob([json],{type:"application/json;charset=utf-8"}));
+      }catch(e){reject(e)}
+    });
+  }
+  async function exportObject(filename,obj){
+    const fs=debugPlugin("Filesystem");
+    if(debugIsNative()&&fs){
+      const folder="MARC Debug";
+      const path=`${folder}/${filename}`;
+      const directory="DOCUMENTS";
+      const data=await jsonBase64(obj);
+      if(!data)throw new Error("Export file could not be prepared.");
+      const written=await fs.writeFile({path,data,directory,recursive:true});
+      const uri=written?.uri||(await fs.getUri({path,directory})).uri;
+      window.dtLastDebugExport={filename,path,directory,uri};
+      alert(`Debug export saved successfully.\n\nDocuments/MARC Debug/${filename}`);
+      return {native:true,filename,path,directory,uri};
+    }
+
     const blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");
     a.href=url;a.download=filename;
     document.body.appendChild(a);
     a.click();
-    setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},1000);
+    setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},1200);
+    return {native:false,filename};
   }
 
   function stamp(){
@@ -18914,10 +19018,10 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     };
   }
 
-  function exportDebugLog(){
+  async function exportDebugLog(){
     record("debug_export_requested",{kind:"log"});
     persistLogNow();
-    exportObject(`MARC_DEBUG_LOG_${stamp()}.json`,{
+    await exportObject(`MARC_DEBUG_LOG_${stamp()}.json`,{
       ...baseMeta(),
       kind:"debug-log",
       eventCount:log.length,
@@ -18925,10 +19029,10 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     });
   }
 
-  function exportDebugBundle(){
+  async function exportDebugBundle(){
     record("debug_export_requested",{kind:"bundle"});
     persistLogNow();
-    exportObject(`MARC_DEBUG_BUNDLE_${stamp()}.json`,{
+    await exportObject(`MARC_DEBUG_BUNDLE_${stamp()}.json`,{
       ...baseMeta(),
       kind:"debug-bundle",
       dataScope:"privacy-default-diagnostics-no-raw-input-values-no-user-visible-text-no-full-history-no-main-state-storage",
@@ -18938,10 +19042,10 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     });
   }
 
-  function exportAppBackup(){
+  async function exportAppBackup(){
     record("debug_export_requested",{kind:"app-backup"});
     persistLogNow();
-    exportObject(`MARC_APP_BACKUP_${stamp()}.json`,{
+    await exportObject(`MARC_APP_BACKUP_${stamp()}.json`,{
       ...baseMeta(),
       kind:"app-backup",
       dataScope:"full-app-state-and-local-storage",
@@ -18972,9 +19076,29 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     setEnabled(next);
     try{window.dtHaptics?.light?.()}catch(_){}
   });
-  exportLogBtn?.addEventListener("click",exportDebugLog);
-  exportBundleBtn?.addEventListener("click",exportDebugBundle);
-  exportBackupBtn?.addEventListener("click",exportAppBackup);
+  async function runDebugExport(btn,fn){
+    if(!btn||btn.dataset.dtExportBusy==="1")return;
+    const original=btn.textContent;
+    btn.dataset.dtExportBusy="1";
+    btn.disabled=true;
+    btn.textContent="Saving…";
+    try{
+      await fn();
+      btn.textContent="Saved";
+      try{window.dtHaptics?.light?.()}catch(_){}
+      setTimeout(()=>{btn.textContent=original;btn.disabled=false;delete btn.dataset.dtExportBusy},1300);
+    }catch(err){
+      console.error("Debug export failed",err);
+      btn.textContent="Retry";
+      btn.disabled=false;
+      delete btn.dataset.dtExportBusy;
+      try{window.dtHaptics?.warning?.()}catch(_){}
+      alert(`Debug export could not be saved. ${err?.message||err}`);
+    }
+  }
+  exportLogBtn?.addEventListener("click",()=>runDebugExport(exportLogBtn,exportDebugLog));
+  exportBundleBtn?.addEventListener("click",()=>runDebugExport(exportBundleBtn,exportDebugBundle));
+  exportBackupBtn?.addEventListener("click",()=>runDebugExport(exportBackupBtn,exportAppBackup));
   clearBtn?.addEventListener("click",clearDebug);
 
   function lifecycleFlush(){
@@ -19129,7 +19253,7 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
   /* User selecting a split -> center the chosen tab. */
   document.addEventListener("click",e=>{
     const btn=e.target?.closest?.("#splitTabs button,.dt-split-tabs button,.workout-tabs button,.tabs.workout-tabs button");
-    if(!btn)return;
+    if(!btn || btn.id==="dtAddSplitBtn")return;
     setTimeout(()=>scrollTabIntoView(btn,true),30);
   },true);
 
@@ -19140,12 +19264,13 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
   const observer=new MutationObserver(records=>{
     let splitChanged=false;
     for(const rec of records){
+      if(rec.type!=="childList")continue;
       const target=rec.target;
-      if(target instanceof Element){
-        if(target.matches?.("#splitTabs,.dt-split-tabs,.workout-tabs,.tabs.workout-tabs") ||
-           target.closest?.("#splitTabs,.dt-split-tabs,.workout-tabs,.tabs.workout-tabs")){
-          splitChanged=true;break;
-        }
+      if(target instanceof Element &&
+         (target.matches?.("#splitTabs,.dt-split-tabs,.workout-tabs,.tabs.workout-tabs") ||
+          target.closest?.("#splitTabs,.dt-split-tabs,.workout-tabs,.tabs.workout-tabs"))){
+        splitChanged=true;
+        break;
       }
       for(const node of rec.addedNodes){
         if(!(node instanceof Element))continue;
@@ -19154,10 +19279,13 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
           splitChanged=true;break;
         }
       }
+      if(splitChanged)break;
     }
     if(splitChanged){
       queueMicrotask(()=>{
         bindStrip();
+        /* New/rendered tabs may move the active split, but only after a true
+           tab render — never from pointer press classes. */
         scrollActive(true);
       });
     }
@@ -19165,7 +19293,10 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
 
   function boot(){
     bindStrip();
-    observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:["class","aria-selected","data-active"]});
+    /* Child-list changes mean tabs were genuinely re-rendered.
+       Do NOT observe class attributes: press/haptic classes must never snap
+       the user's manual horizontal scroll back to the active split. */
+    observer.observe(document.body,{subtree:true,childList:true});
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});
   else boot();
@@ -19304,15 +19435,6 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
 })();
 </script>
 
-<script id="dt-v36-endurance-f-recovery-safearea-js">
-(()=>{"use strict";
-function pct(row){const m=[...(row?.textContent||"").matchAll(/(\d{1,3})\s*%/g)];if(!m.length)return null;const n=Number(m[m.length-1][1]);return Number.isFinite(n)?Math.max(0,Math.min(100,n)):null}
-function trackFor(row){const c=[...row.querySelectorAll("div,span")].filter(el=>{const r=el.getBoundingClientRect(),cs=getComputedStyle(el);return r.width>70&&r.height>=3&&r.height<=18&&(cs.borderRadius!=="0px"||/track|bar|progress/i.test(el.className||""))});return c.sort((a,b)=>b.getBoundingClientRect().width-a.getBoundingClientRect().width)[0]||null}
-function bars(){const root=document.querySelector(".dt-today-recovery")||[...document.querySelectorAll("section,div")].find(el=>/Recovery estimate/i.test(el.textContent||""));if(!root)return;const used=new Set();[...root.querySelectorAll("div")].forEach(row=>{const p=pct(row);if(p==null)return;const tr=trackFor(row);if(!tr||used.has(tr))return;used.add(tr);tr.classList.add("dt-recovery-track-fixed");let f=tr.querySelector(":scope > .dt-recovery-fill");if(!f){f=document.createElement("span");f.className="dt-recovery-fill";f.setAttribute("aria-hidden","true");tr.appendChild(f)}f.style.width="0%";requestAnimationFrame(()=>requestAnimationFrame(()=>{f.style.width=p+"%"}))})}
-function safe(){[...document.querySelectorAll("header,body *")].forEach(el=>{const x=(el.textContent||"").trim();if(!/^M[•\/]?ARC\s*TRAINING$/i.test(x))return;const r=el.getBoundingClientRect();if(r.top<90&&r.left<100&&r.width<220)el.classList.add("dt-safe-top-brand")})}
-let tm=0;function refresh(){clearTimeout(tm);tm=setTimeout(()=>{bars();safe()},40)}
-const mo=new MutationObserver(refresh);function boot(){refresh();mo.observe(document.body,{subtree:true,childList:true,characterData:true});window.addEventListener("resize",refresh,{passive:true});window.addEventListener("orientationchange",refresh,{passive:true})}
-if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();window.dtRecoveryVisualRefresh=refresh})();
-</script>
+
 </body>
 </html>
