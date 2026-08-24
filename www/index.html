@@ -302,7 +302,6 @@ nav button.active{color:var(--green);background:#10231a}
 }
 
 
-.health-connect-card{padding:18px}
 .health-connect-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.06)}
 .health-connect-row:last-child{border-bottom:0}
 .health-btn{border:1px solid var(--line);background:#111d27;color:white;border-radius:13px;padding:10px 13px;font-weight:800}
@@ -1257,7 +1256,6 @@ button.dt-p3-pressed,
 }
 
 /* Keep the visual switch 28px but make its button hit-area ≥44px. */
-#dtHapticToggle,
 #dtDebugToggle,
 .dt-setting-toggle{
   min-width:52px!important;
@@ -1265,7 +1263,6 @@ button.dt-p3-pressed,
   padding:8px 3px!important;
   background-clip:content-box;
 }
-#dtHapticToggle .dt-setting-toggle-dot,
 #dtDebugToggle .dt-setting-toggle-dot,
 .dt-setting-toggle .dt-setting-toggle-dot{
   flex:0 0 auto;
@@ -1749,101 +1746,9 @@ main,.app,.app-shell,#app{
     </div>
     <div class="setting-row"><span>Storage</span><b>On device</b></div>
 
-<div class="setting-row dt-debug-setting">
-  <div>
-    <span>Developer Debug Recorder</span>
-    <small class="dt-setting-note">Private test build · detailed interaction timeline</small>
-  </div>
-  <button id="dtDebugToggle" class="dt-setting-toggle" type="button" role="switch" aria-checked="true">
-    <span class="dt-setting-toggle-dot"></span>
-  </button>
-</div>
-<div class="setting-row dt-debug-actions">
-  <div class="dt-debug-action-copy">
-    <span>Debug & Backup</span>
-    <small class="dt-setting-note">Export before uninstalling or reinstalling</small>
-  </div>
-  <div class="dt-debug-action-grid">
-    <button id="dtExportDebugLog" class="dt-debug-action-btn" type="button">Export Debug Log</button>
-    <button id="dtExportDebugBundle" class="dt-debug-action-btn" type="button">Export Debug Bundle</button>
-    <button id="dtMarkBugNow" class="dt-debug-action-btn" type="button">Mark Bug Now</button>
-    <button id="dtExportAppBackup" class="dt-debug-action-btn" type="button">Export App Backup</button>
-    <button id="dtClearDebugData" class="dt-debug-action-btn danger" type="button">Clear Debug Data</button>
-  </div>
-</div>
-
-    <div class="setting-row dt-haptic-setting">
-      <div>
-        <span>Haptic Feedback</span>
-        <small class="dt-setting-note">Primary actions · private test build</small>
-      </div>
-      <button id="dtHapticToggle" class="dt-setting-toggle" type="button" role="switch" aria-checked="true">
-        <span class="dt-setting-toggle-dot"></span>
-      </button>
-    </div>
-    
-    <div class="card health-connect-card" style="margin-top:16px">
-      <h2 style="font-size:19px;margin-bottom:4px">⌚ Health Integration</h2>
-      <div class="subtitle" style="font-size:12px;margin-bottom:6px">Connect to Android Health Connect and read available health data.</div>
-      <div class="health-connect-row">
-        <div style="flex:1">
-          <b>Health data source</b>
-          <div class="health-test-note">Auto uses Health Connect now. Huawei Direct remains an optional future fallback.</div>
-        </div>
-        <select id="healthSourceSelect" class="currency-select">
-          <option value="auto">Auto</option>
-          <option value="healthconnect">Health Connect</option>
-          <option value="huawei">Huawei Direct</option>
-        </select>
-      </div>
-      <div class="health-connect-row">
-        <div>
-          <b>Source status</b>
-          <div class="health-test-note" id="healthSourceStatus">Health Connect ready • Huawei Direct not configured</div>
-        </div>
-      </div>
-      <div class="health-connect-row">
-        <div>
-          <b>Watch connection</b>
-          <div class="health-test-note" id="watchProvider">Health Connect • not connected</div>
-        </div>
-        <span class="health-badge off" id="watchStatus">Disconnected</span>
-      </div>
-      <div class="health-connect-row">
-        <div>
-          <b>Connect Health Connect</b>
-          <div class="health-test-note">Opens Android Health Connect permissions for this app.</div>
-        </div>
-        <button class="health-btn primary" id="connectTestWatch">Connect</button>
-      </div>
-      <div class="health-connect-row">
-        <div>
-          <b>Sync Now</b>
-          <div class="health-test-note" id="lastHealthSync">No sync yet</div>
-        </div>
-        <button class="health-btn blue" id="syncHealthNow">Sync</button>
-      </div>
-      <div class="health-connect-row" style="align-items:flex-start">
-        <div style="flex:1">
-          <b>Health Diagnostic</b>
-          <div class="health-test-note">Checks what Health Connect actually has from the last 7 days.</div>
-          <div id="healthDiagResults" style="margin-top:12px;display:grid;gap:7px;font-size:13px;color:var(--muted)">
-            <div>Sleep: —</div>
-            <div>Resting HR: —</div>
-            <div>Heart rate: —</div>
-            <div>Active calories: —</div>
-          </div>
-        </div>
-        <button class="health-btn blue" id="diagnoseHealth">Check</button>
-      </div>
-      <div class="health-connect-row">
-        <div>
-          <b>Disconnect</b>
-          <div class="health-test-note">Disconnects the dashboard locally. Health permissions can still be changed in Android settings.</div>
-        </div>
-        <button class="health-btn" id="disconnectWatch">Disconnect</button>
-      </div>
-    </div>
+<button class="setting-row dt-developer-entry" id="dtDeveloperOptionsOpen" type="button" style="width:100%;background:transparent;color:inherit;text-align:left">
+  <span>Developer Options</span><b>›</b>
+</button>
 
     <button class="setting-row" id="resetBtn" style="width:100%;background:transparent;border-left:0;border-right:0;border-top:0;color:var(--red)">Reset app data <span>›</span></button>
   </div>
@@ -1851,8 +1756,39 @@ main,.app,.app-shell,#app{
 
 </div>
 
-<button class="chat" id="chatBtn">✨ Ask GPT</button>
-<button class="chat-handle" id="chatHandle" aria-label="Show Ask GPT">‹</button>
+<div id="dtDeveloperPanel" class="dt-developer-panel" hidden aria-hidden="true">
+  <div class="dt-developer-shell">
+    <div class="dt-developer-head">
+      <button id="dtDeveloperOptionsBack" class="dt-developer-back" type="button" aria-label="Back to Settings">‹</button>
+      <div><small>SETTINGS</small><h2>Developer Options</h2></div>
+    </div>
+    <div class="dt-developer-card">
+      <div class="setting-row dt-debug-setting">
+        <div>
+          <span>Developer Debug Recorder</span>
+          <small class="dt-setting-note">Detailed interaction timeline for real-device diagnosis</small>
+        </div>
+        <button id="dtDebugToggle" class="dt-setting-toggle" type="button" role="switch" aria-checked="true">
+          <span class="dt-setting-toggle-dot"></span>
+        </button>
+      </div>
+      <div class="setting-row dt-debug-actions">
+        <div class="dt-debug-action-copy">
+          <span>Debugger & Test Tools</span>
+          <small class="dt-setting-note">Export diagnostics, mark a bug, or back up app data</small>
+        </div>
+        <div class="dt-debug-action-grid">
+          <button id="dtExportDebugLog" class="dt-debug-action-btn" type="button">Export Debug Log</button>
+          <button id="dtExportDebugBundle" class="dt-debug-action-btn" type="button">Export Debug Bundle</button>
+          <button id="dtMarkBugNow" class="dt-debug-action-btn" type="button">Mark Bug Now</button>
+          <button id="dtExportAppBackup" class="dt-debug-action-btn" type="button">Export App Backup</button>
+          <button id="dtClearDebugData" class="dt-debug-action-btn danger" type="button">Clear Debug Data</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 <nav>
   <button class="active" data-view="today">☀️<br>Today</button>
@@ -2943,8 +2879,8 @@ if(!Array.isArray(state.workouts.savedRoutines))state.workouts.savedRoutines=[];
 if(!dtPlainObject(state.workouts.routineOverrides))state.workouts.routineOverrides={};
 if(!Array.isArray(state.workouts.customSplits))state.workouts.customSplits=[];
 if(!dtPlainObject(state.workouts.dayNames))state.workouts.dayNames={};
-if(!state.health) state.health={connected:false,provider:"Android Health Connect",sourceMode:"auto",lastSync:0,sleepMinutes:null,restingHR:null,workoutHR:null,steps:null};
-if(!state.health.sourceMode) state.health.sourceMode="auto";
+/* V36.12: health integration is retired; legacy health keys are tolerated only
+   long enough for import compatibility and are not initialized as active state. */
 let calendarDate=new Date();
 let currentAction=null;
 let transferDirection="toSavings";
@@ -3136,25 +3072,6 @@ function dtSyncFoundationShadow(){
     });
   }
   state.core.workouts.setLogs=setLogs;
-
-  if(state.health){
-    const snapshot={
-      id:dtStableId("health",String(state.health.lastSync||"current")),
-      userId:state.user.id,
-      capturedAt:state.health.lastSync?new Date(state.health.lastSync).toISOString():null,
-      provider:state.health.provider||null,
-      sleepMinutes:state.health.sleepMinutes??null,
-      restingHR:state.health.restingHR??null,
-      latestHR:state.health.workoutHR??null,
-      activeCalories:state.health.activeCalories??null,
-      steps:state.health.steps??null
-    };
-    const arr=state.core.health.snapshots;
-    if(snapshot.capturedAt && !arr.some(x=>x.id===snapshot.id)){
-      arr.push(snapshot);
-      if(arr.length>90) arr.splice(0,arr.length-90);
-    }
-  }
 
   state.appMeta.updatedAt=dtNowIso();
 }
@@ -3542,7 +3459,6 @@ function switchView(viewName){
     if(viewName==="money") renderMoney();
     if(viewName==="today"){
       renderToday();
-      renderHealth();
       renderTodayDashboardExtras();
       if(typeof window.dtRenderBodyCard==="function")window.dtRenderBodyCard();
     }
@@ -3571,77 +3487,8 @@ document.querySelectorAll("nav button").forEach(b=>{
   b.addEventListener("touchend",e=>{e.preventDefault();switchView(b.dataset.view)},{passive:false});
 });
 
-const chatBtn=document.getElementById("chatBtn");
-const chatHandle=document.getElementById("chatHandle");
-let chatTouchStartX=null;
-let chatTouchStartY=null;
-
-function setChatCollapsed(collapsed){
-  if(!chatBtn || !chatHandle) return;
-  const isCollapsed=!!collapsed;
-  chatBtn.classList.toggle("collapsed",isCollapsed);
-  chatHandle.classList.toggle("show",isCollapsed);
-  chatBtn.setAttribute("aria-hidden",isCollapsed?"true":"false");
-  chatHandle.setAttribute("aria-expanded",isCollapsed?"false":"true");
-  chatHandle.setAttribute("aria-label",isCollapsed?"Show Ask GPT":"Ask GPT shown");
-  void chatHandle.offsetWidth;
-  try{localStorage.setItem("dt_chat_collapsed",isCollapsed?"1":"0")}catch(e){}
-}
-try{
-  setChatCollapsed(localStorage.getItem("dt_chat_collapsed")==="1");
-}catch(e){setChatCollapsed(false)}
-
-if(chatBtn){
-  chatBtn.addEventListener("touchstart",e=>{
-    const t=e.changedTouches?.[0];
-    if(!t)return;
-    chatTouchStartX=t.clientX;
-    chatTouchStartY=t.clientY;
-  },{passive:true});
-  chatBtn.addEventListener("touchend",e=>{
-    const t=e.changedTouches?.[0];
-    if(!t || chatTouchStartX==null)return;
-    const dx=t.clientX-chatTouchStartX;
-    const dy=t.clientY-chatTouchStartY;
-    chatTouchStartX=null;chatTouchStartY=null;
-    if(Math.abs(dx)>45 && Math.abs(dx)>Math.abs(dy) && dx>0){
-      e.preventDefault();
-      setChatCollapsed(true);
-    }
-  },{passive:false});
-}
-if(chatHandle){
-  chatHandle.onclick=()=>setChatCollapsed(false);
-  chatHandle.addEventListener("touchstart",e=>{
-    const t=e.changedTouches?.[0];
-    if(!t)return;
-    chatTouchStartX=t.clientX;
-    chatTouchStartY=t.clientY;
-  },{passive:true});
-  chatHandle.addEventListener("touchend",e=>{
-    const t=e.changedTouches?.[0];
-    if(!t || chatTouchStartX==null)return;
-    const dx=t.clientX-chatTouchStartX;
-    const dy=t.clientY-chatTouchStartY;
-    chatTouchStartX=null;chatTouchStartY=null;
-    if(Math.abs(dx)>35 && Math.abs(dx)>Math.abs(dy) && dx<0){
-      e.preventDefault();
-      setChatCollapsed(false);
-    }
-  },{passive:false});
-}
-
-document.getElementById("chatBtn").onclick=async()=>{
-  const webUrl="https://chatgpt.com/";
-  try{
-    const launcher=window.Capacitor?.Plugins?.AppLauncher;
-    if(launcher){
-      await launcher.openUrl({url:webUrl});
-      return;
-    }
-  }catch(e){console.warn("App launcher fallback",e)}
-  window.open(webUrl,"_blank");
-};
+/* V36.12: Ask ChatGPT surface is retired. No launcher, edge handle,
+   gesture state, or localStorage preference is kept active. */
 const currencySelect=document.getElementById("currencySelect");
 currencySelect.value=state.money.currency||"AUD";
 const fxStatus=document.getElementById("fxStatus");
@@ -4393,177 +4240,10 @@ function renderTrainingBrief(){
 }
 
 
-function healthPlugin(){
-  return window.Capacitor?.Plugins?.HealthConnectNative || null;
-}
-function renderHealth(){
-  const h=state.health||{};
-  const ws=document.getElementById("watchStatus");
-  const wp=document.getElementById("watchProvider");
-  const ls=document.getElementById("lastHealthSync");
-  const btn=document.getElementById("connectTestWatch");
-  if(ws){
-    ws.textContent=h.connected?"Connected":"Disconnected";
-    ws.classList.toggle("off",!h.connected);
-  }
-  if(wp) wp.textContent=h.connected?"Android Health Connect":"Health Connect • not connected";
-  if(ls) ls.textContent=h.lastSync?`Last synced ${new Date(h.lastSync).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})}`:"No sync yet";
-  if(btn) btn.textContent=h.connected?"Manage access":"Connect";
-  const sourceSel=document.getElementById("healthSourceSelect");
-  const sourceStatus=document.getElementById("healthSourceStatus");
-  if(sourceSel) sourceSel.value=h.sourceMode||"auto";
-  if(sourceStatus){
-    if(h.provider==="Huawei Direct") sourceStatus.textContent="Huawei Direct active";
-    else if(h.connected) sourceStatus.textContent="Health Connect active";
-    else sourceStatus.textContent="Health Connect ready • Huawei Direct not configured";
-  }
-}
-async function openHealthPermissions(){
-  const plugin=healthPlugin();
-  if(!plugin){
-    alert("Health Connect is only available in the Android app build.");
-    return;
-  }
-  try{
-    const a=await plugin.isAvailable();
-    if(!a.available){
-      alert("Health Connect requires Android 14 or newer on this build.");
-      return;
-    }
-    await plugin.openPermissions();
-  }catch(e){
-    alert("Unable to open Health Connect permissions: "+(e?.message||e));
-  }
-}
-async function syncRealHealth(){
-  const mode=state.health.sourceMode||"auto";
-
-  async function tryHealthConnect(){
-    const plugin=healthPlugin();
-    if(!plugin) return {ok:false,reason:"Health Connect bridge unavailable"};
-    try{
-      const result=await plugin.readSummary();
-      if(result.needsPermission){
-        await plugin.openPermissions();
-        return {ok:false,reason:"Health Connect permission required"};
-      }
-      const hasData=(result.steps||0)>0 || result.sleepMinutes!=null || result.restingHR!=null || result.workoutHR!=null;
-      if(!hasData) return {ok:false,reason:"Health Connect has no usable records"};
-      state.health.connected=true;
-      state.health.provider="Android Health Connect";
-      state.health.lastSync=Date.now();
-      for(const key of ["sleepMinutes","restingHR","workoutHR","activeCalories","steps",
-                        "heartRateTime","stepsTime","activeCaloriesTime","sleepEndTime"]){
-        if(result[key]!==null && result[key]!==undefined) state.health[key]=result[key];
-      }
-      save();renderHealth();renderTodayDashboardExtras();
-      return {ok:true};
-    }catch(e){
-      return {ok:false,reason:e?.message||String(e)};
-    }
-  }
-
-  async function tryHuaweiDirect(){
-    const hp=window.Capacitor?.Plugins?.HuaweiHealthNative;
-    if(!hp) return {ok:false,reason:"Huawei Direct is not configured yet"};
-    try{
-      const result=await hp.readSummary();
-      const hasData=(result.steps||0)>0 || result.sleepMinutes!=null || result.restingHR!=null || result.heartRate!=null;
-      if(!hasData) return {ok:false,reason:"Huawei Direct returned no usable records"};
-      state.health.connected=true;
-      state.health.provider="Huawei Direct";
-      state.health.lastSync=Date.now();
-      state.health.sleepMinutes=result.sleepMinutes ?? null;
-      state.health.restingHR=result.restingHR ?? result.heartRate ?? null;
-      state.health.workoutHR=result.heartRate ?? null;
-      state.health.steps=result.steps ?? null;
-      save();renderHealth();renderTodayDashboardExtras();
-      return {ok:true};
-    }catch(e){
-      return {ok:false,reason:e?.message||String(e)};
-    }
-  }
-
-  let result;
-  if(mode==="healthconnect") result=await tryHealthConnect();
-  else if(mode==="huawei") result=await tryHuaweiDirect();
-  else{
-    // AUTO: Health Connect is the active working integration.
-    // Only try Huawei Direct when the native Huawei bridge actually exists.
-    result=await tryHealthConnect();
-    if(!result.ok && window.Capacitor?.Plugins?.HuaweiHealthNative){
-      result=await tryHuaweiDirect();
-    }
-  }
-
-  const status=document.getElementById("healthSourceStatus");
-  if(status){
-    if(result.ok) status.textContent=`${state.health.provider} active`;
-    else if(mode==="auto" && !window.Capacitor?.Plugins?.HuaweiHealthNative)
-      status.textContent=`Health Connect: ${result.reason} • Huawei Direct not configured`;
-    else status.textContent=`No health source: ${result.reason}`;
-  }
-
-  // In Auto mode, don't show the misleading "Huawei Direct is not configured yet" popup.
-  // The source-status text is enough while Health Connect has no records.
-  if(!result.ok && mode!=="auto") alert(result.reason);
-}
-const healthSourceSelect=document.getElementById("healthSourceSelect");
-if(healthSourceSelect){
-  healthSourceSelect.value=state.health.sourceMode||"auto";
-  healthSourceSelect.onchange=e=>{
-    state.health.sourceMode=e.target.value;
-    save();
-    renderHealth();
-  };
-}
-const connectBtn=document.getElementById("connectTestWatch");
-if(connectBtn) connectBtn.onclick=openHealthPermissions;
-const syncBtn=document.getElementById("syncHealthNow");
-if(syncBtn) syncBtn.onclick=syncRealHealth;
-
-async function diagnoseHealthData(){
-  const plugin=healthPlugin();
-  if(!plugin){
-    alert("Health Connect is only available in the Android app build.");
-    return;
-  }
-  const box=document.getElementById("healthDiagResults");
-  if(box) box.innerHTML="<div>Checking Health Connect…</div>";
-  try{
-    if(typeof plugin.diagnose!=="function"){
-      if(box) box.innerHTML='<div style="color:var(--red)">Diagnostic bridge is missing in this APK. Install the newest build.</div>';
-      return;
-    }
-    const r=await plugin.diagnose();
-    if(r.needsPermission){
-      if(box) box.innerHTML="<div>Permissions are not granted.</div>";
-      return;
-    }
-    if(box){
-      box.innerHTML=`
-        <div>Sleep: <b>${r.sleepRecords||0}</b> records</div>
-        <div>Resting HR: <b>${r.restingHrRecords||0}</b> records</div>
-        <div>Heart rate: <b>${r.heartRateRecords||0}</b> records / <b>${r.heartRateSamples||0}</b> samples</div>
-        <div>Active calories: <b>${r.activeCalorieRecords||0}</b> records • <b>${r.activeCaloriesTotal||0}</b> kcal</div>
-        
-        <div style="opacity:.7">Window: last ${r.windowDays||7} days</div>`;
-    }
-  }catch(e){
-    if(box) box.innerHTML=`<div style="color:var(--red)">Diagnostic failed: ${e?.message||e}</div>`;
-  }
-}
-const diagnoseBtn=document.getElementById("diagnoseHealth");
-if(diagnoseBtn) diagnoseBtn.onclick=diagnoseHealthData;
-
-const disconnectBtn=document.getElementById("disconnectWatch");
-if(disconnectBtn) disconnectBtn.onclick=()=>{
-  state.health={connected:false,provider:"Android Health Connect",sourceMode:state.health.sourceMode||"auto",lastSync:0,sleepMinutes:null,restingHR:null,workoutHR:null,steps:null};
-  save();renderHealth();
-};
-
+/* V36.12: Health Snapshot / Health Connect runtime is retired.
+   Historical state can be tolerated by the schema but cannot sync, diagnose,
+   render, or reconnect from the production UI. */
 renderSpark();renderToday();renderHistory();renderMoney();renderWorkout();
-renderHealth();
 renderTodayDashboardExtras();/* V27 workout-only: automatic FX refresh disabled */
 </script>
 
@@ -8041,7 +7721,7 @@ function ensureMore(){
     <button class="dt-more-item" data-more="goals"><b>Progress goals</b><small>Weekly consistency and optional lift target.</small></button>
     <button class="dt-more-item" data-more="stats"><b>Weekly performance</b><small>Sets, consistency, muscle emphasis and PRs.</small></button>
     <button class="dt-more-item money" data-more="money"><span><b>Money</b><small>Secondary feature · available balance</small></span><strong id="dtMoreMoneyValue">—</strong></button>
-    <button class="dt-more-item settings" data-more="settings"><b>Settings</b><small>Health Connect, workout setup and preferences.</small></button>
+    <button class="dt-more-item settings" data-more="settings"><b>Settings</b><small>Workout setup and preferences.</small></button>
   </div></section>`;
   m.onclick=e=>{if(e.target===m)m.classList.remove("show")};
   m.querySelector(".dt-more-close").onclick=()=>m.classList.remove("show");
@@ -10350,7 +10030,7 @@ function releaseTextCleanup(){
   try{
     const more=document.getElementById("dtV10MoreModal");
     const settings=more?.querySelector('[data-more="settings"] small');
-    if(settings)settings.textContent="Health Connect, workout setup and preferences.";
+    if(settings)settings.textContent="Workout setup and preferences.";
 
     // The old wording sounded like a diagnostic/developer surface.
     document.querySelectorAll(".dt-wp-foot").forEach(x=>{
@@ -12871,7 +12551,6 @@ body.dt-session-focus-open{overflow:hidden!important}
     el.classList.add("show");clearTimeout(el._hide);el._hide=setTimeout(()=>el.classList.remove("show"),6500);
   }
   function notifyRestCompleteInApp(){
-    try{if(navigator.vibrate)navigator.vibrate([160,90,220])}catch(_){ }
     showRestDoneBanner();
   }
   window.dtTestRestAlert=async()=>scheduleNativeRestAlert(REST_TEST_NOTIFICATION_ID,Date.now()+5000,{test:true});
@@ -13594,9 +13273,7 @@ nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
     const d=new Date(ms||Date.now()),p=n=>String(n).padStart(2,"0");
     return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
   };
-  function hapticTick(ms=9){
-    try{if(typeof navigator.vibrate==="function")navigator.vibrate(ms)}catch(_){}
-  }
+  function hapticTick(ms=9){return false}
 
   /* ---------------- template/session metadata ---------------- */
   function planDescriptor(day){
@@ -15180,96 +14857,6 @@ window.DT_MARC_MERGED_VERSION="25.7-session-history-stats-stable";
 }
 </style>
 
-<script id="dt-v26-legacy-ui-enhance-js">
-(()=>{
-  "use strict";
-  const V="26.0-legacy-ui-autosync-bodycomp-v1";
-  const ACTIVE_REFRESH_MS=5*60*1000;
-  const MIN_ATTEMPT_GAP_MS=15000;
-  let inFlight=false,lastAttempt=0,permissionFlowPending=false;
-
-  function healthState(){
-    if(!state.health)state.health={};
-    if(state.health.autoSyncEnabled===undefined)state.health.autoSyncEnabled=true;
-    return state.health;
-  }
-  function saveHealthPreference(){
-    try{save()}catch(e){console.warn("Health auto-sync preference save failed",e)}
-  }
-  function autoRow(){
-    const oldBtn=document.getElementById("syncHealthNow");
-    if(oldBtn)return oldBtn.closest(".health-connect-row");
-    return document.getElementById("dtHealthAutoSyncBadge")?.closest(".health-connect-row")||null;
-  }
-  function updateAutoSyncUI(){
-    const h=healthState(),row=autoRow();if(!row)return;
-    const title=row.querySelector("b");if(title&&title.textContent!=="Auto Sync")title.textContent="Auto Sync";
-    const note=row.querySelector("#lastHealthSync");
-    if(note){
-      const nextText=h.lastSync
-        ?`Last synced ${new Date(h.lastSync).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})}`
-        :(h.autoSyncEnabled?"Syncs automatically when the app opens or resumes":"Automatic syncing is off");
-      if(note.textContent!==nextText)note.textContent=nextText;
-    }
-    const oldBtn=document.getElementById("syncHealthNow");if(oldBtn)oldBtn.remove();
-    let badge=document.getElementById("dtHealthAutoSyncBadge");
-    if(!badge){badge=document.createElement("span");badge.id="dtHealthAutoSyncBadge";badge.className="health-badge";row.appendChild(badge)}
-    const nextBadge=h.autoSyncEnabled?"On":"Off";
-    if(badge.textContent!==nextBadge)badge.textContent=nextBadge;
-    const shouldOff=!h.autoSyncEnabled;
-    if(badge.classList.contains("off")!==shouldOff)badge.classList.toggle("off",shouldOff);
-  }
-  async function triggerAutoSync(reason,{allowDisconnected=false,force=false}={}){
-    const h=healthState();
-    if(!h.autoSyncEnabled)return false;
-    if(document.visibilityState&&document.visibilityState!=="visible")return false;
-    if(!allowDisconnected&&!h.connected)return false;
-    if(typeof window.syncRealHealth!=="function")return false;
-    const now=Date.now();if(inFlight)return false;if(!force&&now-lastAttempt<MIN_ATTEMPT_GAP_MS)return false;
-    lastAttempt=now;inFlight=true;
-    try{await window.syncRealHealth();updateAutoSyncUI();return true}
-    catch(e){console.warn(`Automatic Health Connect sync failed (${reason})`,e);updateAutoSyncUI();return false}
-    finally{inFlight=false}
-  }
-  function wrapHealthControls(){
-    const h=healthState(),connect=document.getElementById("connectTestWatch");
-    if(connect&&!connect.dataset.dtAutoSyncWrapped){
-      const old=connect.onclick;
-      connect.onclick=function(e){
-        h.autoSyncEnabled=true;permissionFlowPending=true;saveHealthPreference();updateAutoSyncUI();
-        const result=typeof old==="function"?old.call(this,e):undefined;
-        setTimeout(()=>triggerAutoSync("permission-return",{allowDisconnected:true,force:true}),1200);
-        return result;
-      };
-      connect.dataset.dtAutoSyncWrapped="1";
-    }
-    const disconnect=document.getElementById("disconnectWatch");
-    if(disconnect&&!disconnect.dataset.dtAutoSyncWrapped){
-      const old=disconnect.onclick;
-      disconnect.onclick=function(e){
-        const result=typeof old==="function"?old.call(this,e):undefined;
-        healthState().autoSyncEnabled=false;permissionFlowPending=false;saveHealthPreference();updateAutoSyncUI();return result;
-      };
-      disconnect.dataset.dtAutoSyncWrapped="1";
-    }
-  }
-  function onVisible(reason){
-    if(document.visibilityState&&document.visibilityState!=="visible")return;
-    wrapHealthControls();updateAutoSyncUI();
-    const allowDisconnected=permissionFlowPending;permissionFlowPending=false;
-    triggerAutoSync(reason,{allowDisconnected,force:allowDisconnected});
-  }
-  function boot(){
-    healthState();wrapHealthControls();updateAutoSyncUI();setTimeout(()=>onVisible("startup"),900);
-    document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")onVisible("resume")});
-    window.addEventListener("pageshow",()=>onVisible("pageshow"));window.addEventListener("focus",()=>onVisible("focus"));
-    setInterval(()=>{if(document.visibilityState==="visible")triggerAutoSync("active-refresh")},ACTIVE_REFRESH_MS);
-  }
-  document.readyState==="loading"?document.addEventListener("DOMContentLoaded",boot):boot();
-  window.dtHealthAutoSyncNow=(force=false)=>triggerAutoSync("external",{allowDisconnected:false,force:!!force});
-  window.DT_LEGACY_UI_ENHANCE_VERSION=V;
-})();
-</script>
 
 <style id="dt-v26-history-reorder-css">
 /* ChatGPT-owned legacy UI enhancement: live History calendar + hold/drag activity reorder. */
@@ -15521,7 +15108,6 @@ body.dt-reorder-active{-webkit-user-select:none!important;user-select:none!impor
     document.body.classList.add("dt-reorder-active");
     g.box.setAttribute("aria-grabbed","true");
     setVisualDelta(g,0);
-    try{navigator.vibrate?.(18)}catch(_){ }
     startAutoScroll(g);
   }
   function updateDrag(g,y){
@@ -16467,19 +16053,17 @@ function backupContentsSummary(){
     reminders:{included:!!state.notifications,trainingEnabled:!!notifications.trainingEnabled,scheduledCount:Array.isArray(notifications.scheduledIds)?notifications.scheduledIds.length:0},
     workoutSettings:{included:!!w.sessionSettings,restDefaultSec:Number(w.sessionSettings?.restDefaultSec)||90,autoRest:w.sessionSettings?.autoRest!==false},
     preferences:{included:!!state.preferences,weightUnit:prefs.units?.weight||"kg",theme:prefs.theme||"dark"},
-    healthIntegration:{included:!!state.health,connected:!!state.health?.connected,provider:state.health?.provider||"Android Health Connect"},
     appState:"complete"
   };
 }
 function backupStateSnapshot(){
   const snapshot=clone(state);
   if(snapshot.notifications&&typeof snapshot.notifications==="object")snapshot.notifications.scheduledIds=[];
+  delete snapshot.health;
+  if(snapshot.core?.health?.snapshots) snapshot.core.health.snapshots=[];
   return snapshot;
 }
 function fullBackupObject(){
-  let chatCollapsed=null,chatNonOverlap=null;
-  try{chatCollapsed=localStorage.getItem("dt_chat_collapsed")}catch(_){}
-  try{chatNonOverlap=localStorage.getItem("dt_chat_nonoverlap_v1")}catch(_){}
   return {
     type:BACKUP_TYPE,
     version:BACKUP_VERSION,
@@ -16488,8 +16072,8 @@ function fullBackupObject(){
     backupScope:"complete-training-and-app-state",
     contents:backupContentsSummary(),
     deviceBoundExcluded:["notifications.scheduledIds","Android notification permission","Android exact-alarm access"],
-    state:backupStateSnapshot(),
-    auxLocalStorage:{dt_chat_collapsed:chatCollapsed,dt_chat_nonoverlap_v1:chatNonOverlap}
+    retiredExcluded:["Health Snapshot / Health Connect state","Ask ChatGPT UI preferences","Haptics"],
+    state:backupStateSnapshot()
   };
 }
 function forensicObject(){
@@ -16506,22 +16090,20 @@ function validateBackupObject(obj){
 function restoreObject(obj){
   validateBackupObject(obj);const candidate=clone(obj.state);
   if(candidate.notifications&&typeof candidate.notifications==="object")candidate.notifications.scheduledIds=[];
+  // V36.11: legacy Health Snapshot/Health Connect settings are retired.
+  // Do not allow an older backup to resurrect sync preferences/UI on restore.
+  delete candidate.health;
+  if(candidate.core?.health?.snapshots)candidate.core.health.snapshots=[];
   const old=state;state=candidate;
   try{
     dtEnsureFoundation?.();save({forceRecoveryScan:true,replaceRecoveryMeta:true});
-    if(obj.auxLocalStorage){
-      for(const key of ["dt_chat_collapsed","dt_chat_nonoverlap_v1"]){
-        if(!Object.prototype.hasOwnProperty.call(obj.auxLocalStorage,key))continue;
-        const v=obj.auxLocalStorage[key];if(v==null)localStorage.removeItem(key);else localStorage.setItem(key,String(v));
-      }
-    }
   }
   catch(e){state=old;throw new Error("Restore could not be saved. Your previous saved copy is still preserved.")}
   return true;
 }
 function ensureUi(){
   const card=document.querySelector("#settings .settings-card");if(!card||document.getElementById("dtFullBackupBtn"))return;
-  const anchor=card.querySelector(".health-connect-card")||card.querySelector("#resetBtn");
+  const anchor=card.querySelector("#resetBtn");
   const box=document.createElement("div");box.id="dtBackupTools";box.className="dt-backup-tools";
   box.innerHTML=`<button class="setting-row dt-backup-row" id="dtFullBackupBtn" type="button"><span class="dt-backup-copy"><b>Full Training & App Backup</b><small>History, saved routines, schedule, reminders, workout settings and app preferences</small></span><span class="dt-backup-action" id="dtFullBackupAction">Export</span></button><button class="setting-row dt-backup-row" id="dtFullRestoreBtn" type="button"><span class="dt-backup-copy"><b>Restore Full Backup</b><small>Validates before replacing local data</small></span><span class="dt-backup-action" id="dtFullRestoreAction">Import</span></button><input id="dtFullRestoreInput" type="file" accept="application/json,.json" hidden><button class="setting-row dt-backup-row" id="dtRecoveryExportBtn" type="button" style="display:none"><span class="dt-backup-copy"><b>Export Recovery Data</b><small>Preserved damaged payload for recovery/support only</small></span><span class="dt-backup-action" id="dtRecoveryExportAction">Export</span></button>`;
   if(anchor?.parentNode)anchor.parentNode.insertBefore(box,anchor);else card.appendChild(box);
@@ -16781,17 +16363,6 @@ document.readyState==="loading"?document.addEventListener("DOMContentLoaded",ens
     host.innerHTML=`<div class="dt-workout-recovery-title">Muscle recovery dashboard</div><div class="dt-workout-recovery-sub">Estimated timeframes for the main muscles you trained today.</div><div class="dt-workout-recovery-meta"><span>Based on your logged sets and effort</span><b>Longest recovery: ${fmtHoursLeft(minLeft)}</b></div><div class="dt-workout-recovery-chips">${chips}</div>`;
   };
 
-  /* Full UI audit hardening: keep the floating GPT control from covering
-     workout/history/stats content. Existing users are migrated once; they can
-     still reveal it using the edge handle and their choice is respected after. */
-  try{
-    const MIGRATION='dt_chat_nonoverlap_v1';
-    if(!localStorage.getItem(MIGRATION)){
-      if(typeof setChatCollapsed==='function')setChatCollapsed(true);
-      localStorage.setItem(MIGRATION,'1');
-    }
-  }catch(_){ }
-
   /* Training Body uses the summary-body renderer, which correctly applies role
      colours but did not emit the older muscle-map animation event. Animate this
      card directly after its async SVG styling settles. */
@@ -16960,7 +16531,7 @@ body{padding-bottom:max(20px,env(safe-area-inset-bottom))!important}
 /* The More sheet is retired as navigation. If legacy code opens it, remove finance/Today. */
 #dtV10MoreModal [data-more="today"],#dtV10MoreModal [data-more="money"]{display:none!important}
 
-/* Ask GPT remains available as the unobtrusive edge handle, never a floating content blocker. */
+/* Legacy assistant edge styles retained inert for storage compatibility. */
 #chatBtn{display:none!important}
 #chatHandle{display:grid!important;opacity:.72!important}
 
@@ -17138,8 +16709,6 @@ body{padding-bottom:max(20px,env(safe-area-inset-bottom))!important}
 #settings>h1{margin-top:0}
 
 /* Settings cleanup for workout-only mode. */
-#settings .health-connect-card{margin-top:6px!important}
-#settings .health-connect-card>h2{font-size:19px!important}
 #settings #healthSourceSelect{display:none!important}
 #dtBackupTools .setting-row small{max-width:330px}
 #dtHomeRecoveryMount #dtRecoveryStrip{display:none!important}
@@ -17254,10 +16823,6 @@ body:has(#today.view.active) #dtRestGlobal{display:none!important}
 
   function greeting(){const h=new Date().getHours();return h<12?"Good morning":h<18?"Good afternoon":"Good evening"}
   function dateText(){return new Date().toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"})}
-  function healthData(){
-    const h=state.health||{},sleep=h.sleepMinutes!=null?`${Math.floor(h.sleepMinutes/60)}h ${Math.round(h.sleepMinutes%60)}m`:"—";
-    return {connected:!!h.connected,provider:h.provider||"Health Connect",sleep,hr:(h.workoutHR??h.restingHR)!=null?`${Math.round(h.workoutHR??h.restingHR)} bpm`:"—",steps:h.steps!=null?Number(h.steps).toLocaleString("en-AU"):"—",cal:h.activeCalories!=null?`${Math.round(h.activeCalories)} kcal`:"—"};
-  }
   function todayState(){
     const s=session(),summary=todaySummary(),assigned=assignedDay();
     if(s?.active)return {kind:"live",label:s.status==="paused"?"Paused":"Active",title:dayTitle(s.day),sub:s.status==="paused"?"Session paused":"Session active",cta:"Continue session",day:s.day};
@@ -17394,7 +16959,7 @@ body:has(#today.view.active) #dtRestGlobal{display:none!important}
        Previous performance remains visible in the logged-set chips/history, not as editable input. */
     return {kg:"",reps:"",effort:""};
   }
-  function haptic(ms=12){try{navigator.vibrate?.(ms)}catch(_){}}
+  function haptic(ms=12){return false}
   function quickRequiresWeight(info){
     const e=info?.e||[],name=String(e?.[0]||"").toLowerCase(),type=String(e?.[1]||"").toLowerCase(),txt=`${name} ${type}`;
     if(/body\s*weight|bodyweight/.test(txt))return false;
@@ -17590,7 +17155,6 @@ body:has(#today.view.active) #dtRestGlobal{display:none!important}
     ensureWorkoutSettingsLinks();
     const cur=document.getElementById("currencySelect")?.closest(".setting-row");if(cur)cur.style.display="none";
     const h=document.querySelector("#settings>h1");if(h)h.textContent="Settings";
-    const hi=document.querySelector("#settings .health-connect-card>h2");if(hi)hi.textContent="Health Integration";
     document.querySelectorAll("#dtBackupTools small").forEach(x=>{if(/money/i.test(x.textContent||""))x.textContent=(x.textContent||"").replace(/Money,?\s*/ig,"")});
     document.querySelectorAll("#settings *").forEach(x=>{if(x.childElementCount===0&&/currency|exchange rate|rates refresh/i.test(x.textContent||""))x.classList.add("dt-v27-money-hidden")});
   }
@@ -18351,181 +17915,6 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
 <script>window.DT_MARC_RELEASE_FIX_VERSION="36.1-phase1-debug-fixes";</script>
 
 
-<script id="dt-v36-p2-haptics">
-(()=>{
-  "use strict";
-
-  const KEY="dt_haptics_enabled_v1";
-  const toggle=document.getElementById("dtHapticToggle");
-
-  function readEnabled(){
-    try{
-      const raw=localStorage.getItem(KEY);
-      return raw==null ? true : raw!=="0";
-    }catch(_){ return true; }
-  }
-
-  let enabled=readEnabled();
-
-  function renderToggle(){
-    if(!toggle)return;
-    toggle.setAttribute("aria-checked",enabled?"true":"false");
-    toggle.setAttribute("aria-label",`Haptic feedback ${enabled?"on":"off"}`);
-  }
-
-  function setEnabled(next){
-    enabled=!!next;
-    try{localStorage.setItem(KEY,enabled?"1":"0")}catch(_){}
-    renderToggle();
-    window.dispatchEvent(new CustomEvent("dt:haptics-setting",{detail:{enabled}}));
-  }
-
-  function nativePlugin(){
-    try{
-      const cap=window.Capacitor;
-      if(!cap)return null;
-      if(!cap.Plugins)cap.Plugins={};
-      if(!cap.Plugins.Haptics && typeof cap.registerPlugin==="function"){
-        cap.Plugins.Haptics=cap.registerPlugin("Haptics");
-      }
-      return cap.Plugins.Haptics||null;
-    }catch(_){ return null; }
-  }
-
-  async function nativeImpact(style){
-    const h=nativePlugin();
-    if(!h?.impact)return false;
-    try{
-      await h.impact({style});
-      return true;
-    }catch(_){ return false; }
-  }
-
-  async function nativeWarning(){
-    const h=nativePlugin();
-    if(!h)return false;
-    try{
-      if(typeof h.notification==="function"){
-        await h.notification({type:"WARNING"});
-        return true;
-      }
-      if(typeof h.impact==="function"){
-        await h.impact({style:"HEAVY"});
-        return true;
-      }
-    }catch(_){}
-    return false;
-  }
-
-  function webVibrate(pattern){
-    try{
-      if(typeof navigator.vibrate==="function"){
-        navigator.vibrate(pattern);
-        return true;
-      }
-    }catch(_){}
-    return false;
-  }
-
-  async function fire(kind="light"){
-    if(!enabled)return false;
-
-    if(kind==="warning"){
-      if(await nativeWarning())return true;
-      return webVibrate([28,32,42]);
-    }
-
-    const nativeStyle=kind==="medium"?"MEDIUM":"LIGHT";
-    if(await nativeImpact(nativeStyle))return true;
-    return webVibrate(kind==="medium"?24:12);
-  }
-
-  window.dtHaptics={
-    get enabled(){return enabled},
-    setEnabled,
-    light:()=>fire("light"),
-    medium:()=>fire("medium"),
-    warning:()=>fire("warning"),
-    fire
-  };
-
-  renderToggle();
-  if(toggle){
-    toggle.addEventListener("click",()=>{
-      const next=!enabled;
-      setEnabled(next);
-      /* Confirm ON with a light tap; turning OFF is intentionally silent. */
-      if(next)setTimeout(()=>fire("light"),0);
-    });
-  }
-
-  /*
-    Primary-action map.
-    Geometry/UI logic is untouched: haptics are delegated so dynamically-created
-    buttons are covered without rewriting existing handlers.
-  */
-  const warningSelector=[
-    "#confirmMoneyReset",
-    "#dtDeleteCurrentSplit",
-    ".dt-v30-history-delete-confirm",
-    "#dtWorkoutResetConfirm",
-    "[data-action='delete']",
-    "[data-action='reset']"
-  ].join(",");
-
-  const mediumSelector=[
-    "#saveWorkout",
-    "#dtV27SessionButton",
-    "#saveEditExercise",
-    "#dtCreateSplit",
-    "#dtRenameWorkout",
-    ".dt-sched-save",
-    ".dt-g-save",
-    ".dt-rem-enable",
-    "#dtSummaryDone",
-    ".dt-v30-history-save",
-    ".dt-data-confirm",
-    ".dt-summary-action",
-    "#dtHistoryExportBtn",
-    "#dtRecoveryExportAction",
-    "#dtRecoveryExportBtn",
-    "#dtExportStart",
-    "#dtExportEnd"
-  ].join(",");
-
-  const lightSelector=[
-    ".dt-v27-quick-done",
-    ".dt-v27-log-set",
-    ".dt-v27-primary"
-  ].join(",");
-
-  let lastPointerAt=0;
-  document.addEventListener("pointerdown",e=>{
-    if(!enabled)return;
-    if(e.pointerType==="mouse" && e.button!==0)return;
-    const target=e.target?.closest?.("button,[role='button']");
-    if(!target || target.disabled || target.getAttribute("aria-disabled")==="true")return;
-    if(target===toggle)return;
-
-    /* Avoid duplicated synthetic pointer events in unusual Android WebViews. */
-    const now=performance.now();
-    if(now-lastPointerAt<35)return;
-    lastPointerAt=now;
-
-    if(target.matches(warningSelector)){
-      fire("warning");
-      return;
-    }
-    if(target.matches(mediumSelector)){
-      fire("medium");
-      return;
-    }
-    if(target.matches(lightSelector)){
-      fire("light");
-    }
-  },{capture:true,passive:true});
-})();
-</script>
 
 
 <script id="dt-v36-p3-motion">
@@ -18762,21 +18151,18 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
 
       if(result===false){
         state(el,"error",cfg.error,"!");
-        try{window.dtHaptics?.warning?.()}catch(_){}
         await new Promise(r=>setTimeout(r,cfg.errorMs||1200));
         restore(el,s);
         return false;
       }
 
       state(el,"success",cfg.success,"✓");
-      try{window.dtHaptics?.light?.()}catch(_){}
       await new Promise(r=>setTimeout(r,cfg.successMs||900));
       restore(el,s);
       return result;
     }catch(err){
       console.error("M/ARC critical action failed",err);
       state(el,"error",cfg.error,"!");
-      try{window.dtHaptics?.warning?.()}catch(_){}
       await new Promise(r=>setTimeout(r,cfg.errorMs||1200));
       restore(el,s);
       return false;
@@ -19496,7 +18882,7 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
   setInterval(()=>{if(enabled)renderHealth()},1500);
 
   renderToggle();
-  toggle?.addEventListener("click",()=>{const next=!enabled;setEnabled(next);try{window.dtHaptics?.light?.()}catch(_){}});
+  toggle?.addEventListener("click",()=>{const next=!enabled;setEnabled(next);});
   async function runDebugExport(btn,fn){
     if(!btn||btn.dataset.dtExportBusy==="1")return;
     const original=btn.textContent,status=()=>document.getElementById("dtDebugExportStatus");
@@ -19507,12 +18893,10 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
       if(status())status().textContent=result?.native
         ?`Android save/share sheet opened · ${result.filename}`
         :`Downloaded · ${result.filename}`;
-      try{window.dtHaptics?.light?.()}catch(_){}
       setTimeout(()=>{btn.textContent=original;btn.disabled=false;delete btn.dataset.dtExportBusy},2200);
     }catch(err){
       console.error("Debug export failed",err);btn.textContent="Retry";btn.disabled=false;delete btn.dataset.dtExportBusy;
       if(status())status().textContent=`Export failed · ${err?.message||err}`;
-      try{window.dtHaptics?.warning?.()}catch(_){}
       alert(`Debug export could not be saved. ${err?.message||err}`);
     }
   }
@@ -20008,7 +19392,6 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
       markBtn.disabled=true;
       setTimeout(()=>{markBtn.textContent=old;delete markBtn.dataset.marked;markBtn.disabled=false},1400);
     }
-    try{window.dtHaptics?.warning?.()}catch(_){}
     d.flush?.();
   }
 
@@ -20295,42 +19678,104 @@ window.DT_V36_PHASE6_FIX_VERSION="36.6-phase6-release-integrity";
 </style>
 
 
-<script id="dt-v36-p7-haptic-reminder-health">
-(()=>{
-  "use strict";
-  const V="36.7-phase7-haptic-reminder-health";
-  const row=document.querySelector(".dt-haptic-setting");
-  const toggle=document.getElementById("dtHapticToggle");
-  if(row && !document.getElementById("dtHapticHealth")){
-    const box=document.createElement("div");box.id="dtHapticHealth";box.className="dt-haptic-health";
-    box.innerHTML='<button id="dtHapticTest" type="button">Test haptic</button><small id="dtHapticStatus">Checking native haptics…</small>';
-    row.appendChild(box);
-    const status=box.querySelector("#dtHapticStatus"),test=box.querySelector("#dtHapticTest");
-    const native=()=>{try{return window.Capacitor?.Plugins?.Haptics||null}catch(_){return null}};
-    function refresh(){
-      const hasNative=!!native()?.impact,hasWeb=typeof navigator.vibrate==="function";
-      status.textContent=hasNative?"Native Android haptics ready":hasWeb?"Web vibration fallback only":"Haptic API unavailable in this build";
-      status.dataset.mode=hasNative?"native":hasWeb?"web":"none";
-    }
-    test.onclick=async()=>{
-      if(!window.dtHaptics?.enabled){window.dtHaptics?.setEnabled?.(true);}
-      test.disabled=true;test.textContent="Testing…";
-      let ok=false;
-      try{ok=await window.dtHaptics?.medium?.()}catch(_){}
-      refresh();
-      status.textContent=ok?`${status.textContent} · test sent`:`${status.textContent} · no feedback API responded`;
-      setTimeout(()=>{test.disabled=false;test.textContent="Test haptic"},700);
-    };
-    toggle?.addEventListener("click",()=>setTimeout(refresh,80));
-    setTimeout(refresh,350);
-  }
-  window.DT_HAPTIC_REMINDER_HEALTH_VERSION=V;
-})();
-</script>
-<style id="dt-v36-p7-haptic-reminder-health-css">
-.dt-haptic-setting{flex-wrap:wrap}.dt-haptic-health{width:100%;display:flex;align-items:center;gap:9px;margin-top:8px}.dt-haptic-health button{min-height:40px;padding:8px 12px;border:1px solid #2b4a59;border-radius:12px;background:#0b1c26;color:#dce9ee;font:800 9px system-ui}.dt-haptic-health small{color:#78909d;font:600 8px/1.35 system-ui}
-</style>
 <script>window.DT_MARC_RELEASE_FIX_VERSION="36.7-phase7-haptic-reminder-health";</script>
 <script>window.DT_MARC_RELEASE_FIX_VERSION="36.9-phase9-completion-body-route-authoritative-brief";</script>
+
+<style id="dt-v36-p10-developer-options-css">
+.dt-developer-entry{min-height:54px!important;display:flex!important;align-items:center!important;justify-content:space-between!important;border:0;border-top:1px solid rgba(83,122,139,.18)!important;border-radius:0!important;padding:14px 2px!important;font:700 14px system-ui!important}
+.dt-developer-entry b{font-size:22px;color:#7f98a4}
+.dt-developer-panel{position:fixed;inset:0;z-index:12000;background:#06131b;overflow:auto;padding:calc(env(safe-area-inset-top,0px) + 22px) 18px calc(env(safe-area-inset-bottom,0px) + 28px)}
+.dt-developer-panel[hidden]{display:none!important}
+.dt-developer-shell{max-width:680px;margin:0 auto}
+.dt-developer-head{display:flex;align-items:center;gap:14px;margin:0 0 22px}
+.dt-developer-head small{display:block;color:#68818e;font:800 8px/1 system-ui;letter-spacing:.18em;margin-bottom:5px}
+.dt-developer-head h2{margin:0;color:#eef5f7;font:900 27px/1.05 system-ui}
+.dt-developer-back{width:48px;height:48px;border-radius:16px;border:1px solid #284452;background:#0b1c26;color:#cfe0e7;font:500 30px/1 system-ui}
+.dt-developer-card{border:1px solid #173847;border-radius:22px;background:linear-gradient(180deg,#091b24,#071720);overflow:hidden;padding:4px 16px 10px}
+.dt-developer-panel .setting-row{padding:15px 0!important}
+.dt-developer-panel .dt-debug-action-grid{width:100%}
+@media(max-width:420px){.dt-developer-panel{padding-left:16px;padding-right:16px}.dt-developer-head h2{font-size:24px}.dt-developer-panel .dt-debug-action-grid{grid-template-columns:1fr}}
+</style>
+<script id="dt-v36-p10-developer-options-js">
+(()=>{
+  const panel=document.getElementById('dtDeveloperPanel');
+  const open=document.getElementById('dtDeveloperOptionsOpen');
+  const back=document.getElementById('dtDeveloperOptionsBack');
+  if(!panel||!open||!back)return;
+  const show=()=>{panel.hidden=false;panel.setAttribute('aria-hidden','false');document.body.style.overflow='hidden';requestAnimationFrame(()=>back.focus({preventScroll:true}));};
+  const hide=()=>{panel.hidden=true;panel.setAttribute('aria-hidden','true');document.body.style.overflow='';requestAnimationFrame(()=>open.focus({preventScroll:true}));};
+  open.addEventListener('click',show);
+  back.addEventListener('click',hide);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!panel.hidden)hide()});
+  window.dtDeveloperOptions={open:show,close:hide};
+})();
+</script>
+<script>window.DT_MARC_RELEASE_FIX_VERSION="36.10-phase10-settings-cleanup-developer-options";</script>
+<script id="dt-v36-p11-health-retirement-js">
+(()=>{
+  "use strict";
+  const removeLegacyHealthUi=()=>{
+    const selectors=[
+      "#settings .health-connect-card",
+      "#settings .health-connect-row",
+      "#connectTestWatch",
+      "#syncHealthNow",
+      "#disconnectWatch",
+      "#dtHealthAutoSyncBadge",
+      "#lastHealthSync"
+    ];
+    selectors.forEach(sel=>document.querySelectorAll(sel).forEach(el=>{
+      const card=el.closest?.(".health-connect-card");
+      (card||el).remove();
+    }));
+  };
+  removeLegacyHealthUi();
+  document.addEventListener("DOMContentLoaded",removeLegacyHealthUi,{once:true});
+  let queued=false;
+  const obs=new MutationObserver(()=>{
+    if(queued)return;queued=true;
+    requestAnimationFrame(()=>{queued=false;removeLegacyHealthUi()});
+  });
+  const settings=document.getElementById("settings");
+  if(settings)obs.observe(settings,{childList:true,subtree:true});
+  window.DT_V36_PHASE11_FIX_VERSION="36.11-phase11-health-import-retirement";
+})();
+</script>
+<script>window.DT_MARC_RELEASE_FIX_VERSION="36.11-phase11-health-import-retirement";</script>
+<script id="dt-v36-p12-authoritative-state-contract">
+(()=>{
+  "use strict";
+  const RETIRED_SELECTORS=[
+    "#chatBtn","#chatHandle",
+    "#settings .health-connect-card","#settings .health-connect-row",
+    "#connectTestWatch","#syncHealthNow","#disconnectWatch","#diagnoseHealth",
+    "#dtHealthAutoSyncBadge","#lastHealthSync",
+    "#settings .dt-haptic-setting","#testHapticBtn"
+  ];
+  const enforce=()=>{
+    RETIRED_SELECTORS.forEach(sel=>document.querySelectorAll(sel).forEach(el=>{
+      const card=el.closest?.(".health-connect-card");(card||el).remove();
+    }));
+    try{
+      localStorage.removeItem("dt_chat_collapsed");
+      localStorage.removeItem("dt_chat_nonoverlap_v1");
+    }catch(_){}
+    const panel=document.getElementById("dtDeveloperPanel");
+    const entry=document.getElementById("dtDeveloperOptionsOpen");
+    if(panel&&entry){panel.setAttribute("aria-hidden",panel.hidden?"true":"false");}
+  };
+  const lifecycle=()=>{enforce();requestAnimationFrame(enforce);setTimeout(enforce,250)};
+  document.readyState==="loading"?document.addEventListener("DOMContentLoaded",lifecycle,{once:true}):lifecycle();
+  window.addEventListener("pageshow",lifecycle);
+  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")lifecycle()});
+  const settings=document.getElementById("settings");
+  if(settings){
+    let queued=false;new MutationObserver(()=>{if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;enforce()})}).observe(settings,{childList:true,subtree:true});
+  }
+  window.dtEnforceAuthoritativeProductState=lifecycle;
+  window.DT_V36_PHASE12_FIX_VERSION="36.12-phase12-authoritative-state-consolidation";
+})();
+</script>
+<script>window.DT_MARC_RELEASE_FIX_VERSION="36.12-phase12-authoritative-state-consolidation";</script>
 </body>
 </html>

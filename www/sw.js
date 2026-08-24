@@ -1,6 +1,6 @@
 "use strict";
 
-const VERSION = "marc-v36-9-phase9-completion-body-route-authoritative-brief";
+const VERSION = "marc-v36-12-phase12-authoritative-state-consolidation";
 const APP_CACHE = `${VERSION}-app`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest"];
