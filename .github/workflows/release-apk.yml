@@ -42,7 +42,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import hashlib, json
-          expected = "620c5c3b202b1be86f49bc5dfaec2abdc471c3ea474e632f31b3c21298508bc3"
+          expected = "3f836180bdb2f5dd8a9ee95333d9366e8c22058784b77d385989a4d9f7bfdb8b"
           for name in ("package.json", "capacitor.config.json"):
               json.loads(Path(name).read_text())
               print(f"{name}: JSON parse PASS")
@@ -114,14 +114,14 @@ jobs:
       - name: Sync web app
         run: npx cap sync android
 
-      - name: Verify exact V36.12 web bundle copied into Android assets
+      - name: Verify exact V36.13 web bundle copied into Android assets
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           import hashlib
-          expected = "620c5c3b202b1be86f49bc5dfaec2abdc471c3ea474e632f31b3c21298508bc3"
-          marker = 'window.DT_MARC_RELEASE_FIX_VERSION="36.12-phase12-authoritative-state-consolidation"'
+          expected = "3f836180bdb2f5dd8a9ee95333d9366e8c22058784b77d385989a4d9f7bfdb8b"
+          marker = 'window.DT_MARC_RELEASE_FIX_VERSION="36.13-phase13-custom-split-routing-scroll-empty-state"'
           source = Path("www/index.html")
           bundled = Path("android/app/src/main/assets/public/index.html")
           if not bundled.exists():
@@ -137,9 +137,9 @@ jobs:
           if source_bytes != bundled_bytes:
               raise SystemExit("Android bundled index.html is not byte-for-byte identical to www/index.html")
           if marker.encode() not in bundled_bytes:
-              raise SystemExit("V36.12 Phase 12 APK sync marker missing from Android bundled index.html")
-          print(f"Android bundled index.html exact V36.12 SHA256 PASS: {bundled_hash}")
-          print("V36.12 Phase 12 APK sync marker PASS")
+              raise SystemExit("V36.13 Phase 13 APK sync marker missing from Android bundled index.html")
+          print(f"Android bundled index.html exact V36.13 SHA256 PASS: {bundled_hash}")
+          print("V36.13 Phase 13 APK sync marker PASS")
           PY
 
       - name: Preserve precise rest notification permission
@@ -206,8 +206,8 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import hashlib, zipfile
-          expected = "620c5c3b202b1be86f49bc5dfaec2abdc471c3ea474e632f31b3c21298508bc3"
-          marker = b'window.DT_MARC_RELEASE_FIX_VERSION="36.12-phase12-authoritative-state-consolidation"'
+          expected = "3f836180bdb2f5dd8a9ee95333d9366e8c22058784b77d385989a4d9f7bfdb8b"
+          marker = b'window.DT_MARC_RELEASE_FIX_VERSION="36.13-phase13-custom-split-routing-scroll-empty-state"'
           candidates = [
               Path("android/app/build/outputs/apk/release/app-release-unsigned.apk"),
               Path("android/app/build/outputs/apk/release/app-release.apk"),
@@ -283,8 +283,8 @@ jobs:
           from pathlib import Path
           import hashlib, sys, zipfile
           apk = Path(sys.argv[1])
-          expected = "620c5c3b202b1be86f49bc5dfaec2abdc471c3ea474e632f31b3c21298508bc3"
-          marker = b'window.DT_MARC_RELEASE_FIX_VERSION="36.12-phase12-authoritative-state-consolidation"'
+          expected = "3f836180bdb2f5dd8a9ee95333d9366e8c22058784b77d385989a4d9f7bfdb8b"
+          marker = b'window.DT_MARC_RELEASE_FIX_VERSION="36.13-phase13-custom-split-routing-scroll-empty-state"'
           with zipfile.ZipFile(apk) as z:
               name = "assets/public/index.html"
               if name not in z.namelist():
@@ -294,7 +294,7 @@ jobs:
           if actual != expected:
               raise SystemExit(f"Signed APK embedded index.html mismatch: expected {expected}, got {actual}")
           if marker not in data:
-              raise SystemExit("V36.12 Phase 12 marker missing inside signed APK")
+              raise SystemExit("V36.13 Phase 13 marker missing inside signed APK")
           print(f"Signed APK embedded V36 index.html SHA256 PASS: {actual}")
           print("Signed APK V36 marker PASS")
           PY
