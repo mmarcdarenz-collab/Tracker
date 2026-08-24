@@ -2879,7 +2879,7 @@ if(!Array.isArray(state.workouts.savedRoutines))state.workouts.savedRoutines=[];
 if(!dtPlainObject(state.workouts.routineOverrides))state.workouts.routineOverrides={};
 if(!Array.isArray(state.workouts.customSplits))state.workouts.customSplits=[];
 if(!dtPlainObject(state.workouts.dayNames))state.workouts.dayNames={};
-/* V36.12: health integration is retired; legacy health keys are tolerated only
+/* V36.13: health integration is retired; legacy health keys are tolerated only
    long enough for import compatibility and are not initialized as active state. */
 let calendarDate=new Date();
 let currentAction=null;
@@ -3487,7 +3487,7 @@ document.querySelectorAll("nav button").forEach(b=>{
   b.addEventListener("touchend",e=>{e.preventDefault();switchView(b.dataset.view)},{passive:false});
 });
 
-/* V36.12: Ask ChatGPT surface is retired. No launcher, edge handle,
+/* V36.13: Ask ChatGPT surface is retired. No launcher, edge handle,
    gesture state, or localStorage preference is kept active. */
 const currencySelect=document.getElementById("currencySelect");
 currencySelect.value=state.money.currency||"AUD";
@@ -3920,6 +3920,7 @@ const exerciseSelectedCard=document.getElementById("exerciseSelectedCard");
 const saveExerciseBtn=document.getElementById("saveExercise");
 let selectedLibraryExercise=null;
 let customExerciseMode=false;
+let exerciseTargetDay=null; /* V36.13: lock Add Exercise to the split that opened the picker. */
 
 function dtNormalizeExerciseSearchText(value){
   return String(value||"")
@@ -4034,6 +4035,7 @@ function dtRenderExerciseResults(){
 }
 
 if(addExerciseBtn)addExerciseBtn.onclick=()=>{
+  exerciseTargetDay=wday;
   dtResetExercisePicker();
   exerciseModal.classList.add("show");
   setTimeout(()=>exerciseLibrarySearch.focus(),100);
@@ -4095,7 +4097,11 @@ document.getElementById("saveExercise").onclick=()=>{
     aliases,
     source:libraryId?"library":"custom"
   };
-  state.workouts.custom[wday].push(newExercise);
+  const targetDay=(exerciseTargetDay&&plans[exerciseTargetDay])?exerciseTargetDay:wday;
+  if(!state.workouts.custom[targetDay]) state.workouts.custom[targetDay]=[];
+  state.workouts.custom[targetDay].push(newExercise);
+  /* Stay on the split the user was editing; never leak an exercise into another day. */
+  wday=targetDay;
 
   // Register custom exercises in the normalized Phase 1.2 foundation so they can
   // later become part of the user's personal exercise library.
@@ -4240,7 +4246,7 @@ function renderTrainingBrief(){
 }
 
 
-/* V36.12: Health Snapshot / Health Connect runtime is retired.
+/* V36.13: Health Snapshot / Health Connect runtime is retired.
    Historical state can be tolerated by the schema but cannot sync, diagnose,
    render, or reconnect from the production UI. */
 renderSpark();renderToday();renderHistory();renderMoney();renderWorkout();
@@ -4836,10 +4842,16 @@ renderTrainingGoal();
 
     if(!wlist.querySelector(".exercise") && !wlist.querySelector(".pending-workout-bubble")){
       const all = document.createElement("div");
-      all.className = "all-workouts-done";
-      all.innerHTML = `<div class="dt-workout-complete-check">✓</div><b>${p.title} complete</b><small>Today's completed activities are saved in History.</small><div class="dt-workout-recovery-box" id="dtWorkoutRecoveryBox"></div>`;
+      const configuredCount=(plans[wday]?.ex?.length||0)+(state.workouts.custom?.[wday]?.length||0);
+      if(configuredCount===0){
+        all.className = "dt-empty-workout";
+        all.innerHTML = `<div class="dt-empty-workout-mark">＋</div><b>${p.title} is empty</b><small>Add your first exercise to build this workout split.</small>`;
+      }else{
+        all.className = "all-workouts-done";
+        all.innerHTML = `<div class="dt-workout-complete-check">✓</div><b>${p.title} complete</b><small>Today's completed activities are saved in History.</small><div class="dt-workout-recovery-box" id="dtWorkoutRecoveryBox"></div>`;
+      }
       wlist.appendChild(all);
-      if(typeof window.dtRenderWorkoutRecoveryPanel === "function"){
+      if(configuredCount>0 && typeof window.dtRenderWorkoutRecoveryPanel === "function"){
         requestAnimationFrame(()=>window.dtRenderWorkoutRecoveryPanel(wday));
       }
     }
@@ -10274,8 +10286,13 @@ window.dtRemoveWorkoutSet=removeSet;
     if(!plans[key])return;
     wday=key;
     document.querySelectorAll("#workout .workout-tab[data-wday]").forEach(x=>x.classList.toggle("active",x.dataset.wday===key));
-    if(btn)btn.scrollIntoView({behavior:"smooth",inline:"center",block:"nearest"});
     renderWorkout();
+    /* The workout renderer rebuilds the split strip. Center the NEW active tab,
+       not the stale button that existed before the rerender. */
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      const active=document.querySelector(`#workout .workout-tab[data-wday="${CSS.escape(key)}"]`);
+      active?.scrollIntoView({behavior:"smooth",inline:"center",block:"nearest"});
+    }));
   }
 
   function renderTabs(){
@@ -19777,5 +19794,14 @@ window.DT_V36_PHASE6_FIX_VERSION="36.6-phase6-release-integrity";
 })();
 </script>
 <script>window.DT_MARC_RELEASE_FIX_VERSION="36.12-phase12-authoritative-state-consolidation";</script>
+
+<script>window.DT_MARC_RELEASE_FIX_VERSION="36.13-phase13-custom-split-routing-scroll-empty-state";</script>
+<style id="dt-v36-13-custom-split-fix">
+#workout .workout-tabs{touch-action:pan-x!important;overscroll-behavior-x:contain!important}
+.dt-empty-workout{margin:12px 0 4px;padding:30px 18px;border:1px solid #203b49;border-radius:20px;background:#081820;text-align:center}
+.dt-empty-workout-mark{width:58px;height:58px;margin:0 auto 14px;border:1px solid #315a72;border-radius:50%;display:grid;place-items:center;color:#69b9ff;font-size:28px}
+.dt-empty-workout b{display:block;color:#edf5f8;font-size:18px}
+.dt-empty-workout small{display:block;margin-top:7px;color:#879aa6;font-size:12px}
+</style>
 </body>
 </html>
