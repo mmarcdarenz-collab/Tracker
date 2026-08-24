@@ -4881,7 +4881,8 @@ renderTrainingGoal();
   // Rebind category tabs: list only, all collapsed after every switch.
   document.querySelectorAll("[data-wday]").forEach(btn => {
     btn.onclick = () => {
-      wday = btn.dataset.wday;
+      if(typeof window.dtSetSelectedWorkoutSplit==="function")window.dtSetSelectedWorkoutSplit(btn.dataset.wday,{persist:true,render:false});
+      else wday = btn.dataset.wday;
       document.querySelectorAll("[data-wday]").forEach(x=>x.classList.remove("active"));
       btn.classList.add("active");
       renderWorkout();
@@ -10284,7 +10285,8 @@ window.dtRemoveWorkoutSet=removeSet;
   function selectSplit(key,btn){
     ensureState();
     if(!plans[key])return;
-    wday=key;
+    if(typeof window.dtSetSelectedWorkoutSplit==="function")window.dtSetSelectedWorkoutSplit(key,{persist:true,render:false});
+    else wday=key;
     document.querySelectorAll("#workout .workout-tab[data-wday]").forEach(x=>x.classList.toggle("active",x.dataset.wday===key));
     renderWorkout();
     /* The workout renderer rebuilds the split strip. Center the NEW active tab,
@@ -10395,7 +10397,8 @@ window.dtRemoveWorkoutSet=removeSet;
     state.workouts.edits[key]={};
     state.workouts.removed[key]=[];
     plans[key]={title:name.toUpperCase(),sub:"",ex:[]};
-    wday=key;
+    if(typeof window.dtSetSelectedWorkoutSplit==="function")window.dtSetSelectedWorkoutSplit(key,{persist:false,render:false});
+    else wday=key;
     try{save()}catch(e){console.warn("Split save failed",e)}
     m.classList.remove("show");
     renderTabs();
@@ -16952,10 +16955,12 @@ body:has(#today.view.active) #dtRestGlobal{display:none!important}
   }
   function quickDraftEntry(info){
     const fresh=freshActivityInfo(info);if(!fresh||fresh.status!=="active")return null;
+    const priorDay=typeof wday!=="undefined"?wday:null;
     try{
       wday=fresh.day;const d=draft(),key=String(fresh.key||"");
       return (d||[]).find(entry=>String(entry?.__exkey||entry?.exerciseKey||"")===key)||null;
     }catch(_){return null}
+    finally{if(priorDay!=null)wday=priorDay}
   }
   function quickLoggedSets(info){
     if(!info)return [];
@@ -16971,7 +16976,9 @@ body:has(#today.view.active) #dtRestGlobal{display:none!important}
   }
   function smartHint(info){
     const fresh=freshActivityInfo(info);if(!fresh||fresh.status!=="active")return "";
+    const priorDay=typeof wday!=="undefined"?wday:null;
     try{wday=fresh.day;const out=typeof smartRecommendation==="function"?smartRecommendation(fresh.e,fresh.index):null;return out?.text?`Suggested ${out.text}`:""}catch(_){return ""}
+    finally{if(priorDay!=null)wday=priorDay}
   }
   function displaySet(set){
     const unit=window.dtWeightUnitLabel?.()||"KG",kg=set?.kg!==""&&set?.kg!=null?(window.dtWeightDisplayValue?.(set.kg)??set.kg):"—",eff=String(set?.effort||"");
@@ -17005,7 +17012,7 @@ body:has(#today.view.active) #dtRestGlobal{display:none!important}
   }
   function quickComplete(info){
     if(!info||info.status!=="active")return false;
-    try{if(!quickLoggedSets(info).length)return false;wday=info.day;renderWorkout();const card=[...document.querySelectorAll("#wlist .exercise")].find(x=>x.dataset.exerciseKey===info.key),done=card?.querySelector(".exercise-done-btn");if(!done)return false;done.click();haptic(18);return true}catch(_){return false}
+    try{if(!quickLoggedSets(info).length)return false;if(typeof window.dtSetSelectedWorkoutSplit==="function")window.dtSetSelectedWorkoutSplit(info.day,{persist:true,render:false});else wday=info.day;renderWorkout();const card=[...document.querySelectorAll("#wlist .exercise")].find(x=>x.dataset.exerciseKey===info.key),done=card?.querySelector(".exercise-done-btn");if(!done)return false;done.click();haptic(18);return true}catch(_){return false}
   }
   function advanceAfterDone(day,currentIndex){
     const items=activityItems(day);if(!items.length)return;
@@ -17014,7 +17021,7 @@ body:has(#today.view.active) #dtRestGlobal{display:none!important}
   }
   function quickUndo(info){
     if(!info?.pending)return false;
-    try{wday=info.day;renderWorkout();const bubble=[...document.querySelectorAll("#wlist .pending-workout-bubble")].find(x=>x.dataset.pendingId===String(info.pending.id));const btn=bubble?.querySelector(".pending-undo");if(!btn)return false;btn.click();haptic();return true}catch(_){return false}
+    try{if(typeof window.dtSetSelectedWorkoutSplit==="function")window.dtSetSelectedWorkoutSplit(info.day,{persist:true,render:false});else wday=info.day;renderWorkout();const bubble=[...document.querySelectorAll("#wlist .pending-workout-bubble")].find(x=>x.dataset.pendingId===String(info.pending.id));const btn=bubble?.querySelector(".pending-undo");if(!btn)return false;btn.click();haptic();return true}catch(_){return false}
   }
   function quickSetRows(sets){return sets.length?`<div class="dt-v27-set-list">${sets.slice(-4).map((s,i)=>`<div class="dt-v27-set-chip"><span>Set ${Math.max(1,sets.length-Math.min(4,sets.length)+i+1)}</span><b>${esc(displaySet(s))}</b><i>✓</i></div>`).join("")}</div>`:""}
   function quickLogMarkup(day){
@@ -19058,12 +19065,6 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     scrollTabIntoView(activeTab(),smooth);
   }
 
-  /* User selecting a split -> center the chosen tab. */
-  document.addEventListener("click",e=>{
-    const btn=e.target?.closest?.("#splitTabs button,.dt-split-tabs button,.workout-tabs button,.tabs.workout-tabs button");
-    if(!btn || btn.id==="dtAddSplitBtn")return;
-    setTimeout(()=>scrollTabIntoView(btn,true),30);
-  },true);
 
   /*
     New split render or active class changes -> rebind/scroll.
@@ -19819,6 +19820,122 @@ window.DT_V36_PHASE6_FIX_VERSION="36.6-phase6-release-integrity";
   overscroll-behavior-x:contain!important;
   scroll-snap-type:none!important;
 }
+</style>
+
+<script id="dt-v36-15-authoritative-workout-split-state">
+(()=>{
+  "use strict";
+  const V="36.15-phase15-authoritative-workout-split-state";
+  const validKeys=()=>{
+    try{
+      const base=Number(state.workouts?.generatedProgram?.days||3)===2?["push","pull"]:["push","pull","legs"];
+      const custom=(state.workouts?.customSplits||[]).map(x=>x?.key).filter(Boolean);
+      return [...new Set([...base,...custom])].filter(k=>typeof plans!=="undefined"&&plans[k]);
+    }catch(_){return ["push","pull","legs"].filter(k=>typeof plans!=="undefined"&&plans[k])}
+  };
+  const ui=()=>{
+    if(!state.workouts)state.workouts={sessions:[],drafts:{}};
+    if(!state.workouts.uiState||typeof state.workouts.uiState!=="object")state.workouts.uiState={};
+    return state.workouts.uiState;
+  };
+  function current(){
+    const keys=validKeys(),u=ui();
+    if(keys.includes(u.selectedSplitKey))return u.selectedSplitKey;
+    if(typeof wday!=="undefined"&&keys.includes(wday))return wday;
+    return keys[0]||"push";
+  }
+  function setSelected(key,{persist=true,render=false}={}){
+    const keys=validKeys();if(!keys.includes(key))return false;
+    const u=ui();u.selectedSplitKey=key;wday=key;
+    if(persist){try{save()}catch(_){}}
+    if(render){try{renderWorkout()}catch(_){}}
+    return true;
+  }
+  window.dtGetSelectedWorkoutSplit=current;
+  window.dtSetSelectedWorkoutSplit=setSelected;
+
+  /* Any real tab selection becomes authoritative BEFORE legacy bubble handlers run. */
+  document.addEventListener("click",e=>{
+    const tab=e.target?.closest?.('#workout .workout-tab[data-wday]');
+    if(tab?.dataset?.wday)setSelected(tab.dataset.wday,{persist:true,render:false});
+  },true);
+
+  /* Passive renderers are never allowed to replace the selected split. */
+  if(typeof window.renderWorkout==="function"&&!window.renderWorkout.__dtPhase15SelectionGuard){
+    const base=window.renderWorkout;
+    const guarded=function(){
+      const selected=current();wday=selected;
+      const r=base.apply(this,arguments);
+      /* Legacy wrappers may touch wday while rendering; restore the selected key. */
+      wday=selected;
+      return r;
+    };
+    guarded.__dtPhase15SelectionGuard=true;
+    window.renderWorkout=guarded;
+  }
+
+  function trulyEmpty(day){
+    try{
+      const custom=(state.workouts?.customSplits||[]).some(x=>x?.key===day);
+      if(!custom)return false;
+      const baseCount=Array.isArray(plans?.[day]?.ex)?plans[day].ex.length:0;
+      const customCount=Array.isArray(state.workouts?.custom?.[day])?state.workouts.custom[day].length:0;
+      return baseCount===0&&customCount===0;
+    }catch(_){return false}
+  }
+  function enforceWorkoutDom(){
+    const day=current();
+    const tabs=document.querySelectorAll('#workout .workout-tab[data-wday]');
+    tabs.forEach(t=>t.classList.toggle('active',t.dataset.wday===day));
+    if(typeof wday!=="undefined")wday=day;
+
+    if(trulyEmpty(day)){
+      const list=document.getElementById('wlist');if(!list)return;
+      /* No old renderer may describe a never-configured custom split as complete. */
+      if(list.querySelector('.all-workouts-done')||!list.children.length){
+        list.innerHTML='';
+        const empty=document.createElement('div');empty.className='dt-empty-workout';
+        const title=String(plans?.[day]?.title||state.workouts?.dayNames?.[day]||'Workout');
+        empty.innerHTML=`<div class="dt-empty-workout-mark">＋</div><b>${window.dtEscapeHtml?.(title)??title} is empty</b><small>Add your first exercise to build this workout split.</small>`;
+        list.appendChild(empty);
+      }
+      document.getElementById('dtWorkoutRecoveryBox')?.remove();
+    }
+  }
+
+  /* Preserve manual horizontal strip position across passive innerHTML rebuilds. */
+  let strip=null,lastScroll=0,scrolling=false;
+  function bindStrip(){
+    const next=document.querySelector('#workout .workout-tabs');if(!next)return;
+    if(strip===next)return;
+    strip=next;lastScroll=Number(ui().splitScrollLeft)||0;
+    requestAnimationFrame(()=>{const max=Math.max(0,strip.scrollWidth-strip.clientWidth);strip.scrollLeft=Math.min(lastScroll,max)});
+    strip.addEventListener('scroll',()=>{
+      lastScroll=strip.scrollLeft;ui().splitScrollLeft=lastScroll;scrolling=true;
+      clearTimeout(strip.__dtScrollEnd);strip.__dtScrollEnd=setTimeout(()=>{scrolling=false},120);
+    },{passive:true});
+  }
+
+  let queued=false;
+  const reconcile=()=>{
+    if(queued)return;queued=true;
+    requestAnimationFrame(()=>{queued=false;bindStrip();enforceWorkoutDom()});
+  };
+  const mo=new MutationObserver(records=>{
+    if(records.some(r=>r.target instanceof Element&&(r.target.closest?.('#workout')||r.target.id==='workout')))reconcile();
+  });
+  const workout=document.getElementById('workout');if(workout)mo.observe(workout,{childList:true,subtree:true});
+
+  const boot=()=>{setSelected(current(),{persist:false,render:false});bindStrip();enforceWorkoutDom()};
+  document.readyState==='loading'?document.addEventListener('DOMContentLoaded',boot,{once:true}):boot();
+  window.addEventListener('pageshow',boot);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')boot()});
+  window.DT_CUSTOM_SPLIT_STATE_VERSION=V;
+  window.DT_MARC_RELEASE_FIX_VERSION=V;
+})();
+</script>
+<style id="dt-v36-15-authoritative-workout-split-css">
+#workout .workout-tabs{touch-action:pan-x!important;overscroll-behavior-x:contain!important;scroll-snap-type:none!important}
 </style>
 </body>
 </html>
