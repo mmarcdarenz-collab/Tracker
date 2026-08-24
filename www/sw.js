@@ -1,6 +1,6 @@
 "use strict";
 
-const VERSION = "marc-v36-debug-j3";
+const VERSION = "marc-v36-8-phase8-training-brief-deep-regression";
 const APP_CACHE = `${VERSION}-app`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const APP_SHELL = ["./", "./index.html", "./manifest.webmanifest"];

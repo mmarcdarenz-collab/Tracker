@@ -1488,6 +1488,23 @@ main,.app,.app-shell,#app{
 }
 </style>
 
+
+<style id="dt-v36-8-training-brief-css">
+.dt-training-brief-card{grid-column:1/3;border-color:rgba(99,179,237,.24);background:linear-gradient(180deg,rgba(12,29,40,.98),rgba(9,20,28,.98));overflow:hidden;position:relative}
+.dt-training-brief-card::after{content:"";position:absolute;right:-54px;top:-70px;width:150px;height:150px;border:1px solid rgba(88,226,163,.10);border-radius:50%;pointer-events:none}
+.dt-training-brief-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.dt-training-brief-head h2{font-size:19px;margin:4px 0 0}
+.dt-training-brief-signal{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;border:1px solid rgba(88,226,163,.24);background:rgba(88,226,163,.08);color:var(--green);font-size:18px;font-weight:900}
+.dt-training-brief-lead{margin-top:13px;color:#e8f2f6;font-size:13px;line-height:1.55;font-weight:720;max-width:54ch}
+.dt-training-brief-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:14px}
+.dt-training-brief-grid>div{min-width:0;padding:10px;border:1px solid rgba(255,255,255,.07);border-radius:13px;background:rgba(7,16,23,.66)}
+.dt-training-brief-grid span,.dt-training-brief-action span{display:block;color:var(--muted);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+.dt-training-brief-grid b{display:block;margin-top:4px;font-size:13px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dt-training-brief-action{margin-top:10px;padding-top:11px;border-top:1px solid rgba(255,255,255,.07)}
+.dt-training-brief-action b{display:block;margin-top:4px;color:var(--green);font-size:12px;line-height:1.5}
+@media(max-width:720px){.dt-training-brief-card{grid-column:1}.dt-training-brief-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:340px){.dt-training-brief-grid{grid-template-columns:1fr}.dt-training-brief-grid b{white-space:normal}}
+</style>
 </head>
 <body>
 <div id="dtStartupGate" aria-hidden="true"><div class="dt-startup-mark">M/ARC</div></div>
@@ -1532,15 +1549,19 @@ main,.app,.app-shell,#app{
       <div class="quote-author" id="sparkAuthor"></div>
     </div>
 
-    <div class="card health-card">
-      <div class="topbar"><div><div class="label">WATCH / HEALTH</div><h2 style="margin-top:4px;font-size:19px">Health snapshot</h2></div><div>⌚</div></div>
-      <div class="health-row">
-        <div class="health-metric"><span class="label">🌙 Sleep</span><b id="healthSleep">—</b></div>
-        <div class="health-metric"><span class="label">🔥 Active Calories</span><b id="healthCalories">—</b></div>
-        <div class="health-metric"><span class="label">❤️ Latest Heart Rate</span><b id="healthWhr">—</b></div>
-        <div class="health-metric"><span class="label">👣 Steps</span><b id="healthSteps">—</b></div>
+    <div class="card dt-training-brief-card" id="dtTrainingBriefCard">
+      <div class="dt-training-brief-head">
+        <div><div class="label">TRAINING BRIEF</div><h2>What matters right now</h2></div>
+        <span class="dt-training-brief-signal" aria-hidden="true">↗</span>
       </div>
-      <div class="health-status"><span>Health Connect</span><span id="todayHealthStatus">Not connected</span></div>
+      <div class="dt-training-brief-lead" id="dtTrainingBriefHeadline">Build a few sessions and M•ARC will summarize your training here.</div>
+      <div class="dt-training-brief-grid">
+        <div><span>This week</span><b id="dtBriefWorkouts">0 workouts</b></div>
+        <div><span>Working sets</span><b id="dtBriefSets">0 sets</b></div>
+        <div><span>Last session</span><b id="dtBriefLast">None yet</b></div>
+        <div><span>Performance PRs</span><b id="dtBriefPrs">0 this week</b></div>
+      </div>
+      <div class="dt-training-brief-action"><span>Next focus</span><b id="dtTrainingBriefAction">Complete the next planned workout and log each working set.</b></div>
     </div>
   </div>
 
@@ -1561,7 +1582,7 @@ main,.app,.app-shell,#app{
     <h2 style="font-size:18px">At a glance</h2>
     <div class="glance-grid">
       <div class="glance-item">✅<b id="glanceTasks">0/0</b><small>Tasks</small></div>
-      <div class="glance-item">❤️<b id="glanceHeartRate">—</b><small>Heart Rate</small></div>
+      <div class="glance-item">🏋️<b id="glanceLastWorkout">—</b><small>Last workout</small></div>
       <div class="glance-item">💳<b id="glanceSpent">$0</b><small>Spent today</small></div>
       <div class="glance-item">🏦<b id="glanceSavings">$0</b><small>Savings</small></div>
     </div>
@@ -3248,7 +3269,8 @@ function streakCount(){
 document.getElementById("todayDate").textContent=new Date().toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"});
 
 function launchCompletionAnimation(){
-  const ring=document.getElementById("ring");
+  const ring=document.getElementById("progressRing");
+  if(!ring)return;
   ring.classList.remove("complete"); void ring.offsetWidth; ring.classList.add("complete");
   for(let i=0;i<14;i++){
     const s=document.createElement("i");s.className="sparkle";
@@ -3547,9 +3569,14 @@ let chatTouchStartY=null;
 
 function setChatCollapsed(collapsed){
   if(!chatBtn || !chatHandle) return;
-  chatBtn.classList.toggle("collapsed",collapsed);
-  chatHandle.classList.toggle("show",collapsed);
-  try{localStorage.setItem("dt_chat_collapsed",collapsed?"1":"0")}catch(e){}
+  const isCollapsed=!!collapsed;
+  chatBtn.classList.toggle("collapsed",isCollapsed);
+  chatHandle.classList.toggle("show",isCollapsed);
+  chatBtn.setAttribute("aria-hidden",isCollapsed?"true":"false");
+  chatHandle.setAttribute("aria-expanded",isCollapsed?"false":"true");
+  chatHandle.setAttribute("aria-label",isCollapsed?"Show Ask GPT":"Ask GPT shown");
+  void chatHandle.offsetWidth;
+  try{localStorage.setItem("dt_chat_collapsed",isCollapsed?"1":"0")}catch(e){}
 }
 try{
   setChatCollapsed(localStorage.getItem("dt_chat_collapsed")==="1");
@@ -3846,10 +3873,17 @@ function renderWorkout(){
       <button class="addset">＋ Add Set</button>
     </div>`;
 
-    const toggle=()=>box.classList.toggle('open');
-    box.querySelector('.exname').onclick=toggle;
-    box.querySelector('.exsum').onclick=toggle;
-    box.querySelector('.exercise-chevron').onclick=toggle;
+    const chevron=box.querySelector('.exercise-chevron');
+     const syncExpanded=()=>chevron?.setAttribute('aria-expanded',box.classList.contains('open')?'true':'false');
+     const toggle=(ev)=>{
+       ev?.stopPropagation?.();
+       box.classList.toggle('open');
+       syncExpanded();
+     };
+     box.querySelector('.exname').onclick=toggle;
+     box.querySelector('.exsum').onclick=toggle;
+     if(chevron)chevron.onclick=toggle;
+     syncExpanded();
     box.querySelector('.exercise-menu-btn').onclick=(ev)=>{
       ev.stopPropagation();
       openExerciseMenu(e,ei,ev.currentTarget);
@@ -4296,16 +4330,58 @@ function renderTodayDashboardExtras(){
   document.getElementById("weekGrade").textContent=grade;
   document.getElementById("weekGradeNote").textContent=note;
   document.getElementById("glanceTasks").textContent=(r.done||0)+"/"+(r.total||0);
-  const latest=(state.workouts?.sessions||[]).slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
-  const gh=document.getElementById("glanceHeartRate");
-  if(gh){
-    const hr=state.health?.workoutHR ?? state.health?.restingHR ?? null;
-    gh.textContent=hr!=null?Math.round(hr)+" bpm":"—";
-  }
+  const latest=(state.workouts?.sessions||[]).slice().sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")))[0];
+  const glw=document.getElementById("glanceLastWorkout");
+  if(glw) glw.textContent=latest?(latest.splitName||latest.workoutName||(typeof displayDay==="function"?displayDay(latest.day):latest.day)||"Logged"):"—";
+  renderTrainingBrief();
   document.getElementById("glanceSpent").textContent=fmt(todayExpense());
   document.getElementById("glanceSavings").textContent=fmt(state.money.savings);
 }
 
+
+
+function dtBriefWorkingSetCount(session){
+  const rows=Array.isArray(session?.snapshot)&&session.snapshot.length?session.snapshot:(Array.isArray(session?.exercises)?session.exercises:[]);
+  return rows.reduce((total,row)=>{
+    const sets=Array.isArray(row?.sets)?row.sets:[];
+    return total+sets.filter(set=>{
+      if(!set)return false;
+      if(Array.isArray(set)) return set.some(v=>v!==null&&v!==undefined&&String(v).trim()!=="");
+      if(typeof set==="object") return [set.weight,set.kg,set.reps,set.rir,set.effort].some(v=>v!==null&&v!==undefined&&String(v).trim()!=="");
+      return false;
+    }).length;
+  },0);
+}
+function renderTrainingBrief(){
+  const card=document.getElementById("dtTrainingBriefCard");if(!card)return;
+  const sessions=(state.workouts?.sessions||[]).filter(s=>s&&s.date).slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const start=startOfWeek().getTime(),week=sessions.filter(s=>{const t=new Date(s.date).getTime();return Number.isFinite(t)&&t>=start});
+  const sets=week.reduce((n,s)=>n+dtBriefWorkingSetCount(s),0);
+  let prs=0;try{prs=typeof window.dtWeeklyPerformancePRs==="function"?(window.dtWeeklyPerformancePRs()||[]).length:0}catch(_){}
+  const last=sessions[0]||null,lastName=last?(last.splitName||last.workoutName||(typeof displayDay==="function"?displayDay(last.day):last.day)||"Workout"):"None yet";
+  const workoutsEl=document.getElementById("dtBriefWorkouts"),setsEl=document.getElementById("dtBriefSets"),lastEl=document.getElementById("dtBriefLast"),prsEl=document.getElementById("dtBriefPrs");
+  if(workoutsEl)workoutsEl.textContent=`${week.length} workout${week.length===1?"":"s"}`;
+  if(setsEl)setsEl.textContent=`${sets} set${sets===1?"":"s"}`;
+  if(lastEl){lastEl.textContent=lastName;lastEl.title=lastName}
+  if(prsEl)prsEl.textContent=`${prs} this week`;
+  const headline=document.getElementById("dtTrainingBriefHeadline"),action=document.getElementById("dtTrainingBriefAction");
+  if(!sessions.length){
+    if(headline)headline.textContent="No completed workout is logged yet. Your brief will become more useful after the first finalized session.";
+    if(action)action.textContent="Complete the next planned workout and log each working set.";
+    return;
+  }
+  const lastTime=new Date(last.date).getTime(),hours=Number.isFinite(lastTime)?Math.max(0,(Date.now()-lastTime)/36e5):null;
+  if(headline){
+    if(week.length>=4)headline.textContent=`${week.length} completed workouts and ${sets} working sets are logged this week. Keep progression deliberate rather than adding volume automatically.`;
+    else if(week.length>=2)headline.textContent=`${week.length} completed workouts are logged this week. Your latest session was ${lastName}.`;
+    else headline.textContent=`Your latest completed session was ${lastName}${hours!=null&&hours<48?` about ${Math.max(1,Math.round(hours))}h ago`:""}.`;
+  }
+  if(action){
+    if(prs>0)action.textContent=`You logged ${prs} performance PR${prs===1?"":"s"} this week. Keep the next progression small and repeatable.`;
+    else if(week.length===0)action.textContent="Start the next planned session and use your previous set history as the benchmark.";
+    else action.textContent="Aim to improve one controllable signal next session: a rep, a small load increase, or cleaner execution at similar effort.";
+  }
+}
 
 
 function healthPlugin(){
@@ -4313,23 +4389,6 @@ function healthPlugin(){
 }
 function renderHealth(){
   const h=state.health||{};
-  const sleepEl=document.getElementById("healthSleep");
-  const calEl=document.getElementById("healthCalories");
-  const whrEl=document.getElementById("healthWhr");
-  const stepsEl=document.getElementById("healthSteps");
-  if(sleepEl){
-    if(h.connected){
-    sleepEl.textContent=h.sleepMinutes!=null?`${Math.floor(h.sleepMinutes/60)}h ${Math.round(h.sleepMinutes%60)}m`:"—";
-    whrEl.textContent=(h.workoutHR ?? h.restingHR)!=null?`${Math.round(h.workoutHR ?? h.restingHR)} bpm`:"—";
-    calEl.textContent=h.activeCalories!=null?`${Math.round(h.activeCalories)} kcal`:"—";
-    stepsEl.textContent=h.steps!=null?Number(h.steps).toLocaleString("en-AU"):"—";
-  }else{
-    sleepEl.textContent="—";
-    whrEl.textContent="—";
-    calEl.textContent="—";
-    stepsEl.textContent="—";
-  }
-  }
   const ws=document.getElementById("watchStatus");
   const wp=document.getElementById("watchProvider");
   const ls=document.getElementById("lastHealthSync");
@@ -4339,21 +4398,8 @@ function renderHealth(){
     ws.classList.toggle("off",!h.connected);
   }
   if(wp) wp.textContent=h.connected?"Android Health Connect":"Health Connect • not connected";
-  const todayStatus=document.getElementById("todayHealthStatus");
-  if(todayStatus) todayStatus.textContent=h.connected?"Connected":"Not connected";
   if(ls) ls.textContent=h.lastSync?`Last synced ${new Date(h.lastSync).toLocaleString("en-AU",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"})}`:"No sync yet";
   if(btn) btn.textContent=h.connected?"Manage access":"Connect";
-  const freshness=document.getElementById("healthDataFreshness");
-  if(freshness && h.connected){
-    const times=[h.heartRateTime,h.stepsTime,h.activeCaloriesTime,h.sleepEndTime].filter(Boolean);
-    if(times.length){
-      const newest=Math.max(...times);
-      freshness.textContent="Latest health record: "+new Date(newest).toLocaleString([],{
-        day:"numeric",month:"short",hour:"numeric",minute:"2-digit"
-      });
-    }else freshness.textContent="";
-  }
-
   const sourceSel=document.getElementById("healthSourceSelect");
   const sourceStatus=document.getElementById("healthSourceStatus");
   if(sourceSel) sourceSel.value=h.sourceMode||"auto";
@@ -5035,12 +5081,15 @@ renderTrainingGoal();
           <button class="exercise-done-btn" type="button">✓ Done with ${window.dtEscapeHtml?.(e[0])??e[0]}</button>
         </div>`;
 
-      const toggle = () => box.classList.toggle("open");
+      const chevron=box.querySelector(".exercise-chevron");
+      const syncExpanded=()=>chevron?.setAttribute("aria-expanded",box.classList.contains("open")?"true":"false");
+      const toggle = () => { box.classList.toggle("open"); syncExpanded(); };
       box.querySelector(".exname").onclick = () => {
         if(!openMuscleDetail(e[0])) toggle();
       };
       box.querySelector(".exsum").onclick = toggle;
-      box.querySelector(".exercise-chevron").onclick = toggle;
+      if(chevron)chevron.onclick = toggle;
+      syncExpanded();
 
       const menu = box.querySelector(".exercise-menu-btn");
       menu.onclick = ev => {
@@ -7256,8 +7305,10 @@ function resetWorkoutData(){
   try{localStorage.removeItem(window.DT_RECOVERY_META_KEY||"dailyTrackerPremium_last_known_good_meta_v1")}catch(_){}
   try{
     if(typeof save==="function")save({forceRecoveryScan:true,replaceRecoveryMeta:true});
-    renderWorkoutHistory?.();renderHistory?.();renderToday?.();renderWorkout?.();dtRenderTodayWorkoutResult?.();window.dtRenderBodyCard?.();
+    renderWorkoutHistory?.();renderHistory?.();renderToday?.();renderWorkout?.();dtRenderTodayWorkoutResult?.();window.dtRenderBodyCard?.();window.dtRenderRecoveryStrip?.();
+    window.dtRenderCoachInsights?.();
     if(document.querySelector(".view.active")?.id==="stats")window.dtOpenStatsDestination?.();
+    if(document.querySelector(".view.active")?.id==="coach")window.dtRenderCoachDestination?.();
   }catch(e){console.warn("Workout reset render failed",e)}
 }
 function ensureModal(){
@@ -7751,10 +7802,18 @@ function renderWorkoutScheduleBadge(){
   if(!assigned){b.classList.remove("show");return}
   b.classList.add("show");
   b.innerHTML=`<span>Scheduled today · ${window.dtEscapeHtml?.(sessionName(assigned))??sessionName(assigned)}</span><button type="button">Go</button>`;
-  b.querySelector("button").onclick=()=>{
-    const tab=document.querySelector(`.workout-tab[data-wday="${assigned}"]`);
-    if(tab)tab.click();
-  };
+  const goBtn=b.querySelector("button");
+  if(goBtn){
+    goBtn.setAttribute("aria-label",`Open scheduled workout ${sessionName(assigned)}`);
+    goBtn.onclick=(ev)=>{
+      ev.stopPropagation();
+      const tab=document.querySelector(`.workout-tab[data-wday="${assigned}"]`);
+      if(tab){
+        tab.scrollIntoView?.({behavior:"smooth",block:"nearest",inline:"center"});
+        tab.click();
+      }
+    };
+  }
 }
 function addSettingsEntry(){
   const reset=document.getElementById("resetBtn");
@@ -8391,11 +8450,12 @@ async function syncTrainingReminders({requestPermission=false}={}){
   }
   const perm=await notificationPermission(requestPermission);
   if(perm!=="granted"){
-    n.trainingEnabled=false;
-    n.lastStatus=perm==="denied"?"Permission denied":"Permission not granted";
+    /* Keep the user's ON/OFF preference independent from Android permission health. */
+    n.lastStatus=perm==="denied"?"On · Android permission blocked":"On · Android permission not ready";
+    n.lastPermission=perm;
     try{save()}catch(_){}
     renderReminderSettings();
-    return {ok:false,status:perm};
+    return {ok:false,status:perm,enabled:n.trainingEnabled};
   }
   const selectedChannel=await ensureReminderChannel(n.trainingStyle||"silent");
 
@@ -8428,11 +8488,18 @@ async function syncTrainingReminders({requestPermission=false}={}){
   try{
     if(notifications.length)await p.schedule({notifications});
     n.scheduledIds=notifications.map(x=>x.id);
-    n.lastStatus=notifications.length?`${notifications.length} reminders scheduled`:"No upcoming training days";
+    let pendingIds=[];
+    try{pendingIds=((await p.getPending?.())?.notifications||[]).map(x=>Number(x.id));}catch(_){ }
+    const expected=n.scheduledIds.map(Number),pendingCount=expected.filter(id=>pendingIds.includes(id)).length;
+    n.pendingCount=pendingCount;
+    n.lastPermission="granted";
+    n.lastStatus=notifications.length
+      ?`${pendingCount||notifications.length}/${notifications.length} reminders queued on Android`
+      :"On · no upcoming scheduled training days";
     n.lastSyncedAt=new Date().toISOString();
     save();
     renderReminderSettings();
-    return {ok:true,count:notifications.length};
+    return {ok:true,count:notifications.length,pendingCount};
   }catch(e){
     console.warn("Training reminder schedule failed",e);
     n.lastStatus="Scheduling failed";
@@ -8488,7 +8555,15 @@ function renderReminderSettings(){
   <div class="dt-rem-actions"><button class="dt-rem-cancel" type="button">Cancel</button><button class="dt-rem-save" type="button">Save reminder</button></div>`;
   const exactBtn=body.querySelector("#dtRestExactBtn");if(exactBtn)exactBtn.onclick=async()=>{exactBtn.disabled=true;exactBtn.textContent="Opening…";await window.dtEnableExactRestAlerts?.();setTimeout(()=>{if(document.getElementById("dtReminderBody"))renderReminderSettings()},800)};
   const restTest=body.querySelector("#dtRestAlertTest");if(restTest)restTest.onclick=async()=>{restTest.disabled=true;restTest.textContent="Scheduling…";const ok=await window.dtTestRestAlert?.();restTest.textContent=ok?"Sent ✓":"Could not send";setTimeout(()=>{if(document.getElementById("dtReminderBody"))renderReminderSettings()},1200)};
-  body.querySelector("#dtReminderToggle").onclick=e=>e.currentTarget.classList.toggle("on");
+  body.querySelector("#dtReminderToggle").onclick=async e=>{
+    const el=e.currentTarget,next=!el.classList.contains("on");
+    el.classList.toggle("on",next);
+    const n=reminderState();n.trainingEnabled=next;n.promptSeen=true;
+    n.lastStatus=next?"Turning on…":"Off";try{save()}catch(_){}
+    renderReminderSettings();
+    if(next)await syncTrainingReminders({requestPermission:true});
+    else await cancelTrainingReminders();
+  };
   body.querySelectorAll("[data-rem-style]").forEach(b=>b.onclick=()=>{
     body.querySelectorAll("[data-rem-style]").forEach(x=>x.classList.remove("active"));
     b.classList.add("active");
@@ -8574,6 +8649,40 @@ async function bindNotificationAction(){
     });
   }catch(e){console.warn("Notification action listener unavailable",e)}
 }
+
+window.dtSyncTrainingReminders=syncTrainingReminders;
+
+async function reconcileTrainingReminders(){
+  const n=reminderState();
+  if(!n.trainingEnabled)return {ok:true,status:"off"};
+  const p=localPlugin();
+  if(!p?.getPending)return syncTrainingReminders();
+  try{
+    const pending=((await p.getPending())?.notifications||[]).map(x=>Number(x.id));
+    const expected=(n.scheduledIds||[]).map(Number);
+    const live=expected.filter(id=>pending.includes(id));
+    n.pendingCount=live.length;
+    if(!expected.length || live.length!==expected.length){
+      n.lastStatus=`On · repairing Android reminder queue (${live.length}/${expected.length})`;
+      try{save()}catch(_){}
+      renderReminderSettings();
+      return await syncTrainingReminders();
+    }
+    n.lastStatus=`${live.length}/${expected.length} reminders queued on Android`;
+    n.lastCheckedAt=new Date().toISOString();
+    try{save()}catch(_){}
+    renderReminderSettings();
+    return {ok:true,count:expected.length,pendingCount:live.length};
+  }catch(e){
+    n.lastStatus="On · Android queue check unavailable";
+    try{save()}catch(_){}
+    renderReminderSettings();
+    return {ok:false,status:"check-error"};
+  }
+}
+window.dtReconcileTrainingReminders=reconcileTrainingReminders;
+window.addEventListener("pageshow",()=>{if(reminderState().trainingEnabled)setTimeout(reconcileTrainingReminders,1200)});
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&reminderState().trainingEnabled)setTimeout(reconcileTrainingReminders,1000)});
 
 /* ---------- Detailed progress view ---------- */
 function v11Norm(v){return String(v||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}
@@ -9634,20 +9743,22 @@ function exBase64FromArray(u8){
 async function exShareBytes(base64,name,mime){
   const fs=exPlugin("Filesystem"),share=exPlugin("Share");
   if(exIsNative()&&fs){
-    const folder="MARC Exports";
-    const path=`${folder}/${name}`;
-    const directory="DOCUMENTS";
+    // Android 11+ blocks direct writes to shared Documents for this WebView/plugin configuration.
+    // Write to app cache (always permitted), then use Android's share/save sheet so the user chooses Files/Gallery.
+    const folder="MARC Exports",path=`${folder}/${name}`,directory="CACHE";
     const written=await fs.writeFile({path,data:base64,directory,recursive:true});
     const uri=written?.uri||(await fs.getUri({path,directory})).uri;
-    window.dtLastExportSaved={name,mime,uri,directory,path,base64};
-    if(mime==="image/png"){
-      return "Image saved to device files • Documents/MARC Exports";
+    window.dtLastExportSaved={name,mime,uri,directory,path,base64,nativeTemp:true};
+    if(share&&typeof share.share==="function"){
+      await share.share({
+        title:"M/ARC Training Export",
+        text:mime==="image/png"?"Save or share this M/ARC visual progress image.":"Save or share this M/ARC training export.",
+        files:[uri],
+        dialogTitle:"Save or share M/ARC export"
+      });
+      return mime==="image/png"?"Image ready • choose where to save it":"Export ready • choose where to save it";
     }
-    if(share){
-      await share.share({title:"M/ARC Training Export",text:"M/ARC workout progress export",files:[uri],dialogTitle:"Save or share export"});
-      return "File saved to device files and share sheet opened.";
-    }
-    return "File saved to device files • Documents/MARC Exports";
+    return "Export prepared in app storage.";
   }
   const raw=atob(base64),u8=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)u8[i]=raw.charCodeAt(i);
   const blob=new Blob([u8],{type:mime}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1200);
@@ -10482,6 +10593,7 @@ window.dtRemoveWorkoutSet=removeSet;
     ensureState();
     const wrap=document.querySelector("#workout .workout-tabs");
     if(!wrap)return;
+    const priorScrollLeft=Number(wrap.scrollLeft)||0;
     const keys=allKeys();
     if(!keys.includes(wday))wday=keys[0]||"push";
 
@@ -10506,6 +10618,12 @@ window.dtRemoveWorkoutSet=removeSet;
     add.disabled=atMax&&!currentIsCustom;
     add.onclick=openModal;
     wrap.appendChild(add);
+    // A workout rerender used to replace the tab row and snap it back to the start.
+    // Restore the user's horizontal position after the new controls are painted.
+    requestAnimationFrame(()=>{
+      const max=Math.max(0,wrap.scrollWidth-wrap.clientWidth);
+      wrap.scrollLeft=Math.max(0,Math.min(priorScrollLeft,max));
+    });
   }
 
   function ensureModal(){
@@ -10606,6 +10724,7 @@ window.dtRemoveWorkoutSet=removeSet;
     ensureModal().classList.remove("show");
     renderTabs();renderWorkout();
     try{window.dtRenderTodaySchedule?.()}catch(_){}
+    setTimeout(()=>{try{window.dtSyncTrainingReminders?.()}catch(_){}},120);
     return true;
   }
 
@@ -10638,6 +10757,7 @@ window.dtRemoveWorkoutSet=removeSet;
         if(c&&plans[wday])plans[wday].title=c.name.toUpperCase();
         try{save()}catch(_){}
         renderTabs();
+        setTimeout(()=>{try{window.dtSyncTrainingReminders?.()}catch(_){}},120);
       },120);
     }
   },true);
@@ -11902,6 +12022,7 @@ nav.dt-v10-nav{
   setTimeout(renderRecoveryStrip,2500);
 
   window.dtMuscleRecoveryStatus=dtMuscleRecoveryStatus;
+  window.dtRenderRecoveryStrip=renderRecoveryStrip;
   window.dtRecoveryBaseHours=dtRecoveryBaseHours;
   window.DT_RECOVERY_VERSION=V;
 })();
@@ -16543,11 +16664,18 @@ document.readyState==="loading"?document.addEventListener("DOMContentLoaded",ens
     const src=window.dtLastExportPreview;
     const fs=plugin('Filesystem');
     if(isNative()&&fs&&src){
+      const share=plugin('Share');
       const folder='MARC Exports';
       const name=saved?.name||`MARC_Visual_Progress_${(window.dtLocalDateKey?.(new Date())||'export')}.png`;
-      const path=`${folder}/${name}`;
-      await fs.writeFile({path,data:dataUrlToBase64(src),directory:'DOCUMENTS',recursive:true});
-      alert('Saved to device files • Documents/MARC Exports');
+      const path=`${folder}/${name}`,directory='CACHE';
+      const written=await fs.writeFile({path,data:dataUrlToBase64(src),directory,recursive:true});
+      const uri=written?.uri||(await fs.getUri({path,directory})).uri;
+      window.dtLastExportSaved={...(saved||{}),name,path,directory,uri,base64:dataUrlToBase64(src),nativeTemp:true};
+      if(share&&typeof share.share==='function'){
+        await share.share({title:'M/ARC Visual Progress',text:'Save or share this M/ARC visual progress image.',files:[uri],dialogTitle:'Save or share M/ARC image'});
+        return true;
+      }
+      alert('Image prepared in app storage.');
       return true;
     }
     if(src){
@@ -16563,7 +16691,7 @@ document.readyState==="loading"?document.addEventListener("DOMContentLoaded",ens
     if(isNative()&&share&&fs&&saved?.base64){
       const folder='MARC Exports';
       const path=saved.path||`${folder}/${saved.name||'MARC_Visual_Progress.png'}`;
-      const directory=saved.directory||'DOCUMENTS';
+      const directory=saved.directory||'CACHE';
       await fs.writeFile({path,data:saved.base64,directory,recursive:true});
       const uri=saved.uri||(await fs.getUri({path,directory})).uri;
       await share.share({title:'M/ARC Training Export',text:'M/ARC workout progress export',files:[uri],dialogTitle:'Share export'});
@@ -17340,10 +17468,13 @@ body:has(#today.view.active) #dtRestGlobal{display:none!important}
   function renderRecovery(){
     const host=document.getElementById("dtV27RecoverySummary");if(!host)return;
     const st=recoveryStatus(),rows=Object.entries(st).map(([key,v])=>({key,...v})).sort((a,b)=>(a.pct??100)-(b.pct??100));
-    const recovering=rows.filter(x=>x.recovering),ready=rows.filter(x=>!x.recovering).length,longest=recovering.length?Math.max(...recovering.map(x=>Number(x.hoursLeft)||0)):0;
+    const recovering=rows.filter(x=>x.recovering),readyRows=rows.filter(x=>!x.recovering).sort((a,b)=>labelMuscle(a.key).localeCompare(labelMuscle(b.key))),ready=readyRows.length,longest=recovering.length?Math.max(...recovering.map(x=>Number(x.hoursLeft)||0)):0;
+    const rowHtml=x=>{const pct=Math.max(0,Math.min(100,Number(x.pct)||0)),color=pct<40?"#ef725c":pct<75?"#e7bd65":"#59dfa2";return `<div class="dt-v27-recovery-row ${x.recovering?"":"ready"}"><span class="dt-v27-recovery-name">${esc(labelMuscle(x.key))}</span><span class="dt-v27-recovery-track"><i class="dt-v27-recovery-fill" style="width:${pct}%;background:${color}"></i></span><span class="dt-v27-recovery-pct">${pct}%</span><span class="dt-v27-recovery-left">${x.recovering?fmtRecovery(x.hoursLeft):"Fully Recovered"}</span></div>`};
+    const recoveringHtml=recovering.length?`<div class="dt-v27-recovery-section-label">Recovering</div><div class="dt-v27-recovery-list">${recovering.slice(0,8).map(rowHtml).join("")}</div>`:"";
+    const readyHtml=readyRows.length?`<div class="dt-v27-recovery-section-label ready">Fully recovered</div><div class="dt-v27-recovery-list dt-v27-recovery-ready-list">${readyRows.slice(0,12).map(rowHtml).join("")}</div>`:"";
     host.innerHTML=`<div class="dt-v27-kicker">RECOVERY ESTIMATE</div><div class="dt-v27-title">${recovering.length?`${recovering.length} muscle groups recovering`:"Ready to train"}</div><div class="dt-v27-sub">Estimated from your logged sets and effort. This is a training-readiness estimate, not a medical measurement.</div>
       <div class="dt-v27-recovery-meta"><div><small>Recovering</small><b>${recovering.length}</b></div><div><small>Ready</small><b>${ready}</b></div><div><small>Longest</small><b>${recovering.length?fmtRecovery(longest):"Ready"}</b></div></div>
-      <div class="dt-v27-recovery-list">${(recovering.length?recovering.slice(0,8):rows.slice(0,5)).map(x=>{const pct=Math.max(0,Math.min(100,Number(x.pct)||0)),color=pct<40?"#ef725c":pct<75?"#e7bd65":"#59dfa2";return `<div class="dt-v27-recovery-row"><span class="dt-v27-recovery-name">${esc(labelMuscle(x.key))}</span><span class="dt-v27-recovery-track"><i class="dt-v27-recovery-fill" style="width:${pct}%;background:${color}"></i></span><span class="dt-v27-recovery-pct">${pct}%</span><span class="dt-v27-recovery-left">${x.recovering?fmtRecovery(x.hoursLeft):"Ready"}</span></div>`}).join("")||'<div class="dt-v27-empty">Complete a workout and recovery estimates will appear here.</div>'}</div>`;
+      ${recoveringHtml}${readyHtml}${!rows.length?'<div class="dt-v27-empty">Complete a workout and recovery estimates will appear here.</div>':""}`;
     try{window.dtRenderBodyCard?.()}catch(_){ }
     setTimeout(moveTrainingBody,90);
   }
@@ -17505,6 +17636,7 @@ body:has(#today.view.active) #dtRestGlobal{display:none!important}
   document.readyState==="loading"?document.addEventListener("DOMContentLoaded",boot):boot();
 
   window.dtOpenWorkoutHome=openHome;
+  window.dtRenderCoachDestination=renderCoachDestination;
   window.dtWorkoutHomeSetPage=setPage;
   window.dtV27OpenHome=openHome;
   window.dtV27SelectedExerciseKey=day=>selectedActivity(day,{preferUnfinished:false})?.key||"";
@@ -17878,8 +18010,20 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     try{renderTodayDashboardExtras?.()}catch(_){}
     try{window.dtRenderTodayWorkoutResult?.()}catch(_){}
     try{window.dtRenderBodyCard?.()}catch(_){}
+    try{window.dtRenderRecoveryStrip?.()}catch(_){}
     try{window.dtRenderSessionEnhancements?.()}catch(_){}
-    setTimeout(()=>{try{renderHistory?.()}catch(_){}try{window.dtRenderBodyCard?.()}catch(_){}enhanceRows()},0);
+    try{window.dtRenderCoachInsights?.()}catch(_){}
+    try{if(document.querySelector(".view.active")?.id==="stats")window.dtOpenStatsDestination?.()}catch(_){}
+    try{if(document.querySelector(".view.active")?.id==="coach")window.dtRenderCoachDestination?.()}catch(_){}
+    setTimeout(()=>{
+      try{renderHistory?.()}catch(_){}
+      try{window.dtRenderBodyCard?.()}catch(_){}
+      try{window.dtRenderRecoveryStrip?.()}catch(_){}
+      try{window.dtRenderCoachInsights?.()}catch(_){}
+      try{if(document.querySelector(".view.active")?.id==="stats")window.dtOpenStatsDestination?.()}catch(_){}
+      try{if(document.querySelector(".view.active")?.id==="coach")window.dtRenderCoachDestination?.()}catch(_){}
+      enhanceRows()
+    },0);
   }
   function saveEdit(){
     if(!editRec)return false;const cards=[...document.querySelectorAll("#dtV30EditSets .dt-v30-edit-set")],clean=[];
@@ -18181,7 +18325,7 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
 })();
 </script>
 
-<script>window.DT_MARC_RELEASE_FIX_VERSION="36.0-debug-j3";</script>
+<script>window.DT_MARC_RELEASE_FIX_VERSION="36.1-phase1-debug-fixes";</script>
 
 
 <script id="dt-v36-p2-haptics">
@@ -18941,6 +19085,8 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     if(["input","textarea","select"].includes(tag))return false;
     if(/dtSessionOrbit|dtV27SessionButton|dtSessionPause/i.test(p))return false;
     if(/workout-tab/i.test(p))return false;
+    // These controls intentionally succeed via DOM replacement/class changes that the generic fingerprint does not model.
+    if(/dt-skip-button|chatHandle|dtScheduledTodayBadge|workout-history-head|exercise-done-btn/i.test(p))return false;
     return true;
   }
 
@@ -19043,17 +19189,9 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     if(validity&&!validity.valid){counters.validationFailure++;record("input_left_invalid",{path:cssPath(el),validity})}
     inputMap.delete(el);
   },true);
+  // J3/Phase 1: legacy per-second DOM mutation storm observer removed.
+  // Aggregated dom_mutation_summary telemetry is the single DOM churn signal.
 
-  // Dialog/sheet visibility changes and mutation storms.
-  let mutationWindow={start:performance.now(),count:0};
-  new MutationObserver(records=>{
-    mutationWindow.count+=records.length;
-    const now=performance.now();
-    if(now-mutationWindow.start>=1000){
-      if(mutationWindow.count>120)record("dom_mutation_burst",{mutations:mutationWindow.count,windowMs:Math.round(now-mutationWindow.start)});
-      mutationWindow={start:now,count:0};
-    }
-  }).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:["class","style","hidden","aria-hidden"]});
 
   let lastOverlays=visibleOverlays();
   setInterval(()=>{
@@ -19324,7 +19462,13 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
       box=document.createElement("small");box.id="dtDebugHealth";box.className="dt-setting-note";
       box.style.marginTop="5px";root.appendChild(box);
     }
-    box.textContent=`${log.length} events · ${counters.noVisibleChange} no-response · ${counters.consoleError+counters.error+counters.unhandled} errors · ${counters.frameStall} frame stalls`;
+    box.textContent=`${log.length} events · ${counters.noVisibleChange} no-response candidates · ${counters.consoleError+counters.error+counters.unhandled} errors · ${counters.frameStall} frame stalls`;
+    let status=document.getElementById("dtDebugExportStatus");
+    if(!status){
+      status=document.createElement("small");status.id="dtDebugExportStatus";status.className="dt-setting-note dt-debug-export-status";
+      status.setAttribute("aria-live","polite");root.appendChild(status);
+    }
+    if(!status.textContent)status.textContent="Exports open the Android save/share sheet in the APK.";
   }
   setInterval(()=>{if(enabled)renderHealth()},1500);
 
@@ -19332,12 +19476,19 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
   toggle?.addEventListener("click",()=>{const next=!enabled;setEnabled(next);try{window.dtHaptics?.light?.()}catch(_){}});
   async function runDebugExport(btn,fn){
     if(!btn||btn.dataset.dtExportBusy==="1")return;
-    const original=btn.textContent;btn.dataset.dtExportBusy="1";btn.disabled=true;btn.textContent="Preparing…";
+    const original=btn.textContent,status=()=>document.getElementById("dtDebugExportStatus");
+    btn.dataset.dtExportBusy="1";btn.disabled=true;btn.textContent="Preparing…";
+    if(status())status().textContent="Preparing export…";
     try{
-      const result=await fn();btn.textContent=result?.native?"Shared":"Downloaded";try{window.dtHaptics?.light?.()}catch(_){}
-      setTimeout(()=>{btn.textContent=original;btn.disabled=false;delete btn.dataset.dtExportBusy},1600);
+      const result=await fn();btn.textContent=result?.native?"Save/share opened":"Downloaded";
+      if(status())status().textContent=result?.native
+        ?`Android save/share sheet opened · ${result.filename}`
+        :`Downloaded · ${result.filename}`;
+      try{window.dtHaptics?.light?.()}catch(_){}
+      setTimeout(()=>{btn.textContent=original;btn.disabled=false;delete btn.dataset.dtExportBusy},2200);
     }catch(err){
       console.error("Debug export failed",err);btn.textContent="Retry";btn.disabled=false;delete btn.dataset.dtExportBusy;
+      if(status())status().textContent=`Export failed · ${err?.message||err}`;
       try{window.dtHaptics?.warning?.()}catch(_){}
       alert(`Debug export could not be saved. ${err?.message||err}`);
     }
@@ -19892,5 +20043,271 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
 })();
 </script>
 
+
+<style id="dt-v36-phase1-hit-target-css">
+/* V36.1 Phase 1 — real-device hit target hardening */
+.exercise-chevron,.dt-progress-open,#dtScheduledTodayBadge button,#chatHandle{
+  position:relative;
+  z-index:4;
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+}
+.exercise-chevron{min-width:48px!important;min-height:48px!important}
+.dt-progress-open{min-width:64px;min-height:44px;padding:10px 8px!important}
+#dtScheduledTodayBadge button{min-width:44px!important;min-height:44px!important;padding:8px 10px!important}
+#chatHandle{min-width:36px!important;min-height:48px!important}
+#dtExerciseProgressModal.dt-phase1-opening .dt-px-sheet{opacity:0}
+#dtExerciseProgressModal .dt-px-sheet{transition:opacity .12s ease}
+@media(prefers-reduced-motion:reduce){#dtExerciseProgressModal .dt-px-sheet{transition:none}}
+</style>
+<script id="dt-v36-phase1-progress-stabilizer">
+(()=>{
+  "use strict";
+  // Progress is decorated by several legacy modules after open. Keep the sheet hidden for the short
+  // decoration window so Android does not show the 0→50→120→230 ms layout-growth flash seen in J3.
+  document.addEventListener("click",e=>{
+    if(!e.target?.closest?.(".dt-progress-open"))return;
+    const modal=document.getElementById("dtExerciseProgressModal");
+    if(!modal)return;
+    modal.classList.add("dt-phase1-opening");
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      setTimeout(()=>{
+        modal.classList.remove("dt-phase1-opening");
+        modal.querySelector(".dt-px-sheet")?.scrollTo?.({top:0,behavior:"auto"});
+      },240);
+    }));
+  },true);
+  window.DT_V36_PHASE1_FIX_VERSION="36.1-phase1-debug-fixes";
+})();
+</script>
+
+<style id="dt-v36-phase2-handoff-layout-css">
+/* V36.2 Phase 2 — user-reported mobile layout fixes from the master handoff. */
+html,body{overscroll-behavior-y:auto!important;touch-action:pan-y pinch-zoom!important}
+#workout,#history,#stats,#settings,#coach{overflow:visible!important;contain:none!important}
+.dt-v27-return-row{
+  position:sticky!important;
+  top:max(6px,env(safe-area-inset-top,0px))!important;
+  z-index:500!important;
+  align-self:flex-start!important;
+  transform:none!important;
+}
+.dt-v27-return-row .dt-v27-home-back{transform:none!important}
+.dt-v27-viewport{contain:layout!important}
+
+/* Keep Add Split available even when the tab strip is wide. */
+#workout .workout-tabs{scroll-snap-type:none!important;overscroll-behavior-x:contain!important;scroll-behavior:auto!important}
+#dtAddSplitBtn{
+  position:sticky!important;right:0!important;z-index:20!important;
+  flex:0 0 50px!important;width:50px!important;min-width:50px!important;min-height:46px!important;
+  margin-left:2px!important;background:#081820!important;
+  box-shadow:-12px 0 18px rgba(3,16,24,.88),0 0 0 1px rgba(85,191,255,.04)!important;
+}
+
+/* Readable, stable recovery/dashboard bars on real phone widths. */
+.dt-v27-recovery-row{grid-template-columns:minmax(82px,1fr) minmax(76px,1.25fr) 42px minmax(74px,auto)!important;gap:7px!important}
+.dt-v27-recovery-name{font-size:10px!important;line-height:1.15!important}
+.dt-v27-recovery-track{height:4px!important}
+.dt-v27-recovery-pct{font-size:11px!important;font-weight:900!important;color:#b8c8ce!important}
+.dt-v27-recovery-left{font-size:9px!important;line-height:1.1!important;color:#8098a3!important}
+.dt-v27-recovery-row.ready .dt-v27-recovery-left{color:#66dda5!important;font-weight:850!important}
+.dt-v27-recovery-section-label{margin-top:14px;color:#7b919c;font:850 8px/1 system-ui;letter-spacing:.11em;text-transform:uppercase}
+.dt-v27-recovery-section-label.ready{color:#61dba4}
+.dt-v27-recovery-ready-list{margin-top:8px!important}
+
+/* The user reported bar flashes. These nodes are frequently rebuilt; width animation restarts on each rebuild. */
+.dt-v27-recovery-fill,.dt-v27-activity-track i,.dt-g-progress-fill,.dt-wp-fill{
+  transition:none!important;will-change:auto!important;backface-visibility:hidden;
+}
+@media(max-width:420px){
+  .dt-v27-recovery-row{grid-template-columns:minmax(72px,1fr) minmax(62px,1fr) 38px minmax(68px,auto)!important;gap:5px!important}
+  .dt-v27-recovery-left{font-size:8px!important}
+}
+@media(max-width:350px){
+  .dt-v27-recovery-row{grid-template-columns:minmax(66px,1fr) minmax(54px,1fr) 36px minmax(62px,auto)!important}
+}
+</style>
+<script id="dt-v36-phase2-scroll-stability-js">
+(()=>{
+  "use strict";
+  const V="36.2-phase2-handoff-layout";
+  let ro=null,lastHeight=0,raf=0;
+  function activePane(){return document.querySelector('#dtV27Viewport .dt-v27-pane[aria-hidden="false"]')||document.querySelector('#dtV27Viewport .dt-v27-pane[data-pane="1"]')}
+  function sync(){
+    cancelAnimationFrame(raf);
+    raf=requestAnimationFrame(()=>{
+      const vp=document.getElementById("dtV27Viewport"),pane=activePane();if(!vp||!pane)return;
+      const h=Math.max(1,Math.ceil(pane.scrollHeight));
+      if(Math.abs(h-lastHeight)>1){vp.style.height=`${h}px`;lastHeight=h}
+    });
+  }
+  function observe(){
+    ro?.disconnect?.();
+    const pane=activePane();if(!pane||typeof ResizeObserver!=="function")return;
+    ro=new ResizeObserver(sync);ro.observe(pane);sync();
+  }
+  const mo=new MutationObserver(records=>{
+    if(records.some(r=>r.target?.closest?.("#dtV27Viewport")||[...r.addedNodes||[]].some(n=>n instanceof Element&&n.closest?.("#dtV27Viewport")))){observe()}
+  });
+  function boot(){
+    const vp=document.getElementById("dtV27Viewport");if(vp){observe();mo.observe(vp,{subtree:true,childList:true,attributes:true,attributeFilter:["aria-hidden","class"]})}
+  }
+  document.readyState==="loading"?document.addEventListener("DOMContentLoaded",boot,{once:true}):boot();
+  addEventListener("resize",sync,{passive:true});
+  document.addEventListener("click",e=>{if(e.target?.closest?.(".dt-v27-pager button,.dt-v27-launcher,.dt-v27-home-back,.dt-v27-recovery-row"))setTimeout(observe,35)},true);
+  window.DT_V36_PHASE2_FIX_VERSION=V;
+  window.DT_MARC_RELEASE_FIX_VERSION=V;
+})();
+</script>
+<script>window.DT_MARC_RELEASE_FIX_VERSION="36.2-phase2-handoff-layout";</script>
+
+
+<style id="dt-v36-3-phase3-css">
+.dt-debug-export-status{display:block;margin-top:5px!important;max-width:310px;line-height:1.35!important;color:#7f98a4!important}
+.exercise-chevron[aria-expanded="true"]{transform:rotate(180deg)!important}
+</style>
+<script id="dt-v36-3-phase3-js">
+window.DT_MARC_PHASE3_FIX_VERSION="36.3-phase3-reliability";
+</script>
+
+<script id="dt-v36-4-phase4-state-integrity-js">
+(()=>{
+  "use strict";
+  window.DT_PHASE4_STATE_INTEGRITY_VERSION="36.4-state-integrity";
+})();
+</script>
+
+<style id="dt-v36-phase5-mobile-hit-css">
+/* V36.5 Phase 5 — harden exact real-device controls that produced occlusion mismatches in J3. */
+#workout .workout-tab,
+#workout .exname.has-muscle-detail,
+#workout .exercise-chevron,
+#workout .dt-progress-open,
+#today .dt-skip-button,
+#dtScheduledTodayBadge button,
+#settings #dtClearDebugData,
+#history .dt-hv2-week-head{
+  position:relative;z-index:5;touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+}
+#workout .workout-tab{min-height:48px!important}
+#workout .exname.has-muscle-detail{min-height:44px!important;padding:7px 4px!important;border-radius:10px!important}
+#today .dt-skip-button{height:44px!important;min-height:44px!important;min-width:58px!important}
+#settings #dtClearDebugData{min-height:46px!important;padding-top:11px!important;padding-bottom:11px!important}
+#history .dt-hv2-week-head{min-height:58px!important}
+#dtScheduledTodayBadge{position:relative;z-index:6}
+</style>
+<script id="dt-v36-phase5-touch-recovery">
+(()=>{
+  "use strict";
+  const SELECTORS=[
+    "#history .dt-hv2-week-head",
+    "#workout .workout-tab",
+    "#workout .exname.has-muscle-detail",
+    "#workout .exercise-chevron",
+    "#workout .dt-progress-open",
+    "#settings #dtClearDebugData",
+    "#today .dt-skip-button",
+    "#dtScheduledTodayBadge button"
+  ].join(",");
+  let active=null,lastNativeClickAt=0,lastNativeTarget=null;
+  const pointCandidate=(x,y)=>{
+    const direct=document.elementFromPoint(x,y)?.closest?.(SELECTORS);
+    if(direct)return direct;
+    let best=null,bestD=1e9;
+    document.querySelectorAll(SELECTORS).forEach(el=>{
+      const r=el.getBoundingClientRect();
+      if(!r.width||!r.height)return;
+      const pad=10;
+      if(x<r.left-pad||x>r.right+pad||y<r.top-pad||y>r.bottom+pad)return;
+      const cx=Math.max(r.left,Math.min(x,r.right)),cy=Math.max(r.top,Math.min(y,r.bottom));
+      const d=Math.hypot(x-cx,y-cy);
+      if(d<bestD){best=el;bestD=d}
+    });
+    return best;
+  };
+  document.addEventListener("click",e=>{
+    const t=e.target?.closest?.(SELECTORS);
+    if(t){lastNativeClickAt=performance.now();lastNativeTarget=t}
+  },true);
+  document.addEventListener("pointerdown",e=>{
+    if(e.pointerType!=="touch")return;
+    const t=e.target?.closest?.(SELECTORS)||pointCandidate(e.clientX,e.clientY);
+    if(!t)return;
+    active={id:e.pointerId,target:t,x:e.clientX,y:e.clientY,t:performance.now()};
+  },true);
+  document.addEventListener("pointerup",e=>{
+    const a=active;active=null;
+    if(!a||a.id!==e.pointerId||e.pointerType!=="touch")return;
+    const dist=Math.hypot(e.clientX-a.x,e.clientY-a.y);
+    if(dist>14||performance.now()-a.t>650)return;
+    const target=a.target;
+    setTimeout(()=>{
+      const nativeRecent=lastNativeTarget===target && performance.now()-lastNativeClickAt<220;
+      if(nativeRecent||!target.isConnected||target.disabled)return;
+      // Android WebView occasionally ends a small tap on the parent after a layout/scroll sample.
+      // Recover only the original known control, and only when no native click arrived.
+      target.click();
+      try{window.dtDebuggerJ2?.snapshot?.("phase5_touch_recovered",{path:target.id||target.className||target.tagName})}catch(_){}
+    },90);
+  },true);
+  document.addEventListener("pointercancel",()=>{active=null},true);
+  window.DT_V36_PHASE5_FIX_VERSION="36.5-phase5-mobile-hit-hardening";
+})();
+</script>
+
+<!-- M/ARC V36.6 Phase 6 — release/cache/APK parity checkpoint -->
+<script id="dt-v36-phase6-release-marker">
+window.DT_MARC_RELEASE_FIX_VERSION="36.6-phase6-release-integrity";
+window.DT_V36_PHASE6_FIX_VERSION="36.6-phase6-release-integrity";
+</script>
+<style id="dt-v36-phase6-mobile-edge-css">
+/* Clip only root-level rounding overflow; internal horizontal split navigation keeps its own scrolling. */
+#workout{max-width:100%;overflow-x:clip}
+#workout .workout-card,#workout #wlist,#workout .exercise{min-width:0;max-width:100%;box-sizing:border-box}
+/* Current three-position pager is the explicit discoverability cue for the Home carousel. */
+.dt-v27-pager{position:relative}
+.dt-v27-pager::after{content:"SWIPE";position:absolute;right:8px;bottom:-10px;color:#526b77;font:800 6px/1 system-ui;letter-spacing:.13em;opacity:.52;pointer-events:none}
+@media(max-width:359px){.dt-v27-pager::after{right:6px}}
+@media(prefers-reduced-motion:reduce){.dt-v27-pager::after{display:none}}
+</style>
+
+
+<script id="dt-v36-p7-haptic-reminder-health">
+(()=>{
+  "use strict";
+  const V="36.7-phase7-haptic-reminder-health";
+  const row=document.querySelector(".dt-haptic-setting");
+  const toggle=document.getElementById("dtHapticToggle");
+  if(row && !document.getElementById("dtHapticHealth")){
+    const box=document.createElement("div");box.id="dtHapticHealth";box.className="dt-haptic-health";
+    box.innerHTML='<button id="dtHapticTest" type="button">Test haptic</button><small id="dtHapticStatus">Checking native haptics…</small>';
+    row.appendChild(box);
+    const status=box.querySelector("#dtHapticStatus"),test=box.querySelector("#dtHapticTest");
+    const native=()=>{try{return window.Capacitor?.Plugins?.Haptics||null}catch(_){return null}};
+    function refresh(){
+      const hasNative=!!native()?.impact,hasWeb=typeof navigator.vibrate==="function";
+      status.textContent=hasNative?"Native Android haptics ready":hasWeb?"Web vibration fallback only":"Haptic API unavailable in this build";
+      status.dataset.mode=hasNative?"native":hasWeb?"web":"none";
+    }
+    test.onclick=async()=>{
+      if(!window.dtHaptics?.enabled){window.dtHaptics?.setEnabled?.(true);}
+      test.disabled=true;test.textContent="Testing…";
+      let ok=false;
+      try{ok=await window.dtHaptics?.medium?.()}catch(_){}
+      refresh();
+      status.textContent=ok?`${status.textContent} · test sent`:`${status.textContent} · no feedback API responded`;
+      setTimeout(()=>{test.disabled=false;test.textContent="Test haptic"},700);
+    };
+    toggle?.addEventListener("click",()=>setTimeout(refresh,80));
+    setTimeout(refresh,350);
+  }
+  window.DT_HAPTIC_REMINDER_HEALTH_VERSION=V;
+})();
+</script>
+<style id="dt-v36-p7-haptic-reminder-health-css">
+.dt-haptic-setting{flex-wrap:wrap}.dt-haptic-health{width:100%;display:flex;align-items:center;gap:9px;margin-top:8px}.dt-haptic-health button{min-height:40px;padding:8px 12px;border:1px solid #2b4a59;border-radius:12px;background:#0b1c26;color:#dce9ee;font:800 9px system-ui}.dt-haptic-health small{color:#78909d;font:600 8px/1.35 system-ui}
+</style>
+<script>window.DT_MARC_RELEASE_FIX_VERSION="36.7-phase7-haptic-reminder-health";</script>
+<script>window.DT_MARC_RELEASE_FIX_VERSION="36.8-phase8-training-brief-deep-regression";</script>
 </body>
 </html>
