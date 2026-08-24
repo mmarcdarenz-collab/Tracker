@@ -39,10 +39,14 @@ jobs:
           test -f www/index.html
           test -f package.json
           test -f capacitor.config.json
+          test -f native/HealthConnectNativePlugin.java
+          test -f native/MainActivity.java
+          test -f native/PermissionsRationaleActivity.java
+          test -f native/patch_manifest.py
           python3 - <<'PY'
           from pathlib import Path
           import hashlib, json
-          expected = "df95ae6688dae050ce4e9210349498fbcef99ca42b51aebb77424f94d74beae7"
+          expected = "5563acffb233fdfc69fce97d3d6eb0972fbcdfeda92c3d833fc209f8b2e7fe66"
           for name in ("package.json", "capacitor.config.json"):
               json.loads(Path(name).read_text())
               print(f"{name}: JSON parse PASS")
@@ -95,11 +99,11 @@ jobs:
           echo "Capacitor major: $CAP_MAJOR"
           # cap sync inspects package.json when includePlugins is not explicitly configured.
           # Save these dependencies in the ephemeral Actions workspace so plugin discovery is deterministic.
-          npm install --save-exact --package-lock=false "@capacitor/local-notifications@$CAP_MAJOR" "@capacitor/filesystem@$CAP_MAJOR" "@capacitor/share@$CAP_MAJOR"
+          npm install --save-exact --package-lock=false "@capacitor/local-notifications@$CAP_MAJOR" "@capacitor/filesystem@$CAP_MAJOR" "@capacitor/share@$CAP_MAJOR" "@capacitor/haptics@$CAP_MAJOR"
           node - <<'NODE'
           const pkg=require('./package.json');
           const coreMajor=require('./node_modules/@capacitor/core/package.json').version.split('.')[0];
-          for(const name of ['@capacitor/local-notifications','@capacitor/filesystem','@capacitor/share']){
+          for(const name of ['@capacitor/local-notifications','@capacitor/filesystem','@capacitor/share','@capacitor/haptics']){
             const declared=pkg.dependencies?.[name]||pkg.devDependencies?.[name];
             if(!declared)throw new Error(`${name} is not declared in package.json after install`);
             const installed=require(`./node_modules/${name}/package.json`).version;
@@ -111,17 +115,56 @@ jobs:
       - name: Create Android project
         run: npx cap add android
 
+      - name: Set Android minSdk for Health Connect
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          variables = Path("android/variables.gradle")
+          if not variables.exists():
+              raise SystemExit("android/variables.gradle not found")
+          s = variables.read_text()
+          s2, n = re.subn(r'(minSdkVersion\s*=\s*)\d+', r'\g<1>26', s)
+          if n == 0:
+              raise SystemExit("minSdkVersion not found in android/variables.gradle")
+          variables.write_text(s2)
+
+          app_gradle = Path("android/app/build.gradle")
+          if app_gradle.exists():
+              s = app_gradle.read_text()
+              s = re.sub(r'(?m)^(\s*minSdk(?:Version)?\s+)\d+\s*$', r'\g<1>26', s)
+              app_gradle.write_text(s)
+          PY
+
+      - name: Add Health Connect SDK dependency
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path("android/app/build.gradle")
+          s = p.read_text()
+          dep = 'implementation "androidx.health.connect:connect-client:1.1.0"'
+          if dep not in s:
+              m = re.search(r'dependencies\s*\{', s)
+              if not m:
+                  raise SystemExit("dependencies block not found in android/app/build.gradle")
+              pos = m.end()
+              s = s[:pos] + "\n    " + dep + s[pos:]
+              p.write_text(s)
+          PY
+
       - name: Sync web app
         run: npx cap sync android
 
-      - name: Verify exact V36.15 web bundle copied into Android assets
+      - name: Verify exact V36.7 web bundle copied into Android assets
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           import hashlib
-          expected = "df95ae6688dae050ce4e9210349498fbcef99ca42b51aebb77424f94d74beae7"
-          marker = 'window.DT_MARC_RELEASE_FIX_VERSION="36.15-phase15-authoritative-workout-split-state"'
+          expected = "5563acffb233fdfc69fce97d3d6eb0972fbcdfeda92c3d833fc209f8b2e7fe66"
+          marker = 'window.DT_MARC_RELEASE_FIX_VERSION="36.7-phase7-haptic-reminder-health"'
           source = Path("www/index.html")
           bundled = Path("android/app/src/main/assets/public/index.html")
           if not bundled.exists():
@@ -137,13 +180,20 @@ jobs:
           if source_bytes != bundled_bytes:
               raise SystemExit("Android bundled index.html is not byte-for-byte identical to www/index.html")
           if marker.encode() not in bundled_bytes:
-              raise SystemExit("V36.15 Phase 15 APK sync marker missing from Android bundled index.html")
-          print(f"Android bundled index.html exact V36.15 SHA256 PASS: {bundled_hash}")
-          print("V36.15 Phase 15 APK sync marker PASS")
+              raise SystemExit("V36.7 Phase 7 APK sync marker missing from Android bundled index.html")
+          print(f"Android bundled index.html exact V36.7 SHA256 PASS: {bundled_hash}")
+          print("V36.7 Phase 7 APK sync marker PASS")
           PY
 
-      - name: Preserve precise rest notification permission
+      - name: Install Health Connect native bridge
         run: |
+          set -euo pipefail
+          PKG="android/app/src/main/java/com/mrcdrnzz/dailytracker"
+          mkdir -p "$PKG"
+          cp native/HealthConnectNativePlugin.java "$PKG/HealthConnectNativePlugin.java"
+          cp native/MainActivity.java "$PKG/MainActivity.java"
+          cp native/PermissionsRationaleActivity.java "$PKG/PermissionsRationaleActivity.java"
+          python3 native/patch_manifest.py android/app/src/main/AndroidManifest.xml
           python3 - <<'PY'
           from pathlib import Path
           p=Path("android/app/src/main/AndroidManifest.xml")
@@ -177,21 +227,25 @@ jobs:
           print(f"Configured Android versionCode={code}, versionName={name}")
           PY
 
-      - name: Verify notification/filesystem/share native setup
+      - name: Verify Health Connect and version setup
         env:
           VERSION_NAME: ${{ inputs.version_name }}
           VERSION_CODE: ${{ inputs.version_code }}
         run: |
           set -euo pipefail
+          grep -n 'minSdkVersion' android/variables.gradle
+          grep -n 'androidx.health.connect:connect-client:1.1.0' android/app/build.gradle
+          grep -n 'registerPlugin(HealthConnectNativePlugin.class)' android/app/src/main/java/com/mrcdrnzz/dailytracker/MainActivity.java
+          grep -n 'android.permission.health.READ_SLEEP' android/app/src/main/AndroidManifest.xml
           grep -n 'android.permission.SCHEDULE_EXACT_ALARM' android/app/src/main/AndroidManifest.xml
           test -f android/app/src/main/assets/capacitor.plugins.json
           grep -qi 'LocalNotifications' android/app/src/main/assets/capacitor.plugins.json
           grep -qi 'Filesystem' android/app/src/main/assets/capacitor.plugins.json
           grep -qi 'Share' android/app/src/main/assets/capacitor.plugins.json
-          if grep -qi 'HealthConnect' android/app/src/main/assets/capacitor.plugins.json; then
-            echo "Retired Health Connect plugin unexpectedly present" >&2; exit 1;
-          fi
-          echo "Notifications + Filesystem + Share native plugin registry PASS; Health Connect retired"
+          grep -qi 'Haptics' android/app/src/main/assets/capacitor.plugins.json
+          echo "Local Notifications + Filesystem + Share + Haptics native plugin registry PASS"
+          grep -n "versionCode $VERSION_CODE" android/app/build.gradle
+          grep -n "versionName \"$VERSION_NAME\"" android/app/build.gradle
 
       - name: Build unsigned release APK
         run: |
@@ -206,8 +260,8 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import hashlib, zipfile
-          expected = "df95ae6688dae050ce4e9210349498fbcef99ca42b51aebb77424f94d74beae7"
-          marker = b'window.DT_MARC_RELEASE_FIX_VERSION="36.15-phase15-authoritative-workout-split-state"'
+          expected = "5563acffb233fdfc69fce97d3d6eb0972fbcdfeda92c3d833fc209f8b2e7fe66"
+          marker = b'window.DT_MARC_RELEASE_FIX_VERSION="36.7-phase7-haptic-reminder-health"'
           candidates = [
               Path("android/app/build/outputs/apk/release/app-release-unsigned.apk"),
               Path("android/app/build/outputs/apk/release/app-release.apk"),
@@ -283,8 +337,8 @@ jobs:
           from pathlib import Path
           import hashlib, sys, zipfile
           apk = Path(sys.argv[1])
-          expected = "df95ae6688dae050ce4e9210349498fbcef99ca42b51aebb77424f94d74beae7"
-          marker = b'window.DT_MARC_RELEASE_FIX_VERSION="36.15-phase15-authoritative-workout-split-state"'
+          expected = "5563acffb233fdfc69fce97d3d6eb0972fbcdfeda92c3d833fc209f8b2e7fe66"
+          marker = b'window.DT_MARC_RELEASE_FIX_VERSION="36.7-phase7-haptic-reminder-health"'
           with zipfile.ZipFile(apk) as z:
               name = "assets/public/index.html"
               if name not in z.namelist():
@@ -294,7 +348,7 @@ jobs:
           if actual != expected:
               raise SystemExit(f"Signed APK embedded index.html mismatch: expected {expected}, got {actual}")
           if marker not in data:
-              raise SystemExit("V36.15 Phase 15 marker missing inside signed APK")
+              raise SystemExit("V36.7 Phase 7 marker missing inside signed APK")
           print(f"Signed APK embedded V36 index.html SHA256 PASS: {actual}")
           print("Signed APK V36 marker PASS")
           PY
