@@ -1505,6 +1505,15 @@ main,.app,.app-shell,#app{
 @media(max-width:720px){.dt-training-brief-card{grid-column:1}.dt-training-brief-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:340px){.dt-training-brief-grid{grid-template-columns:1fr}.dt-training-brief-grid b{white-space:normal}}
 </style>
+
+<style id="dt-v36-9-phase9-css">
+/* V36.9: authoritative Today Training Brief + real-device Home tab target hardening */
+.dt-v27-training-brief{margin-top:14px;padding:14px;border:1px solid rgba(82,211,166,.16);border-radius:18px;background:linear-gradient(145deg,rgba(14,38,45,.72),rgba(7,24,33,.76))}
+.dt-v27-training-brief-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}.dt-v27-training-brief-head small,.dt-v27-training-brief-action small{color:#6f8e9a;font:800 9px/1.2 system-ui;letter-spacing:.12em}.dt-v27-training-brief-head b{max-width:62%;color:#eaf7f5;font:800 12px/1.25 system-ui;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dt-v27-training-brief-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.dt-v27-training-brief-grid>div{padding:10px 8px;border:1px solid rgba(110,151,166,.13);border-radius:13px;background:rgba(3,16,24,.32);text-align:center}.dt-v27-training-brief-grid small{display:block;color:#718b96;font:750 8px/1.2 system-ui;text-transform:uppercase;letter-spacing:.08em}.dt-v27-training-brief-grid b{display:block;margin-top:4px;color:#f0f8f7;font:850 18px/1 system-ui}.dt-v27-training-brief-grid span{display:block;margin-top:4px;color:#6ed7a6;font:700 8px/1.2 system-ui}
+.dt-v27-training-brief-action{margin-top:10px;padding:10px 11px;border-radius:12px;background:rgba(4,18,26,.42)}.dt-v27-training-brief-action b{display:block;margin-top:5px;color:#a9bec6;font:650 10px/1.45 system-ui}
+#dtHomeV27 .dt-v27-pager button{min-height:44px!important;padding-block:10px!important;touch-action:manipulation}
+</style>
 </head>
 <body>
 <div id="dtStartupGate" aria-hidden="true"><div class="dt-startup-mark">M/ARC</div></div>
@@ -14239,9 +14248,16 @@ nav.dt-v10-nav button.dt-log[data-rest-active="1"]::after{
       try{
         switchView("today");
         setTimeout(()=>{
+          /* V36.9: Training Body now lives inside Home dashboard page 0.
+             Returning to the Today view alone leaves that pane off-screen. */
+          const bodyTab=document.querySelector('#dtHomeV27 .dt-v27-pager button[data-page="0"]');
+          if(bodyTab)bodyTab.click();
           window.dtRenderBodyCard?.();
-          document.getElementById("dtTBCard")?.scrollIntoView({behavior:"smooth",block:"start"});
-        },130);
+          setTimeout(()=>{
+            const card=document.getElementById("dtTBCard")||document.getElementById("dtV27RecoverySummary");
+            card?.scrollIntoView({behavior:"smooth",block:"start"});
+          },90);
+        },160);
       }catch(_){}
     }else{
       try{switchView("today");window.dtRenderBodyCard?.()}catch(_){}
@@ -17443,8 +17459,15 @@ body:has(#today.view.active) #dtRestGlobal{display:none!important}
   }
   function renderTodayHero(){
     const host=document.getElementById("dtV27TodayHero");if(!host)return;
-    const t=todayState(),h=healthData(),live=t.kind==="live",actions=live?"":`<div class="dt-v27-hero-actions"><button class="dt-v27-primary" type="button" id="dtV27PrimaryAction">${svg.play}<span>${esc(t.cta)}</span></button>${t.kind==="done"?'<button class="dt-v27-secondary" type="button" id="dtV27SummaryAction">Summary</button>':""}</div>`;
-    const lower=live?quickLogMarkup(t.day):`<div class="dt-v27-health"><div class="dt-v27-health-stat"><small>Sleep</small><b>${esc(h.sleep)}</b></div><div class="dt-v27-health-stat"><small>Heart rate</small><b>${esc(h.hr)}</b></div><div class="dt-v27-health-stat"><small>Steps</small><b>${esc(h.steps)}</b></div><div class="dt-v27-health-stat"><small>Active</small><b>${esc(h.cal)}</b></div></div><div class="dt-v27-health-source"><span class="dt-v27-dot ${h.connected?"on":""}"></span>${h.connected?`${esc(h.provider)} connected`:"Health Connect not connected"}</div>`;
+    const t=todayState(),live=t.kind==="live",actions=live?"":`<div class="dt-v27-hero-actions"><button class="dt-v27-primary" type="button" id="dtV27PrimaryAction">${svg.play}<span>${esc(t.cta)}</span></button>${t.kind==="done"?'<button class="dt-v27-secondary" type="button" id="dtV27SummaryAction">Summary</button>':""}</div>`;
+    const sessions=(state.workouts?.sessions||[]).filter(x=>x?.date).slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+    const weekStart=(()=>{const d=new Date();const diff=(d.getDay()+6)%7;d.setDate(d.getDate()-diff);d.setHours(0,0,0,0);return d.getTime()})();
+    const week=sessions.filter(x=>{const v=new Date(x.date).getTime();return Number.isFinite(v)&&v>=weekStart});
+    const weekSets=week.reduce((n,x)=>n+(Array.isArray(x.snapshot)?x.snapshot:[]).reduce((m,r)=>m+(Array.isArray(r?.sets)?r.sets.filter(z=>z&&((+z.reps||0)>0||(+z.kg||0)>0)).length:0),0),0);
+    let weekPrs=0;try{weekPrs=typeof window.dtWeeklyPerformancePRs==="function"?(window.dtWeeklyPerformancePRs()||[]).length:0}catch(_){}
+    const last=sessions[0],lastName=last?(last.splitName||last.workoutName||dayTitle(last.day)||"Workout"):"No completed session yet";
+    const briefAction=weekPrs?`${weekPrs} PR${weekPrs===1?"":"s"} this week · keep progression small and repeatable`:week.length?"Improve one controllable signal next session":"Complete your next planned workout to build your baseline";
+    const lower=live?quickLogMarkup(t.day):`<div class="dt-v27-training-brief"><div class="dt-v27-training-brief-head"><small>TRAINING BRIEF</small><b>${esc(lastName)}</b></div><div class="dt-v27-training-brief-grid"><div><small>This week</small><b>${week.length}</b><span>workout${week.length===1?"":"s"}</span></div><div><small>Working sets</small><b>${weekSets}</b><span>logged</span></div><div><small>PRs</small><b>${weekPrs}</b><span>this week</span></div></div><div class="dt-v27-training-brief-action"><small>NEXT FOCUS</small><b>${esc(briefAction)}</b></div></div>`;
     host.innerHTML=`<div class="dt-v27-today-top"><div><div class="dt-v27-kicker">TODAY · ${streak()} DAY STREAK</div><div class="dt-v27-workout-name">${esc(t.title)}</div><div class="dt-v27-session-line" data-v27-session-status="${live?esc(sessionStaticStatus()):""}">${live?`STATUS · <b>${esc(sessionStaticStatus())}</b>`:esc(t.sub)}</div></div><span class="dt-v27-status-badge ${t.kind}">${esc(t.label)}</span></div>${actions}${lower}`;
     const primary=host.querySelector("#dtV27PrimaryAction");if(primary)primary.onclick=()=>{if(t.kind==="done"){setPage(0);return}openWorkout(t.day)};
     if(live)bindQuickLog(t.day);
@@ -20308,6 +20331,6 @@ window.DT_V36_PHASE6_FIX_VERSION="36.6-phase6-release-integrity";
 .dt-haptic-setting{flex-wrap:wrap}.dt-haptic-health{width:100%;display:flex;align-items:center;gap:9px;margin-top:8px}.dt-haptic-health button{min-height:40px;padding:8px 12px;border:1px solid #2b4a59;border-radius:12px;background:#0b1c26;color:#dce9ee;font:800 9px system-ui}.dt-haptic-health small{color:#78909d;font:600 8px/1.35 system-ui}
 </style>
 <script>window.DT_MARC_RELEASE_FIX_VERSION="36.7-phase7-haptic-reminder-health";</script>
-<script>window.DT_MARC_RELEASE_FIX_VERSION="36.8-phase8-training-brief-deep-regression";</script>
+<script>window.DT_MARC_RELEASE_FIX_VERSION="36.9-phase9-completion-body-route-authoritative-brief";</script>
 </body>
 </html>
