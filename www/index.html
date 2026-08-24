@@ -165,6 +165,30 @@ h2{margin:0;font-size:22px}
 .setting-row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.06)}
 .setting-row:last-child{border-bottom:0}
 
+.dt-haptic-setting>div{display:flex;flex-direction:column;gap:3px}
+.dt-setting-note{color:#718893;font:650 9px/1.35 system-ui}
+.dt-setting-toggle{
+  flex:0 0 auto;width:46px;height:28px;border-radius:999px;padding:2px;
+  border:1px solid rgba(86,120,138,.62);background:rgba(9,24,32,.88);
+  display:flex;align-items:center;justify-content:flex-start;
+  transition:background-color .18s ease,border-color .18s ease,box-shadow .18s ease;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation
+}
+.dt-setting-toggle-dot{
+  width:22px;height:22px;border-radius:50%;background:#6f848d;
+  box-shadow:0 2px 9px rgba(0,0,0,.32);
+  transform:translateX(0);
+  transition:transform .20s cubic-bezier(.22,.8,.28,1),background-color .18s ease,box-shadow .18s ease
+}
+.dt-setting-toggle[aria-checked="true"]{
+  border-color:rgba(84,224,161,.40);background:rgba(24,83,61,.52);
+  box-shadow:0 0 18px rgba(84,224,161,.08)
+}
+.dt-setting-toggle[aria-checked="true"] .dt-setting-toggle-dot{
+  transform:translateX(18px);background:#62e6a3;
+  box-shadow:0 0 12px rgba(84,224,161,.25),0 2px 9px rgba(0,0,0,.30)
+}
+
 .chat{
   position:fixed;
   right:max(14px,calc((100vw - 560px)/2 + 14px));
@@ -1029,6 +1053,352 @@ nav button.active{color:var(--green);background:#10231a}
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="M/ARC">
 <link rel="manifest" href="manifest.webmanifest">
+
+<style id="dt-v36-p3-motion-css">
+/* =========================================================
+   BASE APP POLISH — PATCH 3
+   Subtle motion + reusable button states.
+   No async action wiring here; Patch 4 will consume the
+   loading/success/error state classes.
+   ========================================================= */
+
+:root{
+  --dt-p3-motion-fast:160ms;
+  --dt-p3-motion-view:190ms;
+  --dt-p3-press-scale:.978;
+}
+
+/* Press state is opt-in at runtime through delegated pointer handling. */
+button.dt-p3-pressed,
+[role="button"].dt-p3-pressed{
+  transform:scale(var(--dt-p3-press-scale))!important;
+  opacity:.94;
+  transition:
+    transform 90ms cubic-bezier(.2,.75,.25,1),
+    opacity 90ms ease!important;
+}
+
+/* Reusable state classes. Patch 4 will wire these to critical async actions. */
+.dt-p3-state-loading{
+  cursor:progress!important;
+  pointer-events:none!important;
+  opacity:.74!important;
+}
+.dt-p3-state-success{
+  border-color:rgba(84,224,161,.48)!important;
+  box-shadow:0 0 0 1px rgba(84,224,161,.06),0 0 18px rgba(84,224,161,.08)!important;
+}
+.dt-p3-state-error{
+  border-color:rgba(239,107,107,.44)!important;
+  box-shadow:0 0 0 1px rgba(239,107,107,.05),0 0 18px rgba(239,107,107,.06)!important;
+}
+
+/*
+  View motion is NOT attached to .view.active globally.
+  JS adds dt-p3-view-enter only to the newly activated destination,
+  then removes it after the transition.
+*/
+.view.dt-p3-view-enter{
+  animation:dtP3ViewEnter var(--dt-p3-motion-view) cubic-bezier(.22,.8,.25,1)!important;
+}
+@keyframes dtP3ViewEnter{
+  from{opacity:.12;transform:translateY(5px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+/* Small glass feedback for destination panels / sheets when explicitly activated. */
+.dt-p3-surface-enter{
+  animation:dtP3SurfaceEnter var(--dt-p3-motion-fast) cubic-bezier(.22,.8,.25,1)!important;
+}
+@keyframes dtP3SurfaceEnter{
+  from{opacity:.35;transform:translateY(3px) scale(.997)}
+  to{opacity:1;transform:none}
+}
+
+@media (prefers-reduced-motion: reduce){
+  :root{
+    --dt-p3-motion-fast:1ms;
+    --dt-p3-motion-view:1ms;
+    --dt-p3-press-scale:1;
+  }
+  .view.dt-p3-view-enter,
+  .dt-p3-surface-enter{
+    animation:none!important;
+  }
+  button.dt-p3-pressed,
+  [role="button"].dt-p3-pressed{
+    transform:none!important;
+    transition:none!important;
+  }
+}
+</style>
+
+
+<style id="dt-v36-p4-feedback-css">
+.dt-p4-feedback{position:relative;isolation:isolate}
+.dt-p4-feedback::after{
+  content:"";width:12px;height:12px;border-radius:50%;
+  border:1.6px solid rgba(222,242,248,.28);
+  border-top-color:rgba(102,238,174,.95);
+  opacity:0;pointer-events:none;flex:0 0 auto
+}
+.dt-p4-feedback.dt-p3-state-loading::after{
+  opacity:1;animation:dtP4Spin .72s linear infinite
+}
+@keyframes dtP4Spin{to{transform:rotate(360deg)}}
+
+.dt-p4-feedback.dt-p3-state-loading{
+  background:linear-gradient(180deg,rgba(15,35,43,.92),rgba(8,23,30,.94))!important;
+  border-color:rgba(89,152,169,.34)!important;color:#b7c8ce!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025),0 0 16px rgba(57,132,152,.055)!important
+}
+.dt-p4-feedback.dt-p3-state-success{
+  background:linear-gradient(180deg,rgba(17,52,40,.90),rgba(8,30,24,.94))!important;
+  color:#8ee8b9!important
+}
+.dt-p4-feedback.dt-p3-state-error{
+  background:linear-gradient(180deg,rgba(55,26,30,.91),rgba(31,15,19,.95))!important;
+  color:#eaa0aa!important
+}
+.dt-p4-mark{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:15px;height:15px;border-radius:50%;margin-right:6px;vertical-align:-2px;
+  border:1px solid currentColor;font:900 9px/1 system-ui;opacity:.88
+}
+@media(prefers-reduced-motion:reduce){
+  .dt-p4-feedback.dt-p3-state-loading::after{animation:none}
+}
+</style>
+
+
+<style id="dt-v36-p5-debug-css">
+.dt-debug-setting>div,.dt-debug-action-copy{display:flex;flex-direction:column;gap:3px}
+.dt-debug-actions{align-items:flex-start}
+.dt-debug-action-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;width:min(100%,390px)
+}
+.dt-debug-action-btn{
+  min-height:40px;border:1px solid #24414b;border-radius:12px;
+  background:linear-gradient(180deg,rgba(10,29,38,.94),rgba(7,21,28,.96));
+  color:#aebfc6;font:800 10px/1.15 system-ui;padding:10px 11px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.02);
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation
+}
+.dt-debug-action-btn:active{transform:scale(.985)}
+.dt-debug-action-btn.danger{
+  border-color:rgba(174,78,88,.42);color:#d8949d;
+  background:linear-gradient(180deg,rgba(48,24,28,.93),rgba(29,15,19,.96))
+}
+@media(max-width:520px){
+  .dt-debug-actions{display:flex;flex-direction:column;gap:10px}
+  .dt-debug-action-grid{width:100%;grid-template-columns:1fr}
+}
+</style>
+
+
+<style id="dt-v36-endurance-d-mobile-css">
+/* =========================================================
+   ENDURANCE FIX D — MOBILE INTERACTION
+   Preserve visual size; improve effective touch geometry and
+   horizontal discoverability.
+   ========================================================= */
+
+/* Workout split strip: keep horizontal scroll, add discoverability. */
+.dt-split-tabs,
+#splitTabs,
+.workout-tabs,
+.tabs.workout-tabs{
+  scroll-behavior:smooth;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-x:contain;
+  scrollbar-width:none;
+}
+.dt-split-tabs::-webkit-scrollbar,
+#splitTabs::-webkit-scrollbar,
+.workout-tabs::-webkit-scrollbar,
+.tabs.workout-tabs::-webkit-scrollbar{display:none}
+
+/* Edge fade hints that more tabs exist horizontally. */
+.dt-mobile-scroll-hint{
+  position:relative;
+}
+.dt-mobile-scroll-hint::before,
+.dt-mobile-scroll-hint::after{
+  content:"";
+  position:absolute;top:0;bottom:0;width:22px;
+  z-index:5;pointer-events:none;opacity:0;
+  transition:opacity .18s ease;
+}
+.dt-mobile-scroll-hint::before{
+  left:0;background:linear-gradient(90deg,rgba(4,14,19,.96),rgba(4,14,19,0))
+}
+.dt-mobile-scroll-hint::after{
+  right:0;background:linear-gradient(270deg,rgba(4,14,19,.96),rgba(4,14,19,0))
+}
+.dt-mobile-scroll-hint.dt-can-scroll-left::before{opacity:1}
+.dt-mobile-scroll-hint.dt-can-scroll-right::after{opacity:1}
+
+/* Common primary/repeated controls: at least ~44px effective height. */
+.dt-v27-home-back,
+.dt-v27-return-row button,
+.dt-debug-action-btn,
+.dt-v27-primary,
+.dt-v27-quick-done,
+.dt-v27-log-set,
+.dt-sched-save,
+.dt-g-save,
+.dt-rem-enable,
+.dt-v30-history-save,
+.dt-summary-action,
+#dtHistoryExportBtn,
+#dtRecoveryExportAction,
+#dtRecoveryExportBtn{
+  min-height:44px!important;
+}
+
+/* Keep the visual switch 28px but make its button hit-area ≥44px. */
+#dtHapticToggle,
+#dtDebugToggle,
+.dt-setting-toggle{
+  min-width:52px!important;
+  min-height:44px!important;
+  padding:8px 3px!important;
+  background-clip:content-box;
+}
+#dtHapticToggle .dt-setting-toggle-dot,
+#dtDebugToggle .dt-setting-toggle-dot,
+.dt-setting-toggle .dt-setting-toggle-dot{
+  flex:0 0 auto;
+}
+
+/* Workout split tab controls */
+#splitTabs button,
+.dt-split-tabs button,
+.workout-tabs button{
+  min-height:44px!important;
+}
+
+/* High-frequency workout micro-controls: visual icon may stay small,
+   but button hit area becomes comfortable. */
+button[id*="Rename"],
+button[class*="rename"],
+button[aria-label*="rename" i],
+button[title*="rename" i],
+button[class*="effort"],
+.dt-effort-btn,
+button[data-effort],
+button[class*="progress"],
+a[class*="progress"],
+button[aria-label*="progress" i]{
+  min-width:44px!important;
+  min-height:44px!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+}
+
+/* Calendar navigation and date targets */
+#historyCalendar button,
+.calendar button,
+.dt-calendar button,
+[class*="calendar"] button{
+  min-width:44px;
+  min-height:44px;
+}
+#historyCalendar [data-date],
+.calendar [data-date],
+.dt-calendar [data-date],
+[class*="calendar"] [data-date]{
+  min-width:44px;
+  min-height:44px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+/* Avoid 1-2px page overflow caused by rounding at 320px. */
+html,body{max-width:100%;overflow-x:hidden}
+.view,.panel,.card,.section{max-width:100%}
+
+/* Keep dense layout visually compact on very narrow devices. */
+@media(max-width:359px){
+  #splitTabs button,
+  .dt-split-tabs button,
+  .workout-tabs button{
+    padding-left:12px!important;
+    padding-right:12px!important;
+  }
+  .dt-debug-action-grid{gap:7px}
+}
+
+/* Reduced motion: scrolling remains functional but instant. */
+@media(prefers-reduced-motion:reduce){
+  .dt-split-tabs,#splitTabs,.workout-tabs,.tabs.workout-tabs{scroll-behavior:auto}
+}
+</style>
+
+
+<style id="dt-v36-endurance-e-carousel-css">
+/* =========================================================
+   ENDURANCE FIX E — TODAY CAROUSEL DISCOVERABILITY
+   Preserve current horizontal interaction. Add restrained
+   M•ARC-style cues that additional panels exist off-screen.
+   ========================================================= */
+
+.dt-today-carousel-hint-wrap{
+  position:relative;
+}
+.dt-today-carousel-hint-wrap::after{
+  content:"";
+  position:absolute;
+  top:0;right:0;bottom:0;
+  width:28px;
+  pointer-events:none;
+  z-index:4;
+  opacity:0;
+  background:linear-gradient(270deg,rgba(4,14,19,.92),rgba(4,14,19,0));
+  transition:opacity .18s ease;
+}
+.dt-today-carousel-hint-wrap.dt-today-can-scroll-right::after{
+  opacity:1;
+}
+.dt-today-carousel-dots{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  min-height:14px;
+  margin:5px auto 0;
+  pointer-events:none;
+}
+.dt-today-carousel-dot{
+  width:5px;height:5px;border-radius:999px;
+  background:rgba(116,145,157,.32);
+  box-shadow:0 0 0 1px rgba(255,255,255,.015);
+  transition:width .18s ease,background-color .18s ease,box-shadow .18s ease;
+}
+.dt-today-carousel-dot.on{
+  width:13px;
+  background:rgba(91,231,163,.74);
+  box-shadow:0 0 10px rgba(91,231,163,.12);
+}
+
+@media(prefers-reduced-motion:reduce){
+  .dt-today-carousel-hint-wrap::after,
+  .dt-today-carousel-dot{transition:none}
+}
+</style>
+
+<style id="dt-v36-endurance-f-recovery-safearea-css">
+.dt-recovery-fill{position:absolute;inset:0 auto 0 0;width:0;border-radius:inherit;background:linear-gradient(90deg,rgba(68,197,151,.72),rgba(91,231,163,.94));box-shadow:0 0 10px rgba(91,231,163,.18);transform-origin:left center;transition:width .72s cubic-bezier(.22,.72,.24,1),opacity .22s ease;pointer-events:none}
+.dt-recovery-track-fixed{position:relative!important;overflow:hidden!important}
+.dt-recovery-track-fixed::after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 1px rgba(255,255,255,.018);pointer-events:none}
+@media(prefers-reduced-motion:reduce){.dt-recovery-fill{transition:none!important}}
+#app,.app,.app-shell,main{--dt-safe-top:env(safe-area-inset-top,0px)}
+.dt-safe-top-brand{transform:translateY(max(0px,var(--dt-safe-top)))!important}
+@supports(padding:max(0px)){body{padding-top:max(0px,env(safe-area-inset-top))!important}}
+.dt-v27-home-back{margin-top:max(6px,env(safe-area-inset-top))!important}
+</style>
 </head>
 <body>
 <div id="dtStartupGate" aria-hidden="true"><div class="dt-startup-mark">M/ARC</div></div>
@@ -1259,6 +1629,38 @@ nav button.active{color:var(--green);background:#10231a}
       <div class="fx-note" id="fxStatus">Rates refresh every 24 hours.</div>
     </div>
     <div class="setting-row"><span>Storage</span><b>On device</b></div>
+
+<div class="setting-row dt-debug-setting">
+  <div>
+    <span>Developer Debug Recorder</span>
+    <small class="dt-setting-note">Private test build · detailed interaction timeline</small>
+  </div>
+  <button id="dtDebugToggle" class="dt-setting-toggle" type="button" role="switch" aria-checked="true">
+    <span class="dt-setting-toggle-dot"></span>
+  </button>
+</div>
+<div class="setting-row dt-debug-actions">
+  <div class="dt-debug-action-copy">
+    <span>Debug & Backup</span>
+    <small class="dt-setting-note">Export before uninstalling or reinstalling</small>
+  </div>
+  <div class="dt-debug-action-grid">
+    <button id="dtExportDebugLog" class="dt-debug-action-btn" type="button">Export Debug Log</button>
+    <button id="dtExportDebugBundle" class="dt-debug-action-btn" type="button">Export Debug Bundle</button>
+    <button id="dtExportAppBackup" class="dt-debug-action-btn" type="button">Export App Backup</button>
+    <button id="dtClearDebugData" class="dt-debug-action-btn danger" type="button">Clear Debug Data</button>
+  </div>
+</div>
+
+    <div class="setting-row dt-haptic-setting">
+      <div>
+        <span>Haptic Feedback</span>
+        <small class="dt-setting-note">Primary actions · private test build</small>
+      </div>
+      <button id="dtHapticToggle" class="dt-setting-toggle" type="button" role="switch" aria-checked="true">
+        <span class="dt-setting-toggle-dot"></span>
+      </button>
+    </div>
     
     <div class="card health-connect-card" style="margin-top:16px">
       <h2 style="font-size:19px;margin-bottom:4px">⌚ Health Integration</h2>
@@ -2968,6 +3370,7 @@ if(confirmMoneyReset)confirmMoneyReset.onclick=()=>{
   renderMoney();
   renderTodayDashboardExtras();
   moneyResetModal.classList.remove("show");
+  return true;
 };
 
 function setDir(dir){
@@ -3143,6 +3546,14 @@ function workoutDayLabel(day){
   if(day==="legs") return "Leg Day";
   return "Workout";
 }
+function historicalWorkoutLabel(record){
+  const stored=String(record?.splitName||record?.workoutName||"").trim();
+  if(stored)return stored;
+  return workoutDayLabel(record?.day);
+}
+function snapshotWorkoutLabel(day){
+  return String(workoutDayLabel(day)||"Workout");
+}
 function workoutDayIcon(day){
   if(day==="push")return "●";
   if(day==="pull")return "●";
@@ -3174,7 +3585,7 @@ function renderWorkoutHistory(){
     return;
   }
 
-  sessions.slice(0,30).forEach(s=>{
+  sessions.forEach(s=>{
     const when=new Date(s.date);
     const exercises=workoutSessionExercises(s);
     const wrap=document.createElement("div");
@@ -3195,7 +3606,7 @@ function renderWorkoutHistory(){
       <div class="workout-history-row">
         <div class="workout-history-icon">${dtEscapeHtml(workoutDayIcon(s.day))}</div>
         <div class="workout-history-main">
-          <b>${dtEscapeHtml(workoutDayLabel(s.day))}</b>
+          <b>${dtEscapeHtml(historicalWorkoutLabel(s))}</b>
           <small>${when.toLocaleDateString("en-AU",{day:"numeric",month:"short",year:"numeric"})} • ${when.toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit",hour12:true})}</small>
         </div>
         <div class="workout-history-right">
@@ -3435,7 +3846,7 @@ document.getElementById("saveEditExercise").onclick=()=>{
   const ei=parseInt(modal.dataset.ei);
   const exercises=effectiveExercises(wday);
   const e=exercises[ei];
-  if(!e)return;
+  if(!e)return false;
   const name=dtCleanUserText(document.getElementById("editExName").value,80)||e[0];
   const type=dtCleanUserText(document.getElementById("editExType").value,60);
   const muscle=dtCleanUserText(document.getElementById("editExMuscle").value,60)||e[2];
@@ -3456,6 +3867,7 @@ document.getElementById("saveEditExercise").onclick=()=>{
   save();
   modal.classList.remove("show");
   renderWorkout();
+  return true;
 };
 
 
@@ -3488,7 +3900,7 @@ saveWorkout.onclick=()=>{
   const d=JSON.parse(JSON.stringify(draft()));
   if(!d.some(e=>e.sets.some(x=>x.kg||x.reps||x.effort))){
     alert("Enter at least one set first.");
-    return;
+    return false;
   }
 
   const snapshot=effectiveExercises(wday).map((e,i)=>({
@@ -3500,6 +3912,8 @@ saveWorkout.onclick=()=>{
   }));
 
   state.workouts.sessions.push({
+    splitName:snapshotWorkoutLabel(wday),
+    workoutName:snapshotWorkoutLabel(wday),
     day:wday,
     date:new Date().toISOString(),
     exercises:d,
@@ -3512,6 +3926,7 @@ saveWorkout.onclick=()=>{
   renderWorkoutHistory();
   renderTodayDashboardExtras();
   alert("Workout finished and saved ✓");
+  return true;
 };
 const DT_EXERCISE_LIBRARY = [{"id":"lib_machine_chest_press","name":"Machine Chest Press","equipment":"Machine","primaryMuscle":"Chest","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[],"aliases":["chest press machine","machine press","seated chest press"],"movementPattern":"horizontal_push","defaultSets":3},{"id":"lib_dumbbell_bench_press","name":"Dumbbell Bench Press","equipment":"Dumbbells","primaryMuscle":"Chest","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[],"aliases":["db bench","dumbbell press","flat dumbbell press"],"movementPattern":"horizontal_push","defaultSets":3},{"id":"lib_barbell_bench_press","name":"Barbell Bench Press","equipment":"Barbell","primaryMuscle":"Chest","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[],"aliases":["bench press","flat bench","bb bench"],"movementPattern":"horizontal_push","defaultSets":3},{"id":"lib_smith_machine_bench_press","name":"Smith Machine Bench Press","equipment":"Smith Machine","primaryMuscle":"Chest","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[],"aliases":["smith bench","smith chest press"],"movementPattern":"horizontal_push","defaultSets":3},{"id":"lib_incline_machine_press","name":"Incline Machine Press","equipment":"Machine","primaryMuscle":"Upper Chest","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","triceps","chest"],"stabilizerMuscles":[],"aliases":["incline chest press machine"],"movementPattern":"incline_push","defaultSets":3},{"id":"lib_incline_dumbbell_press","name":"Incline Dumbbell Press","equipment":"Dumbbells","primaryMuscle":"Upper Chest","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","triceps","chest"],"stabilizerMuscles":[],"aliases":["incline db press","incline dumbbell bench"],"movementPattern":"incline_push","defaultSets":3},{"id":"lib_incline_barbell_bench_press","name":"Incline Barbell Bench Press","equipment":"Barbell","primaryMuscle":"Upper Chest","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","triceps","chest"],"stabilizerMuscles":[],"aliases":["incline bench","incline barbell press"],"movementPattern":"incline_push","defaultSets":3},{"id":"lib_smith_machine_incline_press","name":"Smith Machine Incline Press","equipment":"Smith Machine","primaryMuscle":"Upper Chest","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[],"aliases":["smith incline bench","smith incline press"],"movementPattern":"incline_push","defaultSets":3},{"id":"lib_decline_bench_press","name":"Decline Bench Press","equipment":"Barbell","primaryMuscle":"Chest","primaryMuscles":["chest"],"secondaryMuscles":["triceps","front_delts"],"stabilizerMuscles":[],"aliases":["decline press"],"movementPattern":"horizontal_push","defaultSets":3},{"id":"lib_cable_chest_press","name":"Cable Chest Press","equipment":"Cable","primaryMuscle":"Chest","primaryMuscles":["chest"],"secondaryMuscles":["front_delts","triceps"],"stabilizerMuscles":[],"aliases":["standing cable chest press"],"movementPattern":"horizontal_push","defaultSets":3},{"id":"lib_pec_fly","name":"Pec Fly","equipment":"Machine","primaryMuscle":"Chest","primaryMuscles":["chest"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[],"aliases":["pec deck","machine fly","chest fly machine"],"movementPattern":"chest_adduction","defaultSets":3},{"id":"lib_cable_fly","name":"Cable Fly","equipment":"Cable","primaryMuscle":"Chest","primaryMuscles":["chest"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[],"aliases":["cable chest fly","standing cable fly"],"movementPattern":"chest_adduction","defaultSets":3},{"id":"lib_low_to_high_cable_fly","name":"Low-to-High Cable Fly","equipment":"Cable","primaryMuscle":"Upper Chest","primaryMuscles":["upper_chest"],"secondaryMuscles":["front_delts","chest"],"stabilizerMuscles":[],"aliases":["low high cable fly","upper chest cable fly"],"movementPattern":"chest_adduction","defaultSets":3},{"id":"lib_high_to_low_cable_fly","name":"High-to-Low Cable Fly","equipment":"Cable","primaryMuscle":"Chest","primaryMuscles":["chest"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[],"aliases":["high low cable fly"],"movementPattern":"chest_adduction","defaultSets":3},{"id":"lib_dumbbell_fly","name":"Dumbbell Fly","equipment":"Dumbbells","primaryMuscle":"Chest","primaryMuscles":["chest"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[],"aliases":["db fly","dumbbell chest fly"],"movementPattern":"chest_adduction","defaultSets":3},{"id":"lib_push_up","name":"Push-Up","equipment":"Bodyweight","primaryMuscle":"Chest","primaryMuscles":["chest"],"secondaryMuscles":["triceps","front_delts"],"stabilizerMuscles":["core"],"aliases":["pushup","press up"],"movementPattern":"horizontal_push","defaultSets":3},{"id":"lib_incline_push_up","name":"Incline Push-Up","equipment":"Bodyweight","primaryMuscle":"Chest","primaryMuscles":["chest"],"secondaryMuscles":["triceps","front_delts"],"stabilizerMuscles":["core"],"aliases":["incline pushup"],"movementPattern":"horizontal_push","defaultSets":3},{"id":"lib_weighted_dip","name":"Weighted Dip","equipment":"Dip Station","primaryMuscle":"Chest / Triceps","primaryMuscles":["chest","triceps"],"secondaryMuscles":["front_delts"],"stabilizerMuscles":[],"aliases":["weighted dips","dip"],"movementPattern":"vertical_push","defaultSets":3},{"id":"lib_shoulder_press","name":"Shoulder Press","equipment":"Machine","primaryMuscle":"Shoulders","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps","upper_chest"],"stabilizerMuscles":[],"aliases":["machine shoulder press","overhead press machine"],"movementPattern":"vertical_push","defaultSets":3},{"id":"lib_dumbbell_shoulder_press","name":"Dumbbell Shoulder Press","equipment":"Dumbbells","primaryMuscle":"Shoulders","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[],"aliases":["db shoulder press","dumbbell overhead press"],"movementPattern":"vertical_push","defaultSets":3},{"id":"lib_barbell_overhead_press","name":"Barbell Overhead Press","equipment":"Barbell","primaryMuscle":"Shoulders","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps","upper_chest"],"stabilizerMuscles":["core"],"aliases":["ohp","military press","barbell shoulder press"],"movementPattern":"vertical_push","defaultSets":3},{"id":"lib_smith_machine_shoulder_press","name":"Smith Machine Shoulder Press","equipment":"Smith Machine","primaryMuscle":"Shoulders","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[],"aliases":["smith shoulder press"],"movementPattern":"vertical_push","defaultSets":3},{"id":"lib_arnold_press","name":"Arnold Press","equipment":"Dumbbells","primaryMuscle":"Shoulders","primaryMuscles":["front_delts","side_delts"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[],"aliases":["arnold shoulder press"],"movementPattern":"vertical_push","defaultSets":3},{"id":"lib_dumbbell_lateral_raise","name":"Dumbbell Lateral Raise","equipment":"Dumbbells","primaryMuscle":"Side Delts","primaryMuscles":["side_delts"],"secondaryMuscles":["upper_traps"],"stabilizerMuscles":[],"aliases":["lateral raise","side raise","db lateral raise"],"movementPattern":"shoulder_abduction","defaultSets":3},{"id":"lib_cable_lateral_raise","name":"Cable Lateral Raise","equipment":"Cable","primaryMuscle":"Side Delts","primaryMuscles":["side_delts"],"secondaryMuscles":["upper_traps"],"stabilizerMuscles":[],"aliases":["single arm cable lateral raise"],"movementPattern":"shoulder_abduction","defaultSets":3},{"id":"lib_machine_lateral_raise","name":"Machine Lateral Raise","equipment":"Machine","primaryMuscle":"Side Delts","primaryMuscles":["side_delts"],"secondaryMuscles":["upper_traps"],"stabilizerMuscles":[],"aliases":["lateral raise machine"],"movementPattern":"shoulder_abduction","defaultSets":3},{"id":"lib_dumbbell_front_raise","name":"Dumbbell Front Raise","equipment":"Dumbbells","primaryMuscle":"Front Delts","primaryMuscles":["front_delts"],"secondaryMuscles":["upper_chest"],"stabilizerMuscles":[],"aliases":["front raise","db front raise"],"movementPattern":"shoulder_flexion","defaultSets":3},{"id":"lib_rear_delt_fly","name":"Rear Delt Fly","equipment":"Machine","primaryMuscle":"Rear Delts","primaryMuscles":["rear_delts"],"secondaryMuscles":["mid_back"],"stabilizerMuscles":[],"aliases":["reverse pec deck","rear delt machine fly"],"movementPattern":"horizontal_abduction","defaultSets":3},{"id":"lib_cable_rear_delt_fly","name":"Cable Rear Delt Fly","equipment":"Cable","primaryMuscle":"Rear Delts","primaryMuscles":["rear_delts"],"secondaryMuscles":["mid_back"],"stabilizerMuscles":[],"aliases":["rear delt cable fly"],"movementPattern":"horizontal_abduction","defaultSets":3},{"id":"lib_bent_over_dumbbell_rear_delt_fly","name":"Bent-Over Dumbbell Rear Delt Fly","equipment":"Dumbbells","primaryMuscle":"Rear Delts","primaryMuscles":["rear_delts"],"secondaryMuscles":["mid_back"],"stabilizerMuscles":[],"aliases":["bent over rear delt fly","reverse fly"],"movementPattern":"horizontal_abduction","defaultSets":3},{"id":"lib_face_pull","name":"Face Pull","equipment":"Cable","primaryMuscle":"Rear Delts","primaryMuscles":["rear_delts"],"secondaryMuscles":["mid_back","rotator_cuff"],"stabilizerMuscles":[],"aliases":["rope face pull"],"movementPattern":"horizontal_pull","defaultSets":3},{"id":"lib_upright_row","name":"Upright Row","equipment":"Cable / Barbell","primaryMuscle":"Side Delts / Traps","primaryMuscles":["side_delts","upper_traps"],"secondaryMuscles":["biceps"],"stabilizerMuscles":[],"aliases":["upright cable row","barbell upright row"],"movementPattern":"vertical_pull","defaultSets":3},{"id":"lib_triceps_pushdown","name":"Triceps Pushdown","equipment":"Cable","primaryMuscle":"Triceps","primaryMuscles":["triceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[],"aliases":["tricep pushdown","cable pushdown","pressdown"],"movementPattern":"elbow_extension","defaultSets":3},{"id":"lib_rope_triceps_pushdown","name":"Rope Triceps Pushdown","equipment":"Cable","primaryMuscle":"Triceps","primaryMuscles":["triceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[],"aliases":["rope pushdown","rope pressdown"],"movementPattern":"elbow_extension","defaultSets":3},{"id":"lib_straight_bar_triceps_pushdown","name":"Straight-Bar Triceps Pushdown","equipment":"Cable","primaryMuscle":"Triceps","primaryMuscles":["triceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[],"aliases":["bar pushdown","straight bar pressdown"],"movementPattern":"elbow_extension","defaultSets":3},{"id":"lib_single_arm_triceps_pushdown","name":"Single-Arm Triceps Pushdown","equipment":"Cable","primaryMuscle":"Triceps","primaryMuscles":["triceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[],"aliases":["unilateral pushdown","one arm pushdown"],"movementPattern":"elbow_extension","defaultSets":3},{"id":"lib_overhead_cable_triceps_extension","name":"Overhead Cable Triceps Extension","equipment":"Cable","primaryMuscle":"Triceps","primaryMuscles":["triceps"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["overhead tricep extension","cable overhead extension"],"movementPattern":"elbow_extension","defaultSets":3},{"id":"lib_dumbbell_overhead_triceps_extension","name":"Dumbbell Overhead Triceps Extension","equipment":"Dumbbell","primaryMuscle":"Triceps","primaryMuscles":["triceps"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["db overhead extension","dumbbell tricep extension"],"movementPattern":"elbow_extension","defaultSets":3},{"id":"lib_skull_crusher","name":"Skull Crusher","equipment":"EZ Bar / Barbell","primaryMuscle":"Triceps","primaryMuscles":["triceps"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["lying tricep extension","ez bar skullcrusher"],"movementPattern":"elbow_extension","defaultSets":3},{"id":"lib_close_grip_bench_press","name":"Close-Grip Bench Press","equipment":"Barbell","primaryMuscle":"Triceps","primaryMuscles":["triceps"],"secondaryMuscles":["chest","front_delts"],"stabilizerMuscles":[],"aliases":["close grip bench","cgbp"],"movementPattern":"horizontal_push","defaultSets":3},{"id":"lib_bench_dip","name":"Bench Dip","equipment":"Bodyweight","primaryMuscle":"Triceps","primaryMuscles":["triceps"],"secondaryMuscles":["front_delts","chest"],"stabilizerMuscles":[],"aliases":["bench dips"],"movementPattern":"vertical_push","defaultSets":3},{"id":"lib_lat_pulldown","name":"Lat Pulldown","equipment":"Cable / Machine","primaryMuscle":"Lats","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":[],"aliases":["wide grip pulldown","lat pull down"],"movementPattern":"vertical_pull","defaultSets":3},{"id":"lib_close_grip_pulldown","name":"Close-Grip Pulldown","equipment":"Cable / Machine","primaryMuscle":"Lats","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":[],"aliases":["neutral grip pulldown","close grip lat pulldown"],"movementPattern":"vertical_pull","defaultSets":3},{"id":"lib_underhand_lat_pulldown","name":"Underhand Lat Pulldown","equipment":"Cable / Machine","primaryMuscle":"Lats","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":[],"aliases":["reverse grip pulldown"],"movementPattern":"vertical_pull","defaultSets":3},{"id":"lib_single_arm_lat_pulldown","name":"Single-Arm Lat Pulldown","equipment":"Cable","primaryMuscle":"Lats","primaryMuscles":["lats"],"secondaryMuscles":["biceps"],"stabilizerMuscles":[],"aliases":["one arm lat pulldown","unilateral pulldown"],"movementPattern":"vertical_pull","defaultSets":3},{"id":"lib_pull_up","name":"Pull-Up","equipment":"Bodyweight","primaryMuscle":"Lats","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":["core"],"aliases":["pullup","wide grip pull up"],"movementPattern":"vertical_pull","defaultSets":3},{"id":"lib_chin_up","name":"Chin-Up","equipment":"Bodyweight","primaryMuscle":"Lats / Biceps","primaryMuscles":["lats","biceps"],"secondaryMuscles":["mid_back"],"stabilizerMuscles":["core"],"aliases":["chinup"],"movementPattern":"vertical_pull","defaultSets":3},{"id":"lib_assisted_pull_up","name":"Assisted Pull-Up","equipment":"Machine","primaryMuscle":"Lats","primaryMuscles":["lats"],"secondaryMuscles":["biceps","mid_back"],"stabilizerMuscles":[],"aliases":["assisted pullup"],"movementPattern":"vertical_pull","defaultSets":3},{"id":"lib_chest_supported_row","name":"Chest-Supported Row","equipment":"Machine","primaryMuscle":"Mid Back","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps","rear_delts"],"stabilizerMuscles":[],"aliases":["chest supported row machine","machine row"],"movementPattern":"horizontal_pull","defaultSets":3},{"id":"lib_seated_cable_row","name":"Seated Cable Row","equipment":"Cable","primaryMuscle":"Mid Back","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps","rear_delts"],"stabilizerMuscles":[],"aliases":["cable row","seated row"],"movementPattern":"horizontal_pull","defaultSets":3},{"id":"lib_barbell_row","name":"Barbell Row","equipment":"Barbell","primaryMuscle":"Mid Back","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps","rear_delts"],"stabilizerMuscles":["lower_back","core"],"aliases":["bent over row","bb row"],"movementPattern":"horizontal_pull","defaultSets":3},{"id":"lib_pendlay_row","name":"Pendlay Row","equipment":"Barbell","primaryMuscle":"Mid Back","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps","rear_delts"],"stabilizerMuscles":["lower_back"],"aliases":["pendlay"],"movementPattern":"horizontal_pull","defaultSets":3},{"id":"lib_one_arm_dumbbell_row","name":"One-Arm Dumbbell Row","equipment":"Dumbbell","primaryMuscle":"Lats","primaryMuscles":["lats"],"secondaryMuscles":["mid_back","biceps"],"stabilizerMuscles":["core"],"aliases":["one arm row","single arm dumbbell row","db row"],"movementPattern":"horizontal_pull","defaultSets":3},{"id":"lib_t_bar_row","name":"T-Bar Row","equipment":"T-Bar / Machine","primaryMuscle":"Mid Back","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps","rear_delts"],"stabilizerMuscles":[],"aliases":["tbar row"],"movementPattern":"horizontal_pull","defaultSets":3},{"id":"lib_landmine_row","name":"Landmine Row","equipment":"Landmine","primaryMuscle":"Mid Back","primaryMuscles":["mid_back"],"secondaryMuscles":["lats","biceps"],"stabilizerMuscles":[],"aliases":["landmine t bar row"],"movementPattern":"horizontal_pull","defaultSets":3},{"id":"lib_straight_arm_pulldown","name":"Straight-Arm Pulldown","equipment":"Cable","primaryMuscle":"Lats","primaryMuscles":["lats"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[],"aliases":["straight arm lat pulldown","cable pullover"],"movementPattern":"shoulder_extension","defaultSets":3},{"id":"lib_machine_pullover","name":"Machine Pullover","equipment":"Machine","primaryMuscle":"Lats","primaryMuscles":["lats"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[],"aliases":["pullover machine"],"movementPattern":"shoulder_extension","defaultSets":3},{"id":"lib_dumbbell_pullover","name":"Dumbbell Pullover","equipment":"Dumbbell","primaryMuscle":"Lats / Chest","primaryMuscles":["lats","chest"],"secondaryMuscles":["triceps"],"stabilizerMuscles":[],"aliases":["db pullover"],"movementPattern":"shoulder_extension","defaultSets":3},{"id":"lib_dumbbell_shrug","name":"Dumbbell Shrug","equipment":"Dumbbells","primaryMuscle":"Traps","primaryMuscles":["upper_traps"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["db shrugs","dumbbell shrugs"],"movementPattern":"scapular_elevation","defaultSets":3},{"id":"lib_barbell_shrug","name":"Barbell Shrug","equipment":"Barbell","primaryMuscle":"Traps","primaryMuscles":["upper_traps"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["bb shrug","barbell shrugs"],"movementPattern":"scapular_elevation","defaultSets":3},{"id":"lib_smith_machine_shrug","name":"Smith Machine Shrug","equipment":"Smith Machine","primaryMuscle":"Traps","primaryMuscles":["upper_traps"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["smith shrug"],"movementPattern":"scapular_elevation","defaultSets":3},{"id":"lib_cable_shrug","name":"Cable Shrug","equipment":"Cable","primaryMuscle":"Traps","primaryMuscles":["upper_traps"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["cable shrugs"],"movementPattern":"scapular_elevation","defaultSets":3},{"id":"lib_back_extension","name":"Back Extension","equipment":"Bodyweight / Machine","primaryMuscle":"Lower Back","primaryMuscles":["lower_back"],"secondaryMuscles":["glutes","hamstrings"],"stabilizerMuscles":[],"aliases":["hyperextension","45 degree back extension"],"movementPattern":"hip_hinge","defaultSets":3},{"id":"lib_dumbbell_biceps_curl","name":"Dumbbell Biceps Curl","equipment":"Dumbbells","primaryMuscle":"Biceps","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[],"aliases":["db biceps curl","dumbbell curl","db curl"],"movementPattern":"elbow_flexion","defaultSets":3},{"id":"lib_alternating_dumbbell_curl","name":"Alternating Dumbbell Curl","equipment":"Dumbbells","primaryMuscle":"Biceps","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[],"aliases":["alternating curl"],"movementPattern":"elbow_flexion","defaultSets":3},{"id":"lib_barbell_curl","name":"Barbell Curl","equipment":"Barbell","primaryMuscle":"Biceps","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[],"aliases":["bb curl"],"movementPattern":"elbow_flexion","defaultSets":3},{"id":"lib_ez_bar_curl","name":"EZ-Bar Curl","equipment":"EZ Bar","primaryMuscle":"Biceps","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[],"aliases":["ez curl","ezbar curl"],"movementPattern":"elbow_flexion","defaultSets":3},{"id":"lib_hammer_curl","name":"Hammer Curl","equipment":"Dumbbells","primaryMuscle":"Brachialis / Biceps","primaryMuscles":["brachialis","biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[],"aliases":["db hammer curl"],"movementPattern":"elbow_flexion","defaultSets":3},{"id":"lib_cross_body_hammer_curl","name":"Cross-Body Hammer Curl","equipment":"Dumbbells","primaryMuscle":"Brachialis / Biceps","primaryMuscles":["brachialis","biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[],"aliases":["cross body curl"],"movementPattern":"elbow_flexion","defaultSets":3},{"id":"lib_cable_curl","name":"Cable Curl","equipment":"Cable","primaryMuscle":"Biceps","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[],"aliases":["cable biceps curl"],"movementPattern":"elbow_flexion","defaultSets":3},{"id":"lib_bayesian_cable_curl","name":"Bayesian Cable Curl","equipment":"Cable","primaryMuscle":"Biceps","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[],"aliases":["bayesian curl"],"movementPattern":"elbow_flexion","defaultSets":3},{"id":"lib_preacher_curl","name":"Preacher Curl","equipment":"Machine / EZ Bar","primaryMuscle":"Biceps","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[],"aliases":["preacher bicep curl"],"movementPattern":"elbow_flexion","defaultSets":3},{"id":"lib_incline_dumbbell_curl","name":"Incline Dumbbell Curl","equipment":"Dumbbells","primaryMuscle":"Biceps","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[],"aliases":["incline curl"],"movementPattern":"elbow_flexion","defaultSets":3},{"id":"lib_concentration_curl","name":"Concentration Curl","equipment":"Dumbbell","primaryMuscle":"Biceps","primaryMuscles":["biceps"],"secondaryMuscles":["forearms"],"stabilizerMuscles":[],"aliases":["concentration biceps curl"],"movementPattern":"elbow_flexion","defaultSets":3},{"id":"lib_reverse_curl","name":"Reverse Curl","equipment":"EZ Bar / Barbell","primaryMuscle":"Forearms / Brachialis","primaryMuscles":["forearms","brachialis"],"secondaryMuscles":["biceps"],"stabilizerMuscles":[],"aliases":["reverse biceps curl"],"movementPattern":"elbow_flexion","defaultSets":3},{"id":"lib_wrist_curl","name":"Wrist Curl","equipment":"Dumbbell / Barbell","primaryMuscle":"Forearms","primaryMuscles":["forearms"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["forearm wrist curl"],"movementPattern":"wrist_flexion","defaultSets":3},{"id":"lib_leg_extension","name":"Leg Extension","equipment":"Machine","primaryMuscle":"Quadriceps","primaryMuscles":["quads"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["leg extensions","quad extension"],"movementPattern":"knee_extension","defaultSets":3},{"id":"lib_seated_leg_curl","name":"Seated Leg Curl","equipment":"Machine","primaryMuscle":"Hamstrings","primaryMuscles":["hamstrings"],"secondaryMuscles":["calves"],"stabilizerMuscles":[],"aliases":["seated hamstring curl","hamstring curl seated"],"movementPattern":"knee_flexion","defaultSets":3},{"id":"lib_lying_leg_curl","name":"Lying Leg Curl","equipment":"Machine","primaryMuscle":"Hamstrings","primaryMuscles":["hamstrings"],"secondaryMuscles":["calves"],"stabilizerMuscles":[],"aliases":["lying hamstring curl","prone leg curl"],"movementPattern":"knee_flexion","defaultSets":3},{"id":"lib_standing_leg_curl","name":"Standing Leg Curl","equipment":"Machine","primaryMuscle":"Hamstrings","primaryMuscles":["hamstrings"],"secondaryMuscles":["calves"],"stabilizerMuscles":[],"aliases":["standing hamstring curl"],"movementPattern":"knee_flexion","defaultSets":3},{"id":"lib_leg_press","name":"Leg Press","equipment":"Plate-Loaded / Machine","primaryMuscle":"Quads / Glutes","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings","calves"],"stabilizerMuscles":[],"aliases":["plate loaded leg press","45 degree leg press"],"movementPattern":"squat","defaultSets":3},{"id":"lib_horizontal_leg_press","name":"Horizontal Leg Press","equipment":"Machine","primaryMuscle":"Quads / Glutes","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":[],"aliases":["seated leg press"],"movementPattern":"squat","defaultSets":3},{"id":"lib_hack_squat","name":"Hack Squat","equipment":"Machine","primaryMuscle":"Quadriceps","primaryMuscles":["quads"],"secondaryMuscles":["glutes","hamstrings"],"stabilizerMuscles":[],"aliases":["hack squat machine"],"movementPattern":"squat","defaultSets":3},{"id":"lib_pendulum_squat","name":"Pendulum Squat","equipment":"Machine","primaryMuscle":"Quadriceps","primaryMuscles":["quads"],"secondaryMuscles":["glutes","hamstrings"],"stabilizerMuscles":[],"aliases":["pendulum"],"movementPattern":"squat","defaultSets":3},{"id":"lib_barbell_back_squat","name":"Barbell Back Squat","equipment":"Barbell","primaryMuscle":"Quadriceps","primaryMuscles":["quads"],"secondaryMuscles":["glutes","hamstrings"],"stabilizerMuscles":["core","lower_back"],"aliases":["back squat","squat"],"movementPattern":"squat","defaultSets":3},{"id":"lib_front_squat","name":"Front Squat","equipment":"Barbell","primaryMuscle":"Quadriceps","primaryMuscles":["quads"],"secondaryMuscles":["glutes"],"stabilizerMuscles":["core"],"aliases":["barbell front squat"],"movementPattern":"squat","defaultSets":3},{"id":"lib_goblet_squat","name":"Goblet Squat","equipment":"Dumbbell / Kettlebell","primaryMuscle":"Quadriceps","primaryMuscles":["quads"],"secondaryMuscles":["glutes"],"stabilizerMuscles":["core"],"aliases":["goblet"],"movementPattern":"squat","defaultSets":3},{"id":"lib_smith_machine_squat","name":"Smith Machine Squat","equipment":"Smith Machine","primaryMuscle":"Quadriceps","primaryMuscles":["quads"],"secondaryMuscles":["glutes","hamstrings"],"stabilizerMuscles":[],"aliases":["smith squat"],"movementPattern":"squat","defaultSets":3},{"id":"lib_bulgarian_split_squat","name":"Bulgarian Split Squat","equipment":"Dumbbells / Barbell","primaryMuscle":"Quads / Glutes","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":["core"],"aliases":["bss","bulgarian squat","split squat"],"movementPattern":"single_leg_squat","defaultSets":3},{"id":"lib_walking_lunge","name":"Walking Lunge","equipment":"Dumbbells / Barbell","primaryMuscle":"Quads / Glutes","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings","calves"],"stabilizerMuscles":["core"],"aliases":["walking lunges"],"movementPattern":"lunge","defaultSets":3},{"id":"lib_reverse_lunge","name":"Reverse Lunge","equipment":"Dumbbells / Barbell","primaryMuscle":"Quads / Glutes","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":["core"],"aliases":["backward lunge"],"movementPattern":"lunge","defaultSets":3},{"id":"lib_forward_lunge","name":"Forward Lunge","equipment":"Dumbbells / Barbell","primaryMuscle":"Quads / Glutes","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":["core"],"aliases":["front lunge"],"movementPattern":"lunge","defaultSets":3},{"id":"lib_step_up","name":"Step-Up","equipment":"Dumbbells / Bodyweight","primaryMuscle":"Quads / Glutes","primaryMuscles":["quads","glutes"],"secondaryMuscles":["hamstrings","calves"],"stabilizerMuscles":["core"],"aliases":["step up"],"movementPattern":"single_leg_squat","defaultSets":3},{"id":"lib_romanian_deadlift","name":"Romanian Deadlift","equipment":"Barbell","primaryMuscle":"Hamstrings","primaryMuscles":["hamstrings"],"secondaryMuscles":["glutes","lower_back"],"stabilizerMuscles":["core"],"aliases":["rdl","barbell rdl"],"movementPattern":"hip_hinge","defaultSets":3},{"id":"lib_dumbbell_romanian_deadlift","name":"Dumbbell Romanian Deadlift","equipment":"Dumbbells","primaryMuscle":"Hamstrings","primaryMuscles":["hamstrings"],"secondaryMuscles":["glutes","lower_back"],"stabilizerMuscles":["core"],"aliases":["db rdl","dumbbell rdl"],"movementPattern":"hip_hinge","defaultSets":3},{"id":"lib_single_leg_romanian_deadlift","name":"Single-Leg Romanian Deadlift","equipment":"Dumbbell / Bodyweight","primaryMuscle":"Hamstrings","primaryMuscles":["hamstrings"],"secondaryMuscles":["glutes"],"stabilizerMuscles":["core"],"aliases":["single leg rdl"],"movementPattern":"hip_hinge","defaultSets":3},{"id":"lib_conventional_deadlift","name":"Conventional Deadlift","equipment":"Barbell","primaryMuscle":"Posterior Chain","primaryMuscles":["hamstrings","glutes","lower_back"],"secondaryMuscles":["quads","lats","upper_traps"],"stabilizerMuscles":["core"],"aliases":["deadlift","conventional dl"],"movementPattern":"hip_hinge","defaultSets":3},{"id":"lib_sumo_deadlift","name":"Sumo Deadlift","equipment":"Barbell","primaryMuscle":"Glutes / Adductors","primaryMuscles":["glutes","adductors"],"secondaryMuscles":["quads","hamstrings","lower_back"],"stabilizerMuscles":["core"],"aliases":["sumo dl"],"movementPattern":"hip_hinge","defaultSets":3},{"id":"lib_hip_thrust","name":"Hip Thrust","equipment":"Barbell / Machine","primaryMuscle":"Glutes","primaryMuscles":["glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":[],"aliases":["barbell hip thrust","machine hip thrust"],"movementPattern":"hip_extension","defaultSets":3},{"id":"lib_glute_bridge","name":"Glute Bridge","equipment":"Bodyweight / Barbell","primaryMuscle":"Glutes","primaryMuscles":["glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":[],"aliases":["bridge"],"movementPattern":"hip_extension","defaultSets":3},{"id":"lib_cable_kickback","name":"Cable Kickback","equipment":"Cable","primaryMuscle":"Glutes","primaryMuscles":["glutes"],"secondaryMuscles":["hamstrings"],"stabilizerMuscles":[],"aliases":["glute kickback","cable glute kickback"],"movementPattern":"hip_extension","defaultSets":3},{"id":"lib_hip_abduction","name":"Hip Abduction","equipment":"Machine","primaryMuscle":"Glutes / Abductors","primaryMuscles":["glutes","abductors"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["abductor machine","hip abductor"],"movementPattern":"hip_abduction","defaultSets":3},{"id":"lib_hip_adduction","name":"Hip Adduction","equipment":"Machine","primaryMuscle":"Adductors","primaryMuscles":["adductors"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["adductor machine","hip adductor"],"movementPattern":"hip_adduction","defaultSets":3},{"id":"lib_seated_calf_raise","name":"Seated Calf Raise","equipment":"Machine","primaryMuscle":"Calves","primaryMuscles":["calves"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["seated calves","calf raise seated"],"movementPattern":"plantar_flexion","defaultSets":3},{"id":"lib_standing_calf_raise","name":"Standing Calf Raise","equipment":"Machine","primaryMuscle":"Calves","primaryMuscles":["calves"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["standing calves","calf raises"],"movementPattern":"plantar_flexion","defaultSets":3},{"id":"lib_leg_press_calf_raise","name":"Leg Press Calf Raise","equipment":"Leg Press","primaryMuscle":"Calves","primaryMuscles":["calves"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["calf press","leg press calves"],"movementPattern":"plantar_flexion","defaultSets":3},{"id":"lib_crunch","name":"Crunch","equipment":"Bodyweight","primaryMuscle":"Abs","primaryMuscles":["abs"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["ab crunch"],"movementPattern":"spinal_flexion","defaultSets":3},{"id":"lib_cable_crunch","name":"Cable Crunch","equipment":"Cable","primaryMuscle":"Abs","primaryMuscles":["abs"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["kneeling cable crunch"],"movementPattern":"spinal_flexion","defaultSets":3},{"id":"lib_machine_crunch","name":"Machine Crunch","equipment":"Machine","primaryMuscle":"Abs","primaryMuscles":["abs"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["ab crunch machine"],"movementPattern":"spinal_flexion","defaultSets":3},{"id":"lib_hanging_leg_raise","name":"Hanging Leg Raise","equipment":"Bodyweight","primaryMuscle":"Abs","primaryMuscles":["abs"],"secondaryMuscles":["hip_flexors"],"stabilizerMuscles":[],"aliases":["hanging leg raises"],"movementPattern":"hip_flexion","defaultSets":3},{"id":"lib_hanging_knee_raise","name":"Hanging Knee Raise","equipment":"Bodyweight","primaryMuscle":"Abs","primaryMuscles":["abs"],"secondaryMuscles":["hip_flexors"],"stabilizerMuscles":[],"aliases":["hanging knee raises"],"movementPattern":"hip_flexion","defaultSets":3},{"id":"lib_reverse_crunch","name":"Reverse Crunch","equipment":"Bodyweight","primaryMuscle":"Abs","primaryMuscles":["abs"],"secondaryMuscles":["hip_flexors"],"stabilizerMuscles":[],"aliases":["reverse ab crunch"],"movementPattern":"spinal_flexion","defaultSets":3},{"id":"lib_plank","name":"Plank","equipment":"Bodyweight","primaryMuscle":"Core","primaryMuscles":["core"],"secondaryMuscles":["abs"],"stabilizerMuscles":["glutes","front_delts"],"aliases":["front plank"],"movementPattern":"anti_extension","defaultSets":3},{"id":"lib_side_plank","name":"Side Plank","equipment":"Bodyweight","primaryMuscle":"Obliques","primaryMuscles":["obliques"],"secondaryMuscles":["core"],"stabilizerMuscles":[],"aliases":["side plank hold"],"movementPattern":"anti_lateral_flexion","defaultSets":3},{"id":"lib_ab_wheel_rollout","name":"Ab Wheel Rollout","equipment":"Ab Wheel","primaryMuscle":"Core","primaryMuscles":["core","abs"],"secondaryMuscles":["lats"],"stabilizerMuscles":["front_delts"],"aliases":["ab rollout","wheel rollout"],"movementPattern":"anti_extension","defaultSets":3},{"id":"lib_russian_twist","name":"Russian Twist","equipment":"Bodyweight / Weight","primaryMuscle":"Obliques","primaryMuscles":["obliques"],"secondaryMuscles":["abs"],"stabilizerMuscles":[],"aliases":["russian twists"],"movementPattern":"rotation","defaultSets":3},{"id":"lib_pallof_press","name":"Pallof Press","equipment":"Cable","primaryMuscle":"Core / Obliques","primaryMuscles":["core","obliques"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["pallof"],"movementPattern":"anti_rotation","defaultSets":3},{"id":"lib_dead_bug","name":"Dead Bug","equipment":"Bodyweight","primaryMuscle":"Core","primaryMuscles":["core","abs"],"secondaryMuscles":[],"stabilizerMuscles":[],"aliases":["deadbug"],"movementPattern":"anti_extension","defaultSets":3},{"id":"lib_sled_push","name":"Sled Push","equipment":"Sled","primaryMuscle":"Full Body","primaryMuscles":["quads","glutes"],"secondaryMuscles":["calves","core"],"stabilizerMuscles":[],"aliases":["prowler push"],"movementPattern":"conditioning","defaultSets":3},{"id":"lib_sled_pull","name":"Sled Pull","equipment":"Sled","primaryMuscle":"Full Body","primaryMuscles":["quads","glutes"],"secondaryMuscles":["mid_back","core"],"stabilizerMuscles":[],"aliases":["prowler pull"],"movementPattern":"conditioning","defaultSets":3},{"id":"lib_farmer_s_carry","name":"Farmer's Carry","equipment":"Dumbbells / Trap Bar","primaryMuscle":"Full Body","primaryMuscles":["forearms","upper_traps"],"secondaryMuscles":["core","glutes"],"stabilizerMuscles":[],"aliases":["farmers walk","farmer carry"],"movementPattern":"carry","defaultSets":3}];
 
@@ -4691,14 +5106,17 @@ renderTrainingGoal();
       if(!sets.length||completedToday(wday,key))return;
       const id=pendingId(wday,key);
       if(state.workouts.pendingExercises?.[id]){finalizePending(id);saved++;return}
-      state.workouts.completedExercises.push({id,day:wday,dayKey:today,exerciseKey:key,name:e[0],type:e[1]||"",muscle:e[2]||"",sets:deepClone(sets),startedAt:new Date().toISOString(),finalizedAt:new Date().toISOString()});
+      state.workouts.completedExercises.push({
+    splitName:snapshotWorkoutLabel(wday),
+    workoutName:snapshotWorkoutLabel(wday),id,day:wday,dayKey:today,exerciseKey:key,name:e[0],type:e[1]||"",muscle:e[2]||"",sets:deepClone(sets),startedAt:new Date().toISOString(),finalizedAt:new Date().toISOString()});
       if(entries[ei])entries[ei].sets=(entries[ei].sets||[]).map(()=>({kg:"",reps:"",effort:""}));
       saved++;
     });
-    if(!saved){alert("Enter at least one valid set first (reps must be above 0; weight cannot be negative).");return}
+    if(!saved){alert("Enter at least one valid set first (reps must be above 0; weight cannot be negative).");return false}
     persistNow();
     try{window.dtCheckWorkoutCompletion?.(wday,true)}catch(_){}
     try{renderWorkout();renderWorkoutHistory?.();renderHistory?.();renderToday?.();renderTodayDashboardExtras?.()}catch(_){}
+    return true;
   }
   if(finishBtn){
     finishBtn.textContent = "Save remaining workout";
@@ -6277,7 +6695,15 @@ function dateKey(d){
 }
 function weekBounds(offset=0){const now=new Date();now.setHours(12,0,0,0);const day=(now.getDay()+6)%7;const start=new Date(now.getTime()-day*DAY+offset*7*DAY);const end=new Date(start.getTime()+6*DAY);return {start,end,keys:Array.from({length:7},(_,i)=>dateKey(new Date(start.getTime()+i*DAY)))}}
 function sessionsInWeek(w){return (state.workouts?.sessions||[]).filter(s=>{const k=String(s.date||s.dayKey||'').slice(0,10);return w.keys.includes(k)})}
+function completedSessionsInWeek(w){
+  return sessionsInWeek(w).filter(s=>{
+    try{
+      return typeof workoutSessionSets==="function" ? workoutSessionSets(s)>0 : true;
+    }catch(_){return true}
+  })
+}
 function completedInWeek(w){return (state.workouts?.completedExercises||[]).filter(x=>w.keys.includes(workoutRecordDayKey(x)))}
+window.dtCompletedWorkoutSessionsInWeek=completedSessionsInWeek;
 function validSets(x){return (x.sets||[]).filter(s=>Number.isFinite(Number(s.kg))&&Number(s.reps)>0)}
 function e1rm(s){return (+s.kg||0)*(1+Math.min(+s.reps||0,30)/30)}
 function sessionIds(rows){const ids=new Set();rows.forEach(x=>ids.add(`${x.dayKey||String(x.finalizedAt||'').slice(0,10)}|${x.day||''}`));return ids.size}
@@ -6320,7 +6746,7 @@ window.dtWeeklyPerformancePRList=prList;
 function ensure(){if(document.getElementById('dtWeeklyPerformanceModal'))return;const m=document.createElement('div');m.id='dtWeeklyPerformanceModal';m.innerHTML='<section class="dt-wp-sheet"><div id="dtWpContent"></div></section>';m.onclick=e=>{if(e.target===m)m.classList.remove('show')};document.body.appendChild(m)}
 function fmtRange(w){const f=d=>new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric'}).format(d);return `${f(w.start)} – ${f(w.end)}`}
 function insight(rows,muscles,prs,sessions,streak){if(!rows.length)return ['•','Build the week','Complete your first workout this week and this dashboard will start comparing your streak, working sets and progression.'];if(prs.length)return ['↑',`${prs.length} new PR${prs.length===1?'':'s'}`,`Performance moved forward this week. Keep progression conservative and preserve good reps rather than forcing a load increase every session.`];if(sessions>=3)return ['🔥',`${streak}-day streak`,`You logged ${sessions} workout sessions. ${muscles[0]?`${muscles[0][0]} received the most logged set emphasis.`:''}`];return ['→','Keep building',`You have ${sessions} completed workout${sessions===1?'':'s'} this week. The dashboard will become more useful as completed sessions accumulate.`]}
-function openWeekly(){ensure();const w=weekBounds(),rows=completedInWeek(w),sessions=sessionIds(rows),sets=rows.reduce((n,x)=>n+validSets(x).length,0),volume=Math.round(rows.reduce((n,x)=>n+validSets(x).reduce((a,s)=>a+(+s.kg)*(+s.reps),0),0)),muscles=muscleTotals(rows),prs=currentWeekPRs(),totalM=muscles.reduce((a,x)=>a+x[1],0)||1,active=new Set(rows.map(x=>workoutRecordDayKey(x))),streak=currentStreak(),ins=insight(rows,muscles,prs,sessions,streak);
+function openWeekly(){ensure();const w=weekBounds(),rows=completedInWeek(w),completedSessions=completedSessionsInWeek(w),sessions=completedSessions.length,sets=rows.reduce((n,x)=>n+validSets(x).length,0),volume=Math.round(rows.reduce((n,x)=>n+validSets(x).reduce((a,s)=>a+(+s.kg)*(+s.reps),0),0)),muscles=muscleTotals(rows),prs=currentWeekPRs(),totalM=muscles.reduce((a,x)=>a+x[1],0)||1,active=new Set(completedSessions.map(s=>String(s.date||s.dayKey||"").slice(0,10))),streak=currentStreak(),ins=insight(rows,muscles,prs,sessions,streak);
  const muscleHtml=muscles.length?muscles.slice(0,6).map(([name,v])=>{const pct=Math.round(v/totalM*100),on=Math.max(1,Math.round(pct/10));return `<div class="dt-wp-muscle-line"><b>${name}</b><div class="dt-wp-track">${Array.from({length:10},(_,i)=>`<i class="${i<on?'on':''}"></i>`).join('')}</div><strong>${pct}%</strong></div>`}).join(''):'<div class="dt-wp-sub">Muscle emphasis appears after completed workout sets.</div>';
  const prHtml=prs.length?prs.slice(0,5).map(p=>`<div class="dt-wp-pr"><div><b>${p.name}</b><span>${p.date}</span></div><strong>🏆 ${p.kg} × ${p.reps}</strong></div>`).join(''):'<div class="dt-wp-sub">No new performance records detected this week.</div>';
  document.getElementById('dtWpContent').innerHTML=`<div class="dt-wp-head"><div><div class="dt-wp-kicker">Weekly Performance</div><div class="dt-wp-title">Your training week</div><div class="dt-wp-sub">${fmtRange(w)}</div></div><button class="dt-wp-close" onclick="document.getElementById('dtWeeklyPerformanceModal').classList.remove('show')">×</button></div><div class="dt-wp-grid"><div class="dt-wp-stat"><small>Workouts</small><strong>${sessions}</strong><em>completed</em></div><div class="dt-wp-stat"><small>Working sets</small><strong>${sets}</strong><em>logged sets</em></div><div class="dt-wp-stat"><small>Volume load</small><strong>${volume?volume.toLocaleString():'—'}</strong><em>${volume?'kg logged':'no data'}</em></div><div class="dt-wp-stat"><small>PRs</small><strong>${prs.length}</strong><em>this week</em></div></div><div class="dt-wp-card"><h4>🔥 Streak</h4><div class="dt-wp-streak-count">${streak} day${streak===1?'':'s'}</div><div class="dt-wp-days">${w.keys.map((k,i)=>`<div class="dt-wp-day ${active.has(k)?'on':''}"><i></i><span>${['M','T','W','T','F','S','S'][i]}</span></div>`).join('')}</div></div><div class="dt-wp-card"><h4>Logged set emphasis</h4><div class="dt-wp-muscles">${muscleHtml}</div><div class="dt-wp-foot">Relative share of your logged working sets this week.</div></div><div class="dt-wp-card"><h4>Performance records</h4><div class="dt-wp-prs">${prHtml}</div></div><div class="dt-wp-card"><h4>Weekly insight</h4><div class="dt-wp-insight"><div class="dt-wp-insight-icon">${ins[0]}</div><div><b>${ins[1]}</b><span>${ins[2]}</span></div></div></div>`;document.getElementById('dtWeeklyPerformanceModal').classList.add('show')}
@@ -10044,10 +10470,10 @@ window.dtRemoveWorkoutSet=removeSet;
 
   function createSplit(){
     ensureState();
-    if(allKeys().length>=MAX_SPLITS)return;
+    if(allKeys().length>=MAX_SPLITS)return false;
     const m=ensureModal(),input=m.querySelector("#dtSplitName");
     const name=(window.dtCleanUserText?.(input.value,28)||input.value.trim().replace(/\s+/g," ").slice(0,28));
-    if(!name){input.focus();return}
+    if(!name){input.focus();return false}
     const key="split_"+Date.now().toString(36);
     state.workouts.customSplits.push({key,name,createdAt:new Date().toISOString()});
     state.workouts.dayNames[key]=name;
@@ -10063,14 +10489,15 @@ window.dtRemoveWorkoutSet=removeSet;
     /* New split starts empty: use the existing Add Exercise flow. */
     setTimeout(()=>document.getElementById("addExerciseBtn")?.scrollIntoView({behavior:"smooth",block:"center"}),120);
     try{window.dtRenderTodaySchedule?.()}catch(_){}
+    return true;
   }
 
   function deleteCurrent(){
     ensureState();
     const idx=state.workouts.customSplits.findIndex(s=>s.key===wday);
-    if(idx<0)return;
+    if(idx<0)return false;
     const item=state.workouts.customSplits[idx];
-    if(!confirm(`Delete "${item.name}"? Workout history already logged under this split will be kept.`))return;
+    if(!confirm(`Delete "${item.name}"? Workout history already logged under this split will be kept.`))return "cancelled";
 
     const key=item.key;
     state.workouts.customSplits.splice(idx,1);
@@ -10089,6 +10516,7 @@ window.dtRemoveWorkoutSet=removeSet;
     ensureModal().classList.remove("show");
     renderTabs();renderWorkout();
     try{window.dtRenderTodaySchedule?.()}catch(_){}
+    return true;
   }
 
   /* Keep custom tabs in sync after renders, onboarding, and renaming. */
@@ -10307,7 +10735,7 @@ function daySessions(key){
 
     const sessionHtml=sessions.map(s=>{
       const when=new Date(s.date);
-      const title=typeof workoutDayLabel==="function"?workoutDayLabel(s.day):(s.day||"Workout");
+      const title=typeof workoutDayLabel==="function"?historicalWorkoutLabel(s):(s.day||"Workout");
       const time=when.toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit",hour12:true});
       const ex=sessionExercises(s);
       const details=ex.map(e=>{
@@ -16456,8 +16884,20 @@ body{padding-bottom:max(20px,env(safe-area-inset-bottom))!important}
 .dt-v27-open-stats{width:100%;margin-top:11px;min-height:44px;border-radius:14px;border:1px solid rgba(85,170,255,.24);background:rgba(85,170,255,.07);color:#7abcf0;font:850 10px system-ui}
 
 /* Secondary destinations: top Home control replaces bottom navigation. */
-.dt-v27-return-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 13px}
-.dt-v27-home-back{border:1px solid #23404c;border-radius:13px;background:#091a23;color:#9eb2bc;min-height:39px;padding:0 12px;display:inline-flex;align-items:center;gap:7px;font:820 9px/1 system-ui}
+.dt-v27-return-row{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin:max(0px,env(safe-area-inset-top)) 0 13px
+}
+.dt-v27-home-back{
+  border:1px solid #23404c;border-radius:13px;background:#091a23;color:#9eb2bc;
+  min-width:44px;min-height:44px;padding:0 12px;
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  font:820 9px/1 system-ui;touch-action:manipulation
+}
+@media(max-width:560px){
+  .dt-v27-return-row{margin-top:max(6px,env(safe-area-inset-top))}
+}
+
 .dt-v27-home-back svg{width:16px;height:16px;stroke:currentColor}
 .dt-v27-destination-name{color:#5f7884;font:800 8px/1 system-ui;letter-spacing:.09em;text-transform:uppercase}
 #workout,#history,#stats,#settings{padding-bottom:calc(34px + env(safe-area-inset-bottom))!important}
@@ -17072,7 +17512,7 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
   const esc=v=>window.dtEscapeHtml?window.dtEscapeHtml(v):String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
   /* ---------------- History V2 ---------------- */
-  const histUi={visibleWeeks:4,openWeeks:new Set(),openSessions:new Set(),initialized:false};
+  const histUi={visibleWeeks:4,visibleActivities:20,openWeeks:new Set(),openSessions:new Set(),initialized:false};
   function monday(d){const x=new Date(d);x.setHours(0,0,0,0);const day=(x.getDay()+6)%7;x.setDate(x.getDate()-day);return x}
   function ymd(d){const p=n=>String(n).padStart(2,"0");return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`}
   function weekLabel(start,isCurrent){const end=new Date(start);end.setDate(end.getDate()+6);if(isCurrent)return "This week";const fmt=d=>d.toLocaleDateString("en-AU",{day:"numeric",month:"short"});return `${fmt(start)} – ${fmt(end)}`}
@@ -17085,19 +17525,46 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     return [...map.values()].sort((a,b)=>b.start-a.start).map(g=>{const metrics=g.sessions.map(sessionMetric),sets=metrics.reduce((n,m)=>n+m.sets,0),volume=Math.round(metrics.reduce((n,m)=>n+m.volume,0));return {...g,sets,volume}})
   }
   function exDetail(ex){const rows=setRows(ex);if(!rows.length)return "";const sets=rows.map((s,i)=>{const kg=String(s.kg??"").trim()!==""?`${s.kg} kg`:"BW",eff=s.effort?` · ${String(s.effort)[0].toUpperCase()+String(s.effort).slice(1)}`:"";return `S${i+1} ${kg} × ${s.reps}${eff}`}).join(" · ");return `<div class="dt-hv2-ex"><b>${esc(ex.name||"Exercise")}</b><span>${esc(sets)}</span></div>`}
-  function sessionHtml(s,idx){const m=sessionMetric(s),id=String(s.summaryId||s.id||`${s.date}|${idx}`),open=histUi.openSessions.has(id),d=new Date(s.date),label=typeof workoutDayLabel==="function"?workoutDayLabel(s.day):String(s.day||"Workout");return `<div class="dt-hv2-session ${open?"open":""}" data-session-id="${esc(id)}"><button class="dt-hv2-session-head" type="button"><i class="dt-hv2-dot"></i><span class="dt-hv2-session-main"><b>${esc(label)}</b><small>${esc(d.toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short"}))} · ${esc(d.toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit",hour12:true}))}</small></span><span class="dt-hv2-session-side"><b>${m.sets} sets</b><small>${m.ex.length} exercises · ${m.volume?`${Math.round(m.volume).toLocaleString()} kg`:"details"}</small></span></button><div class="dt-hv2-session-detail">${m.ex.map(exDetail).filter(Boolean).join("")||'<div class="dt-hv2-ex"><span>No detailed set data was stored for this session.</span></div>'}</div></div>`}
+  function sessionHtml(s,idx){const m=sessionMetric(s),id=String(s.summaryId||s.id||`${s.date}|${idx}`),open=histUi.openSessions.has(id),d=new Date(s.date),label=typeof workoutDayLabel==="function"?historicalWorkoutLabel(s):String(s.day||"Workout");return `<div class="dt-hv2-session ${open?"open":""}" data-session-id="${esc(id)}"><button class="dt-hv2-session-head" type="button"><i class="dt-hv2-dot"></i><span class="dt-hv2-session-main"><b>${esc(label)}</b><small>${esc(d.toLocaleDateString("en-AU",{weekday:"short",day:"numeric",month:"short"}))} · ${esc(d.toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit",hour12:true}))}</small></span><span class="dt-hv2-session-side"><b>${m.sets} sets</b><small>${m.ex.length} exercises · ${m.volume?`${Math.round(m.volume).toLocaleString()} kg`:"details"}</small></span></button><div class="dt-hv2-session-detail">${m.ex.map(exDetail).filter(Boolean).join("")||'<div class="dt-hv2-ex"><span>No detailed set data was stored for this session.</span></div>'}</div></div>`}
   function weekHtml(g,index,currentKey){const current=g.key===currentKey;if(!histUi.initialized&&current)histUi.openWeeks.add(g.key);const open=histUi.openWeeks.has(g.key);return `<section class="dt-hv2-week ${current?"current":""} ${open?"open":""}" data-week="${g.key}"><button class="dt-hv2-week-head" type="button"><span class="dt-hv2-week-title"><small>${current?"CURRENT WEEK":"WEEKLY HISTORY"}</small><b>${esc(weekLabel(g.start,current))}</b><span>${g.sessions.length} workout${g.sessions.length===1?"":"s"} · ${g.sets} working sets</span></span><span class="dt-hv2-week-metrics"><span><b>${g.volume?g.volume.toLocaleString():"—"}</b><small>${g.volume?"kg volume":"volume"}</small></span><i class="dt-hv2-chevron">⌄</i></span></button><div class="dt-hv2-week-body">${g.sessions.map(sessionHtml).join("")}</div></section>`}
+  function historyLocalKey(value,fallback=""){
+    if(value){
+      const d=new Date(value);
+      if(Number.isFinite(d.getTime()))return ymd(d);
+    }
+    return String(fallback||"").slice(0,10);
+  }
   function savedActivitiesHtml(){
-    const records=[...(state.workouts?.completedExercises||[])].filter(r=>(r.sets||[]).some(x=>Number(x?.reps)>0)).sort((a,b)=>String(b.finalizedAt||b.startedAt||b.dayKey||"").localeCompare(String(a.finalizedAt||a.startedAt||a.dayKey||""))).slice(0,60);
-    if(!records.length)return "";
+    const completedDays=new Set(
+      (state.workouts?.sessions||[])
+        .filter(s=>s?.date&&sessionMetric(s).sets>0)
+        .map(s=>historyLocalKey(s.date,s.dayKey))
+        .filter(Boolean)
+    );
+    const allRecords=[...(state.workouts?.completedExercises||[])]
+      .filter(r=>(r.sets||[]).some(x=>Number(x?.reps)>0))
+      .filter(r=>!completedDays.has(historyLocalKey(r.finalizedAt||r.startedAt,r.dayKey)))
+      .sort((a,b)=>String(b.finalizedAt||b.startedAt||b.dayKey||"").localeCompare(String(a.finalizedAt||a.startedAt||a.dayKey||"")));
+
+    if(!allRecords.length)return "";
+
+    const records=allRecords.slice(0,histUi.visibleActivities);
     const unit=String(window.dtWeightUnitLabel?.()||"KG").toLowerCase();
     const rows=records.map(rec=>{
       const when=new Date(rec.finalizedAt||rec.startedAt||rec.dayKey||Date.now()),sets=(rec.sets||[]).filter(x=>Number(x?.reps)>0);
       const details=sets.map((set,i)=>{const raw=String(set?.kg??"").trim(),kg=raw!==""&&Number(raw)>0?`${window.dtWeightDisplayValue?.(Number(raw))??raw} ${unit}`:"BW",eff=set?.effort?` · ${String(set.effort)[0].toUpperCase()+String(set.effort).slice(1)}`:"";return `Set ${i+1}: ${kg} × ${Number(set.reps)} reps${eff}`}).join("<br>");
-      const day=typeof workoutDayLabel==="function"?workoutDayLabel(rec.day):String(rec.day||"Workout"),date=isNaN(when)?String(rec.dayKey||""):when.toLocaleDateString("en-AU",{day:"numeric",month:"short",year:"numeric"}),time=isNaN(when)?"":` · ${when.toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit",hour12:true})}`;
+      const day=typeof historicalWorkoutLabel==="function"?historicalWorkoutLabel(rec):String(rec.splitName||rec.workoutName||rec.day||"Workout"),date=isNaN(when)?String(rec.dayKey||""):when.toLocaleDateString("en-AU",{day:"numeric",month:"short",year:"numeric"}),time=isNaN(when)?"":` · ${when.toLocaleTimeString("en-AU",{hour:"numeric",minute:"2-digit",hour12:true})}`;
       return `<div class="saved-activity-row" data-saved-record-id="${esc(String(rec.id||""))}" data-saved-exercise-key="${esc(String(rec.exerciseKey||""))}" data-saved-record-time="${esc(String(rec.finalizedAt||rec.startedAt||rec.dayKey||""))}"><div class="saved-activity-icon">${window.dtMuscleIconHTML?.(rec.muscle)||"✓"}</div><div class="saved-activity-main"><b>${esc(rec.name||"Exercise")}</b><small>${esc(day)} · ${esc(date)}${esc(time)}</small><div class="saved-activity-detail">${details||"No set details"}</div></div></div>`;
     }).join("");
-    return `<div class="activity-history-title">Saved activities</div>${rows}`;
+
+    const more=histUi.visibleActivities<allRecords.length
+      ? `<button class="primary" type="button" data-hv2="more-activities">Show earlier saved activities</button>`
+      : "";
+    const less=histUi.visibleActivities>20
+      ? `<button type="button" data-hv2="less-activities">Show fewer saved activities</button>`
+      : "";
+
+    return `<div class="activity-history-title">Saved activities not yet in a completed workout</div>${rows}${(more||less)?`<div class="dt-hv2-more">${more}${less}</div>`:""}`;
   }
   function renderHistoryV2(){
     const list=document.getElementById("workoutHistoryList");if(!list)return;list.classList.add("dt-history-v2");
@@ -17111,6 +17578,8 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     list.querySelectorAll(".dt-hv2-session-head").forEach(b=>b.onclick=()=>{const s=b.closest(".dt-hv2-session"),id=s.dataset.sessionId,open=!s.classList.contains("open");s.classList.toggle("open",open);open?histUi.openSessions.add(id):histUi.openSessions.delete(id)});
     list.querySelector('[data-hv2="more"]')?.addEventListener("click",()=>{histUi.visibleWeeks=Math.min(groups.length,histUi.visibleWeeks+4);renderHistoryV2()});
     list.querySelector('[data-hv2="less"]')?.addEventListener("click",()=>{histUi.visibleWeeks=4;renderHistoryV2();document.getElementById("workoutHistoryCard")?.scrollIntoView({behavior:"smooth",block:"start"})});
+    list.querySelector('[data-hv2="more-activities"]')?.addEventListener("click",()=>{histUi.visibleActivities+=20;renderHistoryV2()});
+    list.querySelector('[data-hv2="less-activities"]')?.addEventListener("click",()=>{histUi.visibleActivities=20;renderHistoryV2()});
   }
   /* Replace the long flat session + saved-activity dump with scalable weekly history. */
   try{renderWorkoutHistory=renderHistoryV2}catch(_){}
@@ -17220,7 +17689,7 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
   const esc=v=>window.dtEscapeHtml?window.dtEscapeHtml(v):String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const validSet=s=>Number.isFinite(Number(s?.reps))&&Number(s?.reps)>0&&(String(s?.kg??"").trim()===""||(Number.isFinite(Number(s.kg))&&Number(s.kg)>=0));
   const recordTime=r=>String(r?.finalizedAt||r?.startedAt||r?.dayKey||"");
-  const records=()=>[...(state.workouts?.completedExercises||[])].filter(r=>(r.sets||[]).some(x=>Number(x?.reps)>0)).sort((a,b)=>recordTime(b).localeCompare(recordTime(a))).slice(0,60);
+  const records=()=>[...(state.workouts?.completedExercises||[])].filter(r=>(r.sets||[]).some(x=>Number(x?.reps)>0)).sort((a,b)=>recordTime(b).localeCompare(recordTime(a)));
   const localKey=value=>{
     const d=value instanceof Date?new Date(value):new Date(value||"");
     if(Number.isFinite(d.getTime())){const p=n=>String(n).padStart(2,"0");return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`}
@@ -17323,9 +17792,9 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
     setTimeout(()=>{try{renderHistory?.()}catch(_){}try{window.dtRenderBodyCard?.()}catch(_){}enhanceRows()},0);
   }
   function saveEdit(){
-    if(!editRec)return;const cards=[...document.querySelectorAll("#dtV30EditSets .dt-v30-edit-set")],clean=[];
-    for(const card of cards){const kgRaw=card.querySelector(".dt-v30-edit-kg").value.trim(),repsRaw=card.querySelector(".dt-v30-edit-reps").value.trim(),i=Number(card.dataset.setIndex),effort=editSets[i]?.effort||"",hasAny=kgRaw!==""||repsRaw!==""||effort!=="";if(!hasAny)continue;const reps=Number(repsRaw),kgDisplay=kgRaw===""?null:Number(kgRaw);if(!Number.isFinite(reps)||reps<=0){showError(`Set ${i+1}: reps must be above 0.`);return}if(kgRaw!==""&&(!Number.isFinite(kgDisplay)||kgDisplay<0)){showError(`Set ${i+1}: weight cannot be negative.`);return}const storedKg=kgRaw===""?"":inputKg(kgRaw);clean.push({kg:storedKg===""?"":String(storedKg),reps:String(Math.round(reps)),effort})}
-    if(!clean.length){showError("Keep at least one valid set, or use Delete activity.");return}editRec.sets=clean;syncSession(editRec,"edit");syncTimed(editRec);syncSummary(editRec,"edit");persistAndRefresh(recDayKey(editRec));document.getElementById("dtHistoryEditModal")?.classList.remove("show");editRec=null;editSets=[];
+    if(!editRec)return false;const cards=[...document.querySelectorAll("#dtV30EditSets .dt-v30-edit-set")],clean=[];
+    for(const card of cards){const kgRaw=card.querySelector(".dt-v30-edit-kg").value.trim(),repsRaw=card.querySelector(".dt-v30-edit-reps").value.trim(),i=Number(card.dataset.setIndex),effort=editSets[i]?.effort||"",hasAny=kgRaw!==""||repsRaw!==""||effort!=="";if(!hasAny)continue;const reps=Number(repsRaw),kgDisplay=kgRaw===""?null:Number(kgRaw);if(!Number.isFinite(reps)||reps<=0){showError(`Set ${i+1}: reps must be above 0.`);return false}if(kgRaw!==""&&(!Number.isFinite(kgDisplay)||kgDisplay<0)){showError(`Set ${i+1}: weight cannot be negative.`);return false}const storedKg=kgRaw===""?"":inputKg(kgRaw);clean.push({kg:storedKg===""?"":String(storedKg),reps:String(Math.round(reps)),effort})}
+    if(!clean.length){showError("Keep at least one valid set, or use Delete activity.");return false}editRec.sets=clean;syncSession(editRec,"edit");syncTimed(editRec);syncSummary(editRec,"edit");persistAndRefresh(recDayKey(editRec));document.getElementById("dtHistoryEditModal")?.classList.remove("show");editRec=null;editSets=[];return true;
   }
   function openDelete(rec){ensureModals();const m=document.getElementById("dtHistoryDeleteModal");m._record=rec;document.getElementById("dtV30DeleteName").textContent=`${rec.name||"Saved activity"} · ${activityMeta(rec)}`;m.classList.add("show")}
   function deleteRecord(rec){
@@ -17624,5 +18093,1226 @@ body:has(#today.view.active) #dtRestGlobal,body.dt-session-focus-open #dtRestGlo
 
 <script>window.DT_MARC_RELEASE_FIX_VERSION="36.0-pr-consistency";</script>
 
+
+<script id="dt-v36-p2-haptics">
+(()=>{
+  "use strict";
+
+  const KEY="dt_haptics_enabled_v1";
+  const toggle=document.getElementById("dtHapticToggle");
+
+  function readEnabled(){
+    try{
+      const raw=localStorage.getItem(KEY);
+      return raw==null ? true : raw!=="0";
+    }catch(_){ return true; }
+  }
+
+  let enabled=readEnabled();
+
+  function renderToggle(){
+    if(!toggle)return;
+    toggle.setAttribute("aria-checked",enabled?"true":"false");
+    toggle.setAttribute("aria-label",`Haptic feedback ${enabled?"on":"off"}`);
+  }
+
+  function setEnabled(next){
+    enabled=!!next;
+    try{localStorage.setItem(KEY,enabled?"1":"0")}catch(_){}
+    renderToggle();
+    window.dispatchEvent(new CustomEvent("dt:haptics-setting",{detail:{enabled}}));
+  }
+
+  function nativePlugin(){
+    try{
+      const cap=window.Capacitor;
+      if(!cap)return null;
+      if(!cap.Plugins)cap.Plugins={};
+      if(!cap.Plugins.Haptics && typeof cap.registerPlugin==="function"){
+        cap.Plugins.Haptics=cap.registerPlugin("Haptics");
+      }
+      return cap.Plugins.Haptics||null;
+    }catch(_){ return null; }
+  }
+
+  async function nativeImpact(style){
+    const h=nativePlugin();
+    if(!h?.impact)return false;
+    try{
+      await h.impact({style});
+      return true;
+    }catch(_){ return false; }
+  }
+
+  async function nativeWarning(){
+    const h=nativePlugin();
+    if(!h)return false;
+    try{
+      if(typeof h.notification==="function"){
+        await h.notification({type:"WARNING"});
+        return true;
+      }
+      if(typeof h.impact==="function"){
+        await h.impact({style:"HEAVY"});
+        return true;
+      }
+    }catch(_){}
+    return false;
+  }
+
+  function webVibrate(pattern){
+    try{
+      if(typeof navigator.vibrate==="function"){
+        navigator.vibrate(pattern);
+        return true;
+      }
+    }catch(_){}
+    return false;
+  }
+
+  async function fire(kind="light"){
+    if(!enabled)return false;
+
+    if(kind==="warning"){
+      if(await nativeWarning())return true;
+      return webVibrate([28,32,42]);
+    }
+
+    const nativeStyle=kind==="medium"?"MEDIUM":"LIGHT";
+    if(await nativeImpact(nativeStyle))return true;
+    return webVibrate(kind==="medium"?24:12);
+  }
+
+  window.dtHaptics={
+    get enabled(){return enabled},
+    setEnabled,
+    light:()=>fire("light"),
+    medium:()=>fire("medium"),
+    warning:()=>fire("warning"),
+    fire
+  };
+
+  renderToggle();
+  if(toggle){
+    toggle.addEventListener("click",()=>{
+      const next=!enabled;
+      setEnabled(next);
+      /* Confirm ON with a light tap; turning OFF is intentionally silent. */
+      if(next)setTimeout(()=>fire("light"),0);
+    });
+  }
+
+  /*
+    Primary-action map.
+    Geometry/UI logic is untouched: haptics are delegated so dynamically-created
+    buttons are covered without rewriting existing handlers.
+  */
+  const warningSelector=[
+    "#confirmMoneyReset",
+    "#dtDeleteCurrentSplit",
+    ".dt-v30-history-delete-confirm",
+    "#dtWorkoutResetConfirm",
+    "[data-action='delete']",
+    "[data-action='reset']"
+  ].join(",");
+
+  const mediumSelector=[
+    "#saveWorkout",
+    "#dtV27SessionButton",
+    "#saveEditExercise",
+    "#dtCreateSplit",
+    "#dtRenameWorkout",
+    ".dt-sched-save",
+    ".dt-g-save",
+    ".dt-rem-enable",
+    "#dtSummaryDone",
+    ".dt-v30-history-save",
+    ".dt-data-confirm",
+    ".dt-summary-action",
+    "#dtHistoryExportBtn",
+    "#dtRecoveryExportAction",
+    "#dtRecoveryExportBtn",
+    "#dtExportStart",
+    "#dtExportEnd"
+  ].join(",");
+
+  const lightSelector=[
+    ".dt-v27-quick-done",
+    ".dt-v27-log-set",
+    ".dt-v27-primary"
+  ].join(",");
+
+  let lastPointerAt=0;
+  document.addEventListener("pointerdown",e=>{
+    if(!enabled)return;
+    if(e.pointerType==="mouse" && e.button!==0)return;
+    const target=e.target?.closest?.("button,[role='button']");
+    if(!target || target.disabled || target.getAttribute("aria-disabled")==="true")return;
+    if(target===toggle)return;
+
+    /* Avoid duplicated synthetic pointer events in unusual Android WebViews. */
+    const now=performance.now();
+    if(now-lastPointerAt<35)return;
+    lastPointerAt=now;
+
+    if(target.matches(warningSelector)){
+      fire("warning");
+      return;
+    }
+    if(target.matches(mediumSelector)){
+      fire("medium");
+      return;
+    }
+    if(target.matches(lightSelector)){
+      fire("light");
+    }
+  },{capture:true,passive:true});
+})();
+</script>
+
+
+<script id="dt-v36-p3-motion">
+(()=>{
+  "use strict";
+
+  const reduceMotion=window.matchMedia?.("(prefers-reduced-motion: reduce)")||null;
+  const PRESS_CLASS="dt-p3-pressed";
+  const ENTER_CLASS="dt-p3-view-enter";
+  const SURFACE_CLASS="dt-p3-surface-enter";
+
+  function motionReduced(){
+    return !!reduceMotion?.matches;
+  }
+
+  function animateView(view){
+    if(!view || motionReduced())return;
+    view.classList.remove(ENTER_CLASS);
+    /* Restart only this intentional transition. */
+    void view.offsetWidth;
+    view.classList.add(ENTER_CLASS);
+    window.setTimeout(()=>view.classList.remove(ENTER_CLASS),240);
+  }
+
+  function animateSurface(el){
+    if(!el || motionReduced())return;
+    el.classList.remove(SURFACE_CLASS);
+    void el.offsetWidth;
+    el.classList.add(SURFACE_CLASS);
+    window.setTimeout(()=>el.classList.remove(SURFACE_CLASS),210);
+  }
+
+  /* Watch actual app view changes rather than patching switchView/openHome/etc. */
+  const seenActive=new WeakMap();
+  const viewObserver=new MutationObserver(records=>{
+    for(const rec of records){
+      const view=rec.target;
+      if(!(view instanceof HTMLElement) || !view.classList.contains("view"))continue;
+      const active=view.classList.contains("active");
+      const was=seenActive.get(view)===true;
+      seenActive.set(view,active);
+      if(active && !was)animateView(view);
+    }
+  });
+
+  function bindViews(){
+    document.querySelectorAll(".view").forEach(view=>{
+      seenActive.set(view,view.classList.contains("active"));
+      viewObserver.observe(view,{attributes:true,attributeFilter:["class"]});
+    });
+  }
+
+  /*
+    Press-state delegation.
+    Applies to real interactive controls without modifying their click logic.
+    Long/repetitive text inputs are excluded because they are not buttons.
+  */
+  let pressed=null;
+
+  function eligible(el){
+    if(!el)return false;
+    if(el.disabled || el.getAttribute("aria-disabled")==="true")return false;
+    if(el.matches("input,textarea,select"))return false;
+    return el.matches("button,[role='button']");
+  }
+
+  function clearPressed(){
+    if(pressed){
+      pressed.classList.remove(PRESS_CLASS);
+      pressed=null;
+    }
+  }
+
+  document.addEventListener("pointerdown",e=>{
+    if(e.pointerType==="mouse" && e.button!==0)return;
+    const el=e.target?.closest?.("button,[role='button']");
+    if(!eligible(el))return;
+    clearPressed();
+    pressed=el;
+    el.classList.add(PRESS_CLASS);
+  },{capture:true,passive:true});
+
+  document.addEventListener("pointerup",clearPressed,{capture:true,passive:true});
+  document.addEventListener("pointercancel",clearPressed,{capture:true,passive:true});
+  window.addEventListener("blur",clearPressed,{passive:true});
+
+  /* Keyboard activation gets the same visual state briefly. */
+  document.addEventListener("keydown",e=>{
+    if(e.key!=="Enter" && e.key!==" ")return;
+    const el=e.target?.closest?.("button,[role='button']");
+    if(!eligible(el))return;
+    el.classList.add(PRESS_CLASS);
+  },true);
+  document.addEventListener("keyup",e=>{
+    if(e.key!=="Enter" && e.key!==" ")return;
+    e.target?.closest?.("button,[role='button']")?.classList.remove(PRESS_CLASS);
+  },true);
+
+  /*
+    Shared helper for Patch 4 and future app features.
+    Patch 3 provides the state contract only; it does not change
+    any save/delete/export behavior by itself.
+  */
+  function setButtonState(el,state="idle"){
+    if(!el)return;
+    const states=["loading","success","error"];
+    states.forEach(s=>el.classList.toggle(`dt-p3-state-${s}`,state===s));
+
+    if(state==="loading"){
+      if(!el.dataset.dtP3DisabledBefore){
+        el.dataset.dtP3DisabledBefore=el.disabled?"1":"0";
+      }
+      el.disabled=true;
+      el.setAttribute("aria-busy","true");
+    }else{
+      el.removeAttribute("aria-busy");
+      if(el.dataset.dtP3DisabledBefore==="0")el.disabled=false;
+      delete el.dataset.dtP3DisabledBefore;
+    }
+  }
+
+  window.dtMotion={
+    reduced:motionReduced,
+    animateView,
+    animateSurface,
+    setButtonState
+  };
+
+  if(document.readyState==="loading"){
+    document.addEventListener("DOMContentLoaded",bindViews,{once:true});
+  }else{
+    bindViews();
+  }
+
+  /*
+    Views such as Coach can be created later. Observe the document for
+    newly inserted .view elements and register them without polling.
+  */
+  const addObserver=new MutationObserver(records=>{
+    for(const rec of records){
+      for(const node of rec.addedNodes){
+        if(!(node instanceof HTMLElement))continue;
+        const views=[];
+        if(node.classList?.contains("view"))views.push(node);
+        node.querySelectorAll?.(".view").forEach(v=>views.push(v));
+        views.forEach(view=>{
+          if(seenActive.has(view))return;
+          seenActive.set(view,view.classList.contains("active"));
+          viewObserver.observe(view,{attributes:true,attributeFilter:["class"]});
+        });
+      }
+    }
+  });
+
+  const observeRoot=()=>{
+    if(document.body)addObserver.observe(document.body,{childList:true,subtree:true});
+  };
+  if(document.body)observeRoot();
+  else document.addEventListener("DOMContentLoaded",observeRoot,{once:true});
+})();
+</script>
+
+
+<script id="dt-v36-p4-feedback">
+(()=>{
+  "use strict";
+
+  const configs=[
+    {selector:"#saveWorkout",loading:"Saving…",success:"Saved",error:"Check entries",successMs:950,errorMs:1250},
+    {selector:"#saveEditExercise",loading:"Saving…",success:"Saved",error:"Try again",successMs:850,errorMs:1200},
+    {selector:"#dtCreateSplit",loading:"Creating…",success:"Created",error:"Check name",successMs:850,errorMs:1200},
+    {selector:"#confirmMoneyReset",loading:"Resetting…",success:"Reset",error:"Try again",successMs:800,errorMs:1200},
+    {selector:"#dtDeleteCurrentSplit",loading:"Deleting…",success:"Deleted",error:"Try again",successMs:800,errorMs:1200},
+    {selector:".dt-v30-history-save",loading:"Saving…",success:"Saved",error:"Try again",successMs:850,errorMs:1200}
+  ];
+
+  const pending=new Set();
+
+  function targetFor(el){
+    return el.querySelector?.(".dt-p4-label")||el;
+  }
+
+  function snap(el){
+    const target=targetFor(el);
+    return {target,html:target===el?el.innerHTML:null,text:target===el?null:target.textContent,disabled:!!el.disabled};
+  }
+
+  function restore(el,s){
+    if(!el||!s)return;
+    if(s.target===el)el.innerHTML=s.html;
+    else if(s.target?.isConnected)s.target.textContent=s.text;
+    el.disabled=s.disabled;
+    el.removeAttribute("aria-busy");
+    el.classList.remove("dt-p4-feedback","dt-p3-state-loading","dt-p3-state-success","dt-p3-state-error");
+  }
+
+  function label(el,text,mark){
+    const t=targetFor(el);
+    if(t===el){
+      t.textContent=String(text||"");
+      if(mark){
+        const m=document.createElement("span");
+        m.className="dt-p4-mark";
+        m.textContent=mark;
+        t.prepend(m);
+      }
+    }else t.textContent=String(text||"");
+  }
+
+  function state(el,name,text,mark){
+    el.classList.add("dt-p4-feedback");
+    window.dtMotion?.setButtonState?.(el,name);
+    label(el,text,mark);
+    if(name==="loading"){
+      el.disabled=true;
+      el.setAttribute("aria-busy","true");
+    }
+  }
+
+  async function run(el,original,event,cfg){
+    if(!el||pending.has(el))return;
+    pending.add(el);
+    const s=snap(el);
+    state(el,"loading",cfg.loading);
+
+    try{
+      let result=original.call(el,event);
+      if(result&&typeof result.then==="function")result=await result;
+
+      if(result==="cancelled"){
+        restore(el,s);
+        return result;
+      }
+
+      if(result===false){
+        state(el,"error",cfg.error,"!");
+        try{window.dtHaptics?.warning?.()}catch(_){}
+        await new Promise(r=>setTimeout(r,cfg.errorMs||1200));
+        restore(el,s);
+        return false;
+      }
+
+      state(el,"success",cfg.success,"✓");
+      try{window.dtHaptics?.light?.()}catch(_){}
+      await new Promise(r=>setTimeout(r,cfg.successMs||900));
+      restore(el,s);
+      return result;
+    }catch(err){
+      console.error("M/ARC critical action failed",err);
+      state(el,"error",cfg.error,"!");
+      try{window.dtHaptics?.warning?.()}catch(_){}
+      await new Promise(r=>setTimeout(r,cfg.errorMs||1200));
+      restore(el,s);
+      return false;
+    }finally{
+      pending.delete(el);
+    }
+  }
+
+  function wrap(el,cfg){
+    if(!el||el.dataset.dtP4Wrapped==="1")return;
+    const original=el.onclick;
+    if(typeof original!=="function")return;
+    el.dataset.dtP4Wrapped="1";
+    el.onclick=function(event){
+      event?.preventDefault?.();
+      return run(el,original,event,cfg);
+    };
+  }
+
+  function scan(root=document){
+    configs.forEach(cfg=>{
+      if(root.matches?.(cfg.selector))wrap(root,cfg);
+      root.querySelectorAll?.(cfg.selector).forEach(el=>wrap(el,cfg));
+    });
+  }
+
+  function boot(){
+    scan(document);
+    const observer=new MutationObserver(records=>{
+      for(const rec of records){
+        for(const node of rec.addedNodes){
+          if(node instanceof HTMLElement)queueMicrotask(()=>scan(node));
+        }
+      }
+    });
+    observer.observe(document.body,{childList:true,subtree:true});
+    setTimeout(()=>scan(document),250);
+    setTimeout(()=>scan(document),1000);
+  }
+
+  window.dtFeedback={run,scan,isBusy:el=>pending.has(el)};
+
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});
+  else boot();
+})();
+</script>
+
+
+<script id="dt-v36-p5-debug-recorder">
+(()=>{
+  "use strict";
+
+  const ENABLE_KEY="dt_debug_recorder_enabled_v1";
+  const LOG_KEY="dt_debug_recorder_log_v1";
+  const MAX_EVENTS=1800;
+  const MAX_TEXT=180;
+  const REDACT_RE=/(password|passwd|token|secret|auth|key|credential|pin|ssn|card|cvv)/i;
+  /*
+    Privacy-by-default recorder:
+    - Never persist raw user-entered text or numeric values in debug events.
+    - Record only structural identifiers, input type, lengths, and booleans.
+    - Visible button text is not used as a tap label because it may be user-authored.
+  */
+  const SAFE_CONTROL_LABEL_RE=/^(save|done|cancel|close|back|home|next|previous|add|edit|delete|remove|reset|export|import|start|stop|finish|confirm|settings?|today|history|workout|money|recovery|coach|on|off)$/i;
+
+  const toggle=document.getElementById("dtDebugToggle");
+  const exportLogBtn=document.getElementById("dtExportDebugLog");
+  const exportBundleBtn=document.getElementById("dtExportDebugBundle");
+  const exportBackupBtn=document.getElementById("dtExportAppBackup");
+  const clearBtn=document.getElementById("dtClearDebugData");
+
+  function readEnabled(){
+    try{
+      const raw=localStorage.getItem(ENABLE_KEY);
+      return raw==null?true:raw!=="0";
+    }catch(_){return true}
+  }
+  let enabled=readEnabled();
+
+  function renderToggle(){
+    if(!toggle)return;
+    toggle.setAttribute("aria-checked",enabled?"true":"false");
+    toggle.setAttribute("aria-label",`Developer Debug Recorder ${enabled?"on":"off"}`);
+  }
+
+  function loadLog(){
+    try{
+      const raw=localStorage.getItem(LOG_KEY);
+      const arr=raw?JSON.parse(raw):[];
+      return Array.isArray(arr)?arr:[];
+    }catch(_){return []}
+  }
+
+  let log=loadLog();
+
+  let persistTimer=null;
+  let dirty=false;
+  let eventsSincePersist=0;
+  const PERSIST_DEBOUNCE_MS=1400;
+  const PERSIST_EVENT_BATCH=12;
+
+  function persistLogNow(){
+    if(!dirty && eventsSincePersist===0)return true;
+    if(persistTimer){
+      clearTimeout(persistTimer);
+      persistTimer=null;
+    }
+    try{
+      localStorage.setItem(LOG_KEY,JSON.stringify(log));
+      dirty=false;
+      eventsSincePersist=0;
+      return true;
+    }catch(_){
+      return false;
+    }
+  }
+
+  function schedulePersist(){
+    dirty=true;
+    eventsSincePersist++;
+    if(eventsSincePersist>=PERSIST_EVENT_BATCH){
+      persistLogNow();
+      return;
+    }
+    if(persistTimer)clearTimeout(persistTimer);
+    persistTimer=setTimeout(()=>{
+      persistTimer=null;
+      persistLogNow();
+    },PERSIST_DEBOUNCE_MS);
+  }
+
+  function trim(){
+    if(log.length>MAX_EVENTS)log=log.slice(log.length-MAX_EVENTS);
+  }
+
+  function safeText(value,name=""){
+    if(REDACT_RE.test(String(name||"")))return "[REDACTED]";
+    if(value==null)return value;
+    let s=String(value);
+    if(REDACT_RE.test(s) && s.length>24)return "[REDACTED]";
+    if(s.length>MAX_TEXT)s=s.slice(0,MAX_TEXT)+"…";
+    return s;
+  }
+
+  function currentView(){
+    const v=document.querySelector(".view.active");
+    return v?.id||v?.getAttribute("data-view")||null;
+  }
+
+  function deviceMeta(){
+    return {
+      width:window.innerWidth,
+      height:window.innerHeight,
+      dpr:window.devicePixelRatio||1,
+      tz:Intl.DateTimeFormat().resolvedOptions().timeZone||null,
+      ua:navigator.userAgent,
+      platform:navigator.userAgentData?.platform||navigator.platform||null,
+      standalone:!!window.matchMedia?.("(display-mode: standalone)")?.matches
+    };
+  }
+
+  function record(type,data={}){
+    if(!enabled)return;
+    const evt={
+      ts:new Date().toISOString(),
+      t:Math.round(performance.now()),
+      type,
+      view:currentView(),
+      data
+    };
+    log.push(evt);
+    trim();
+    schedulePersist();
+  }
+
+  function cssPath(el){
+    if(!el || !(el instanceof Element))return null;
+    const parts=[];
+    let node=el,depth=0;
+    while(node && depth<4 && node!==document.body){
+      let p=node.tagName.toLowerCase();
+      if(node.id){p+="#"+node.id;parts.unshift(p);break}
+      const cls=[...node.classList].filter(c=>!/^dt-p[345]-/.test(c)).slice(0,2);
+      if(cls.length)p+="."+cls.join(".");
+      parts.unshift(p);
+      node=node.parentElement;
+      depth++;
+    }
+    return parts.join(">");
+  }
+
+  function elementLabel(el){
+    const structural=el?.getAttribute?.("aria-label") || el?.getAttribute?.("title") || el?.name || el?.id || "";
+    const safeStructural=safeText(structural,el?.name||el?.id||"");
+    if(safeStructural && safeStructural!=="[REDACTED]")return safeStructural;
+
+    const visible=String(el?.innerText||el?.textContent||"").trim();
+    return SAFE_CONTROL_LABEL_RE.test(visible) ? visible : "[USER_TEXT]";
+  }
+
+  // Rapid-tap detection
+  let lastTap={path:null,ts:0,count:0};
+  document.addEventListener("pointerup",e=>{
+    if(!enabled)return;
+    const target=e.target?.closest?.("button,[role='button'],a,input,select,textarea");
+    if(!target)return;
+    const path=cssPath(target);
+    const now=performance.now();
+    let rapid=1;
+    if(lastTap.path===path && now-lastTap.ts<650){
+      rapid=lastTap.count+1;
+    }
+    lastTap={path,ts:now,count:rapid};
+    record(rapid>=2?"rapid_tap":"tap",{
+      path,
+      label:elementLabel(target),
+      rapidCount:rapid,
+      pointerType:e.pointerType||null,
+      x:Math.round(e.clientX),
+      y:Math.round(e.clientY)
+    });
+  },true);
+
+  document.addEventListener("change",e=>{
+    if(!enabled)return;
+    const el=e.target;
+    if(!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement))return;
+    const name=el.name||el.id||el.getAttribute("aria-label")||"input";
+    const type=(el instanceof HTMLInputElement ? (el.type||"text") : el.tagName.toLowerCase());
+    const data={
+      path:cssPath(el),
+      name:safeText(name,name),
+      inputType:type
+    };
+
+    if(el instanceof HTMLInputElement && (el.type==="checkbox"||el.type==="radio")){
+      data.checked=!!el.checked;
+    }else if(el instanceof HTMLSelectElement){
+      data.selectedIndex=el.selectedIndex;
+      data.optionCount=el.options?.length||0;
+    }else{
+      /* Length is useful for diagnosing interaction without retaining the value. */
+      data.valueLength=String(el.value||"").length;
+      data.value="[REDACTED]";
+    }
+    record("input_change",data);
+  },true);
+
+  document.addEventListener("input",e=>{
+    if(!enabled)return;
+    const el=e.target;
+    if(!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement))return;
+    if(REDACT_RE.test(el.name||el.id||""))return;
+    if((el.value||"").length%8!==0)return; // sampled input trace; avoids log spam
+    record("input_progress",{
+      path:cssPath(el),
+      name:safeText(el.name||el.id||"input"),
+      inputType:el.type||el.tagName.toLowerCase(),
+      length:(el.value||"").length,
+      value:"[REDACTED]"
+    });
+  },true);
+
+  // View-state watcher
+  function watchViews(){
+    document.querySelectorAll(".view").forEach(v=>{
+      new MutationObserver(()=>{
+        if(v.classList.contains("active"))record("view_open",{id:v.id||null});
+      }).observe(v,{attributes:true,attributeFilter:["class"]});
+    });
+  }
+
+  // Global errors
+  window.addEventListener("error",e=>{
+    record("error",{
+      message:safeText(e.message),
+      file:safeText(e.filename),
+      line:e.lineno||null,
+      col:e.colno||null
+    });
+  });
+  window.addEventListener("unhandledrejection",e=>{
+    record("unhandled_rejection",{reason:safeText(e.reason?.message||e.reason)});
+  });
+
+  // Wrap console.error lightly, preserving original behavior.
+  try{
+    const origError=console.error.bind(console);
+    console.error=(...args)=>{
+      try{record("console_error",{args:args.slice(0,4).map(x=>safeText(x?.message||x))})}catch(_){}
+      origError(...args);
+    };
+  }catch(_){}
+
+  function safeLocalStorageSnapshot(options={}){
+    const ls={};
+    const excludeKeys=new Set(options.excludeKeys||[]);
+    try{
+      for(let i=0;i<localStorage.length;i++){
+        const k=localStorage.key(i);
+        if(!k)continue;
+        if(excludeKeys.has(k))continue;
+        if(REDACT_RE.test(k))continue;
+        if(k===LOG_KEY)continue;
+        const val=localStorage.getItem(k);
+        ls[k]=val && val.length>120000 ? `[OMITTED ${val.length} chars]` : val;
+      }
+    }catch(_){}
+    return ls;
+  }
+
+  function getDebugSnapshot(){
+    const out={
+      currentView:currentView(),
+      /* Never include the persisted full-state blob in a diagnostic bundle. */
+      localStorage:safeLocalStorageSnapshot({excludeKeys:["dailyTrackerPremium"]})
+    };
+
+    try{
+      if(typeof wday!=="undefined")out.workoutDay=wday;
+    }catch(_){}
+
+    try{
+      if(typeof state!=="undefined"){
+        const workouts=state?.workouts||{};
+        out.stateSummary={
+          workoutSessionCount:Array.isArray(workouts.sessions)?workouts.sessions.length:0,
+          completedExerciseCount:Array.isArray(workouts.completedExercises)?workouts.completedExercises.length:0,
+          customSplitCount:Array.isArray(workouts.customSplits)?workouts.customSplits.length:0,
+          hasActiveDraft:!!(
+            typeof wkey==="function" &&
+            workouts.drafts &&
+            workouts.drafts[wkey()]
+          ),
+          trainingScheduleConfigured:!!state?.trainingSchedule,
+          settingsKeys:state?.settings && typeof state.settings==="object"
+            ? Object.keys(state.settings)
+            : []
+        };
+
+        if(typeof wkey==="function" && workouts.drafts?.[wkey()]){
+          out.currentDraft=workouts.drafts[wkey()];
+        }
+      }
+    }catch(_){}
+
+    return out;
+  }
+
+  function getFullBackupSnapshot(){
+    const out={};
+    try{
+      if(typeof state!=="undefined")out.state=state;
+    }catch(_){}
+    out.localStorage=safeLocalStorageSnapshot();
+    return out;
+  }
+
+  function releaseMeta(){
+    let release=null;
+    try{
+      release=
+        document.querySelector('meta[name="release"]')?.content ||
+        window.DT_RELEASE ||
+        window.RELEASE ||
+        null;
+    }catch(_){}
+    return {release};
+  }
+
+  function exportObject(filename,obj){
+    const blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;a.download=filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},1000);
+  }
+
+  function stamp(){
+    return new Date().toISOString().replace(/[:.]/g,"-");
+  }
+
+  function baseMeta(){
+    return {
+      schema:"marc-debug-export",
+      schemaVersion:1,
+      exportedAt:new Date().toISOString(),
+      device:deviceMeta(),
+      app:releaseMeta()
+    };
+  }
+
+  function exportDebugLog(){
+    record("debug_export_requested",{kind:"log"});
+    persistLogNow();
+    exportObject(`MARC_DEBUG_LOG_${stamp()}.json`,{
+      ...baseMeta(),
+      kind:"debug-log",
+      eventCount:log.length,
+      events:log
+    });
+  }
+
+  function exportDebugBundle(){
+    record("debug_export_requested",{kind:"bundle"});
+    persistLogNow();
+    exportObject(`MARC_DEBUG_BUNDLE_${stamp()}.json`,{
+      ...baseMeta(),
+      kind:"debug-bundle",
+      dataScope:"privacy-default-diagnostics-no-raw-input-values-no-user-visible-text-no-full-history-no-main-state-storage",
+      eventCount:log.length,
+      events:log,
+      snapshot:getDebugSnapshot()
+    });
+  }
+
+  function exportAppBackup(){
+    record("debug_export_requested",{kind:"app-backup"});
+    persistLogNow();
+    exportObject(`MARC_APP_BACKUP_${stamp()}.json`,{
+      ...baseMeta(),
+      kind:"app-backup",
+      dataScope:"full-app-state-and-local-storage",
+      snapshot:getFullBackupSnapshot()
+    });
+  }
+
+  function clearDebug(){
+    if(!confirm("Clear the developer debug timeline? This does not delete workout or app data."))return;
+    log=[];
+    dirty=true;
+    eventsSincePersist=1;
+    persistLogNow();
+    record("debug_log_cleared",{});
+    persistLogNow();
+  }
+
+  function setEnabled(next){
+    enabled=!!next;
+    try{localStorage.setItem(ENABLE_KEY,enabled?"1":"0")}catch(_){}
+    renderToggle();
+    if(enabled)record("debug_recorder_enabled",{});
+  }
+
+  renderToggle();
+  toggle?.addEventListener("click",()=>{
+    const next=!enabled;
+    setEnabled(next);
+    try{window.dtHaptics?.light?.()}catch(_){}
+  });
+  exportLogBtn?.addEventListener("click",exportDebugLog);
+  exportBundleBtn?.addEventListener("click",exportDebugBundle);
+  exportBackupBtn?.addEventListener("click",exportAppBackup);
+  clearBtn?.addEventListener("click",clearDebug);
+
+  function lifecycleFlush(){
+    persistLogNow();
+  }
+
+  document.addEventListener("visibilitychange",()=>{
+    if(document.visibilityState==="hidden")lifecycleFlush();
+  },{passive:true});
+  window.addEventListener("pagehide",lifecycleFlush,{passive:true});
+  window.addEventListener("beforeunload",lifecycleFlush);
+
+  window.dtDebugRecorder={
+    get enabled(){return enabled},
+    setEnabled,
+    record,
+    flush:persistLogNow,
+    exportDebugLog,
+    exportDebugBundle,
+    exportAppBackup,
+    clear:clearDebug,
+    getLog:()=>log.slice()
+  };
+
+  if(document.readyState==="loading"){
+    document.addEventListener("DOMContentLoaded",()=>{
+      watchViews();
+      record("session_start",{device:deviceMeta()});
+    },{once:true});
+  }else{
+    watchViews();
+    record("session_start",{device:deviceMeta()});
+  }
+})();
+</script>
+
+
+<script id="dt-v36-endurance-b-history-name-migration">
+(()=>{
+  "use strict";
+  function labelFor(day){
+    try{
+      return String(
+        state?.workouts?.dayNames?.[day] ||
+        ({push:"Push Day",pull:"Pull Day",legs:"Leg Day"}[day]) ||
+        "Workout"
+      );
+    }catch(_){return "Workout"}
+  }
+  function migrate(){
+    try{
+      if(typeof state==="undefined" || !state?.workouts)return;
+      let changed=false;
+      const apply=rec=>{
+        if(!rec || typeof rec!=="object")return;
+        if(!String(rec.splitName||"").trim()){
+          rec.splitName=labelFor(rec.day);
+          changed=true;
+        }
+        if(!String(rec.workoutName||"").trim()){
+          rec.workoutName=rec.splitName;
+          changed=true;
+        }
+      };
+      (state.workouts.sessions||[]).forEach(apply);
+      (state.workouts.completedExercises||[]).forEach(apply);
+      if(changed){
+        try{save()}catch(_){}
+      }
+    }catch(err){
+      try{console.error("Historical workout-name migration failed",err)}catch(_){}
+    }
+  }
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",migrate,{once:true});
+  else migrate();
+  window.dtMigrateHistoricalWorkoutNames=migrate;
+})();
+</script>
+
+
+<script id="dt-v36-endurance-d-mobile-js">
+(()=>{
+  "use strict";
+
+  function findSplitStrip(){
+    const candidates=[
+      document.getElementById("splitTabs"),
+      document.querySelector(".dt-split-tabs"),
+      document.querySelector(".workout-tabs"),
+      document.querySelector(".tabs.workout-tabs")
+    ].filter(Boolean);
+    return candidates.find(el=>el.scrollWidth>el.clientWidth || el.querySelectorAll("button").length>=3) || candidates[0] || null;
+  }
+
+  let strip=null;
+  let host=null;
+  let raf=0;
+
+  function updateHints(){
+    if(!strip||!host)return;
+    cancelAnimationFrame(raf);
+    raf=requestAnimationFrame(()=>{
+      const max=Math.max(0,strip.scrollWidth-strip.clientWidth);
+      host.classList.toggle("dt-can-scroll-left",strip.scrollLeft>6);
+      host.classList.toggle("dt-can-scroll-right",strip.scrollLeft<max-6);
+    });
+  }
+
+  function bindStrip(){
+    const next=findSplitStrip();
+    if(!next)return;
+    if(strip===next){updateHints();return}
+
+    strip=next;
+    host=strip.parentElement||strip;
+    host.classList.add("dt-mobile-scroll-hint");
+
+    strip.addEventListener("scroll",updateHints,{passive:true});
+    window.addEventListener("resize",updateHints,{passive:true});
+    updateHints();
+
+    /* Put the active split fully into view after first render. */
+    setTimeout(()=>scrollActive(false),60);
+  }
+
+  function activeTab(){
+    if(!strip)return null;
+    return strip.querySelector(
+      'button.active,button.on,button[aria-selected="true"],button[data-active="true"],.active button,.on button'
+    );
+  }
+
+  function scrollTabIntoView(tab,smooth=true){
+    if(!strip||!tab)return;
+    const sr=strip.getBoundingClientRect(),tr=tab.getBoundingClientRect();
+    const clippedLeft=tr.left<sr.left+10;
+    const clippedRight=tr.right>sr.right-10;
+    if(clippedLeft||clippedRight){
+      const target=tab.offsetLeft-(strip.clientWidth-tab.offsetWidth)/2;
+      strip.scrollTo({
+        left:Math.max(0,target),
+        behavior:smooth && !window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? "smooth" : "auto"
+      });
+    }
+    setTimeout(updateHints,220);
+  }
+
+  function scrollActive(smooth=true){
+    scrollTabIntoView(activeTab(),smooth);
+  }
+
+  /* User selecting a split -> center the chosen tab. */
+  document.addEventListener("click",e=>{
+    const btn=e.target?.closest?.("#splitTabs button,.dt-split-tabs button,.workout-tabs button,.tabs.workout-tabs button");
+    if(!btn)return;
+    setTimeout(()=>scrollTabIntoView(btn,true),30);
+  },true);
+
+  /*
+    New split render or active class changes -> rebind/scroll.
+    This catches the Add Split flow without coupling to its handler.
+  */
+  const observer=new MutationObserver(records=>{
+    let splitChanged=false;
+    for(const rec of records){
+      const target=rec.target;
+      if(target instanceof Element){
+        if(target.matches?.("#splitTabs,.dt-split-tabs,.workout-tabs,.tabs.workout-tabs") ||
+           target.closest?.("#splitTabs,.dt-split-tabs,.workout-tabs,.tabs.workout-tabs")){
+          splitChanged=true;break;
+        }
+      }
+      for(const node of rec.addedNodes){
+        if(!(node instanceof Element))continue;
+        if(node.matches?.("#splitTabs,.dt-split-tabs,.workout-tabs,.tabs.workout-tabs") ||
+           node.querySelector?.("#splitTabs,.dt-split-tabs,.workout-tabs,.tabs.workout-tabs")){
+          splitChanged=true;break;
+        }
+      }
+    }
+    if(splitChanged){
+      queueMicrotask(()=>{
+        bindStrip();
+        scrollActive(true);
+      });
+    }
+  });
+
+  function boot(){
+    bindStrip();
+    observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:["class","aria-selected","data-active"]});
+  }
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});
+  else boot();
+
+  window.dtMobileInteraction={
+    bindSplitStrip:bindStrip,
+    scrollActiveSplit:scrollActive,
+    updateSplitHints:updateHints
+  };
+})();
+</script>
+
+
+<script id="dt-v36-endurance-e-carousel-js">
+(()=>{
+  "use strict";
+
+  function looksLikeTodayCarousel(el){
+    if(!el || !(el instanceof HTMLElement))return false;
+    const cs=getComputedStyle(el);
+    const horizontalScrollable=
+      (cs.overflowX==="auto" || cs.overflowX==="scroll" || el.scrollWidth>el.clientWidth+8);
+    if(!horizontalScrollable)return false;
+
+    const txt=(el.textContent||"").toLowerCase();
+    const inToday=!!el.closest?.("#todayView,.today-view,[data-view='today'],#today");
+    const hasTodayCards=/body\s*&\s*recovery|performance|today/.test(txt);
+    return inToday || hasTodayCards;
+  }
+
+  function findCarousel(){
+    const preferred=[
+      document.querySelector("#todayView [class*='track']"),
+      document.querySelector("#todayView [class*='carousel']"),
+      document.querySelector("#todayView [class*='slider']"),
+      document.querySelector("[data-view='today'] [class*='track']"),
+      document.querySelector("[data-view='today'] [class*='carousel']"),
+      document.querySelector("[data-view='today'] [class*='slider']")
+    ].filter(Boolean);
+
+    for(const el of preferred){
+      if(looksLikeTodayCarousel(el))return el;
+    }
+
+    const pool=[...document.querySelectorAll("#todayView div,#todayView section,[data-view='today'] div,[data-view='today'] section")];
+    return pool.find(looksLikeTodayCarousel)||null;
+  }
+
+  let track=null,wrap=null,dots=null;
+  let scrollRaf=0;
+
+  function childPanels(){
+    if(!track)return [];
+    return [...track.children].filter(el=>{
+      const r=el.getBoundingClientRect();
+      return r.width>80 && r.height>40;
+    });
+  }
+
+  function nearestPanelIndex(){
+    const panels=childPanels();
+    if(!panels.length)return 0;
+    const tr=track.getBoundingClientRect();
+    const center=tr.left+tr.width/2;
+    let best=0,dist=Infinity;
+    panels.forEach((p,i)=>{
+      const r=p.getBoundingClientRect();
+      const d=Math.abs((r.left+r.width/2)-center);
+      if(d<dist){dist=d;best=i}
+    });
+    return best;
+  }
+
+  function buildDots(){
+    if(!track||!wrap)return;
+    const panels=childPanels();
+    if(panels.length<2)return;
+
+    dots?.remove();
+    dots=document.createElement("div");
+    dots.className="dt-today-carousel-dots";
+    dots.setAttribute("aria-hidden","true");
+    panels.forEach((_,i)=>{
+      const d=document.createElement("span");
+      d.className="dt-today-carousel-dot"+(i===0?" on":"");
+      dots.appendChild(d);
+    });
+    wrap.insertAdjacentElement("afterend",dots);
+    update();
+  }
+
+  function update(){
+    if(!track||!wrap)return;
+    cancelAnimationFrame(scrollRaf);
+    scrollRaf=requestAnimationFrame(()=>{
+      const max=Math.max(0,track.scrollWidth-track.clientWidth);
+      wrap.classList.toggle("dt-today-can-scroll-right",track.scrollLeft<max-6);
+
+      if(dots){
+        const idx=nearestPanelIndex();
+        [...dots.children].forEach((d,i)=>d.classList.toggle("on",i===idx));
+      }
+    });
+  }
+
+  function bind(){
+    const next=findCarousel();
+    if(!next)return;
+    if(track===next){update();return}
+
+    track=next;
+    wrap=track.parentElement||track;
+    wrap.classList.add("dt-today-carousel-hint-wrap");
+    track.addEventListener("scroll",update,{passive:true});
+    window.addEventListener("resize",update,{passive:true});
+    buildDots();
+    update();
+  }
+
+  const observer=new MutationObserver(()=>queueMicrotask(bind));
+
+  function boot(){
+    bind();
+    observer.observe(document.body,{childList:true,subtree:true});
+    setTimeout(bind,300);
+    setTimeout(bind,1000);
+  }
+
+  if(document.readyState==="loading"){
+    document.addEventListener("DOMContentLoaded",boot,{once:true});
+  }else{
+    boot();
+  }
+
+  window.dtTodayCarouselCue={bind,update};
+})();
+</script>
+
+<script id="dt-v36-endurance-f-recovery-safearea-js">
+(()=>{"use strict";
+function pct(row){const m=[...(row?.textContent||"").matchAll(/(\d{1,3})\s*%/g)];if(!m.length)return null;const n=Number(m[m.length-1][1]);return Number.isFinite(n)?Math.max(0,Math.min(100,n)):null}
+function trackFor(row){const c=[...row.querySelectorAll("div,span")].filter(el=>{const r=el.getBoundingClientRect(),cs=getComputedStyle(el);return r.width>70&&r.height>=3&&r.height<=18&&(cs.borderRadius!=="0px"||/track|bar|progress/i.test(el.className||""))});return c.sort((a,b)=>b.getBoundingClientRect().width-a.getBoundingClientRect().width)[0]||null}
+function bars(){const root=document.querySelector(".dt-today-recovery")||[...document.querySelectorAll("section,div")].find(el=>/Recovery estimate/i.test(el.textContent||""));if(!root)return;const used=new Set();[...root.querySelectorAll("div")].forEach(row=>{const p=pct(row);if(p==null)return;const tr=trackFor(row);if(!tr||used.has(tr))return;used.add(tr);tr.classList.add("dt-recovery-track-fixed");let f=tr.querySelector(":scope > .dt-recovery-fill");if(!f){f=document.createElement("span");f.className="dt-recovery-fill";f.setAttribute("aria-hidden","true");tr.appendChild(f)}f.style.width="0%";requestAnimationFrame(()=>requestAnimationFrame(()=>{f.style.width=p+"%"}))})}
+function safe(){[...document.querySelectorAll("header,body *")].forEach(el=>{const x=(el.textContent||"").trim();if(!/^M[•\/]?ARC\s*TRAINING$/i.test(x))return;const r=el.getBoundingClientRect();if(r.top<90&&r.left<100&&r.width<220)el.classList.add("dt-safe-top-brand")})}
+let tm=0;function refresh(){clearTimeout(tm);tm=setTimeout(()=>{bars();safe()},40)}
+const mo=new MutationObserver(refresh);function boot(){refresh();mo.observe(document.body,{subtree:true,childList:true,characterData:true});window.addEventListener("resize",refresh,{passive:true});window.addEventListener("orientationchange",refresh,{passive:true})}
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();window.dtRecoveryVisualRefresh=refresh})();
+</script>
 </body>
 </html>
